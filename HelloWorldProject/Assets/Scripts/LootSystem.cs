@@ -1,0 +1,172 @@
+using UnityEngine;
+
+namespace AutoBattle
+{
+    /// <summary>
+    /// 掉落系统（要求 11、12、13）：击杀后按概率掉装备，品质按权重抽取，
+    /// 属性由「装备基础值 × 等级成长 × 品质倍率」计算得出。
+    /// </summary>
+    public static class LootSystem
+    {
+        /// <summary>是否掉落装备（30% 概率，见 GameConfig.DropChance）。</summary>
+        public static bool RollDrop() => Random.value < GameConfig.DropChance;
+
+        /// <summary>高品质 = 稀有及以上；精英/Boss 的爆率加成只作用于这三档。</summary>
+        public static bool IsHighQuality(EquipmentQuality quality) => quality >= EquipmentQuality.Rare;
+
+        /// <summary>
+        /// 按权重抽取品质（要求 12：62.5/25/9/3/0.5）。
+        /// highQualityBonus 把稀有及以上的权重整体放大（精英 +10%、Boss +20%）后重新归一化，
+        /// 所以普通/优秀的实际占比会相应下降。
+        /// </summary>
+        public static EquipmentQuality RollQuality(float highQualityBonus = 0f)
+        {
+            float boosted = 1f + highQualityBonus;
+
+            float total = 0f;
+            for (int i = 0; i < GameConfig.QualityWeights.Length; i++) total += Weight(i, boosted);
+
+            float roll = Random.value * total;
+            float cumulative = 0f;
+
+            for (int i = 0; i < GameConfig.QualityWeights.Length; i++)
+            {
+                cumulative += Weight(i, boosted);
+                if (roll < cumulative) return (EquipmentQuality)i;
+            }
+
+            // 浮点累加误差兜底。
+            return (EquipmentQuality)(GameConfig.QualityWeights.Length - 1);
+        }
+
+        /// <summary>取第 index 档品质的权重，高品质档乘上爆率加成。</summary>
+        private static float Weight(int index, float boosted)
+        {
+            float w = GameConfig.QualityWeights[index];
+            return IsHighQuality((EquipmentQuality)index) ? w * boosted : w;
+        }
+
+        /// <summary>随机槽位（武器或衣服）并生成一件装备。</summary>
+        public static Equipment CreateRandomEquipment(int playerLevel, float highQualityBonus = 0f)
+        {
+            EquipmentSlot slot = Random.value < 0.5f ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
+            return CreateEquipment(slot, playerLevel, RollQuality(highQualityBonus));
+        }
+
+        /// <summary>
+        /// 按给定权重抽取品质（数组按 EquipmentQuality 顺序给出，允许某几档为 0）。
+        /// 精英 / Boss 的保底掉落用它：精英「稀有 70 / 史诗 25 / 传说 5」、Boss「史诗 80 / 传说 20」。
+        /// </summary>
+        public static EquipmentQuality RollQualityWithWeights(float[] weights)
+        {
+            float total = 0f;
+            for (int i = 0; i < weights.Length; i++) total += weights[i];
+
+            float roll = Random.value * total;
+            float cumulative = 0f;
+
+            for (int i = 0; i < weights.Length; i++)
+            {
+                cumulative += weights[i];
+                if (roll < cumulative) return (EquipmentQuality)i;
+            }
+
+            return (EquipmentQuality)(weights.Length - 1);
+        }
+
+        /// <summary>按指定等级与品质权重生成一件装备（精英 / Boss 的保底掉落，等级取怪物自身等级）。</summary>
+        public static Equipment CreateEquipmentAtLevel(int level, float[] qualityWeights)
+        {
+            EquipmentSlot slot = Random.value < 0.5f ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
+            return CreateEquipment(slot, level, RollQualityWithWeights(qualityWeights));
+        }
+
+        /// <summary>
+        /// 生成指定槽位/品质的装备（要求 13）。
+        /// 武器加攻击、暴击率、暴击伤害；衣服加防御和生命，**不加暴击**（要求 10）。
+        /// 属性倍率每次生成时在品质区间内随机抽取，所以同品质的装备也有好坏之分。
+        /// </summary>
+        public static Equipment CreateEquipment(EquipmentSlot slot, int level, EquipmentQuality quality)
+        {
+            int steps = Mathf.Max(0, level - 1);
+            float multiplier = GameConfig.RollQualityMultiplier(quality);
+
+            var e = new Equipment
+            {
+                slot = slot,
+                quality = quality,
+                level = level,
+                qualityMultiplier = multiplier,
+            };
+
+            if (slot == EquipmentSlot.Weapon)
+            {
+                float atk = GameConfig.WeaponBaseAttack + GameConfig.WeaponAttackPerLevel * steps;
+                e.attack = Mathf.Max(1, Mathf.RoundToInt(atk * multiplier));
+
+                // 主词条除攻击外，再随机给「暴击率」或「暴击伤害」其中一个（各 50%，不会同时出现）。
+                // 数值沿用原公式：基础 + 每级成长，再乘品质倍率。
+                float critChance = (GameConfig.WeaponBaseCritChance + GameConfig.WeaponCritChancePerLevel * steps) * multiplier;
+                float critDamage = (GameConfig.WeaponBaseCritDamage + GameConfig.WeaponCritDamagePerLevel * steps) * multiplier;
+
+                if (Random.value < 0.5f) e.critChance = critChance;
+                else e.critDamage = critDamage;
+            }
+            else
+            {
+                float def = GameConfig.ArmorBaseDefense + GameConfig.ArmorDefensePerLevel * steps;
+                float hp = GameConfig.ArmorBaseHp + GameConfig.ArmorHpPerLevel * steps;
+                e.defense = Mathf.Max(1, Mathf.RoundToInt(def * multiplier));
+                e.hp = Mathf.Max(1, Mathf.RoundToInt(hp * multiplier));
+            }
+
+            RollAffixes(e, level);
+            return e;
+        }
+
+        /// <summary>
+        /// 按品质给装备挂副词条：条数在 EquipAffixCountMin ~ Max 之间随机
+        /// （普通 1 / 优秀 1~2 / 稀有 2 / 史诗 3 / 传说 4）。
+        /// 从词条池里洗牌抽取，所以同一件装备内不会重复；
+        /// 数值 = 基础随机值 × (1 + 装备等级 × EquipAffixLevelScale)，**不乘品质倍率**。
+        /// </summary>
+        private static void RollAffixes(Equipment e, int level)
+        {
+            int q = (int)e.quality;
+            // Random.Range 的 int 重载上界不含，所以 +1 才能取到上限。
+            int count = Random.Range(GameConfig.EquipAffixCountMin[q], GameConfig.EquipAffixCountMax[q] + 1);
+            if (count <= 0) return;
+
+            int poolSize = GameConfig.EquipAffixNames.Length;
+            int[] pool = new int[poolSize];
+            for (int i = 0; i < poolSize; i++) pool[i] = i;
+
+            // Fisher-Yates 洗牌后取前 count 个，天然不重复。
+            for (int i = poolSize - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                int tmp = pool[i];
+                pool[i] = pool[j];
+                pool[j] = tmp;
+            }
+
+            float levelScale = 1f + level * GameConfig.EquipAffixLevelScale;
+
+            for (int i = 0; i < count && i < poolSize; i++)
+            {
+                int kind = pool[i];
+                float baseValue = Random.Range(GameConfig.EquipAffixMin[kind], GameConfig.EquipAffixMax[kind]);
+                float value = baseValue * levelScale;
+
+                switch ((EquipmentAffix)kind)
+                {
+                    case EquipmentAffix.CritChance: e.affixCritChance = value; break;
+                    case EquipmentAffix.CritDamage: e.affixCritDamage = value; break;
+                    case EquipmentAffix.AttackSpeed: e.affixAttackSpeed = value; break;
+                    case EquipmentAffix.AllStats: e.affixAllStats = value; break;
+                    case EquipmentAffix.ArmorPen: e.affixArmorPen = value; break;
+                }
+            }
+        }
+    }
+}

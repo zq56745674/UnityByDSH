@@ -1,0 +1,601 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "id": "e2fa1342-9e1f-4d73-9e5e-1ff64de9cf3e",
+      "title": "DSH Desktop 插件市场 pnpm「静默看门狗」导致安装被回滚：诊断与处置",
+      "description": "DSH Desktop 插件市场用 pnpm 安装插件时，因宿主 10 分钟无输出看门狗杀进程并回滚失败，但 node_modules 残留孤儿包；含证据链、根因与两种绕过方案。",
+      "status": "active",
+      "filename": "dsh-desktop-pnpm-e2fa1342.md",
+      "relativePath": "documents/active/dsh-desktop-pnpm-e2fa1342.md",
+      "sourcePaths": [],
+      "sessionIds": [
+        "da96600d-5709-45b8-8c21-1ad1f650387d"
+      ],
+      "createdAt": "2026-10-12T12:30:35.585Z",
+      "updatedAt": "2026-10-12T12:30:35.585Z",
+      "lastAccessedAt": "2026-10-15T12:47:35.476Z",
+      "revision": 1,
+      "contentHash": "ce0b494f92c07a46c105338dd1e9bcfb04fafe9dd7e19157be048900ffab28e3",
+      "sizeBytes": 5981,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "d3bf27fd-13bf-47e8-be39-e276c5659411",
+      "title": "dsh-browser 浏览器桥插件：managed 安装、验证判据与 web/desktop profile 接入记录",
+      "description": "dsh-browser（桥插件 + Chrome 扩展）在本机的 managed 安装全过程：pnpm/.npmrc/GitHub hosts 劫持绕行、install.ps1 本地 checkout 分支、桥端点验证，以及把桥接入 desktop profile（19387）的待定方案与回滚命令。",
+      "status": "active",
+      "filename": "dsh-browser-managed-web-desktop-profile-d3bf27fd.md",
+      "relativePath": "documents/active/dsh-browser-managed-web-desktop-profile-d3bf27fd.md",
+      "sourcePaths": [],
+      "sessionIds": [
+        "60a85e14-1beb-4f92-b3fc-568e068578bd"
+      ],
+      "createdAt": "2026-10-12T12:57:15.169Z",
+      "updatedAt": "2026-10-12T12:57:15.169Z",
+      "lastAccessedAt": "2026-10-16T03:30:59.568Z",
+      "revision": 1,
+      "contentHash": "bf0683fb1e166372f4ea7886ec467b8424757a6e98fbebb11632f92f6c999575",
+      "sizeBytes": 6265,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "7c3b8ebf-3e86-4b45-8f70-ad53ec9188c5",
+      "title": "Unity AutoBattle 巅峰等级与技能系统：设计、公式与接入点",
+      "description": "HelloWorldProject 中巅峰等级（Paragon）与 15 个技能（主动/被动/触发）的完整设计：数值表、经验与技能等级公式、战斗循环接入点、6 槽装备限制与 UI 布局，含实测验证结论。",
+      "status": "active",
+      "filename": "unity-autobattle-7c3b8ebf.md",
+      "relativePath": "documents/active/unity-autobattle-7c3b8ebf.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/Skills.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs"
+      ],
+      "sessionIds": [
+        "21ad90d2-8d0c-4643-b5a4-2ca70a6a2ca1"
+      ],
+      "createdAt": "2026-10-12T16:41:30.197Z",
+      "updatedAt": "2026-10-12T16:41:30.197Z",
+      "lastAccessedAt": "2026-10-15T18:23:02.315Z",
+      "revision": 1,
+      "contentHash": "343ff924fb05029fd4feb87c1955df4f18ab81cbb84bef1fd5debe0ed73a765f",
+      "sizeBytes": 5938,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "a68e8f3d-4799-4bff-8ae2-942a12bae043",
+      "title": "Unity AutoBattle 技能获取机制改版（巅峰随机获得）与 100 级后成功率实测",
+      "description": "HelloWorldProject 技能改为「100 级前无技能、满级后每 10 级巅峰随机抽一个」的实现要点（ownedSkillMask 掩码、GrantRandomSkill、装备校验）、Play 模式验证结果，以及 Lv.100/Lv.110 精英与 Boss 的分档胜率统计与统计口径教训。取代既有文档 7c3b8ebf 中的解锁顺序与默认装配结论。",
+      "status": "active",
+      "filename": "unity-autobattle-100-a68e8f3d.md",
+      "relativePath": "documents/active/unity-autobattle-100-a68e8f3d.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/Skills.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/SaveSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs"
+      ],
+      "sessionIds": [
+        "c25f3e74-02c4-44f3-b86f-704b4f0a5ba1"
+      ],
+      "createdAt": "2026-10-12T16:47:52.589Z",
+      "updatedAt": "2026-10-12T16:47:52.589Z",
+      "lastAccessedAt": "2026-10-15T12:23:19.959Z",
+      "revision": 1,
+      "contentHash": "e04299ee0d3303d207d1bbf6c6f0ec5eaceae6ba7195273c0353b7d2f653a6ec",
+      "sizeBytes": 6253,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "609caf57-6568-4386-8c0c-d99116057527",
+      "title": "billion-context 上下文压缩插件：原理、DSH 原生接入与 desktop profile 生效实测",
+      "description": "billion-context 0.1.195 在 desktop profile 生效的证据链、模型驱动分层压缩原理（T1–T3、nudgeGrowthTokens、前缀缓存友好）、dsh.bundle.patch.yml 对 DSH 的三处改动，以及本会话 acp_status 实测读数与存储/运维要点。",
+      "status": "active",
+      "filename": "billion-context-dsh-desktop-profile-609caf57.md",
+      "relativePath": "documents/active/billion-context-dsh-desktop-profile-609caf57.md",
+      "sourcePaths": [],
+      "sessionIds": [
+        "05c25654-b701-4d63-baa8-3b15660cb543"
+      ],
+      "createdAt": "2026-10-12T16:57:51.394Z",
+      "updatedAt": "2026-10-12T16:57:51.394Z",
+      "lastAccessedAt": "2026-10-15T18:18:23.972Z",
+      "revision": 1,
+      "contentHash": "60c0042d34a7bb6c94dc3702789df7ead8138d1843bc26411976cf8a17569197",
+      "sizeBytes": 7302,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "e0af2b00-883b-47fe-ad14-f22f8f78f565",
+      "title": "Unity AutoBattle 攻速上限、护甲穿透与怪物速度表",
+      "description": "HelloWorldProject 三项数值改动：攻速上限改为每秒 5 下（含副词条越限漏洞修复）、护甲穿透属性（数值范围/伤害公式/80% 上限/评分权重/词条池 4→5）、全等级各类型怪物速度与攻击间隔表；另含 UI 底部裁切根因（CanvasScaler.matchWidthOrHeight）与词条折行修复。",
+      "status": "active",
+      "filename": "unity-autobattle-e0af2b00.md",
+      "relativePath": "documents/active/unity-autobattle-e0af2b00.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/LootSystem.cs",
+        "HelloWorldProject/Assets/Scripts/BattleSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Screenshots/armorpen.png"
+      ],
+      "sessionIds": [
+        "f546e5b6-b8d8-4433-af52-1df603b54ca6"
+      ],
+      "createdAt": "2026-10-12T17:12:21.757Z",
+      "updatedAt": "2026-10-12T17:12:21.757Z",
+      "lastAccessedAt": "2026-10-12T18:07:20.767Z",
+      "revision": 1,
+      "contentHash": "abe4cd1775889146813534482f6cd451fbcd8ec4816bfd67cd9fa1c8d3783c5c",
+      "sizeBytes": 5979,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "4f6621d0-f8c4-4dab-81fb-719d78ddf259",
+      "title": "Unity AutoBattle 装备评分改版：线性权重 → 增量期望 DPS（含暴击率/暴伤失衡发现）",
+      "description": "HelloWorldProject 装备评分口径从线性加权求和改为「增量期望 DPS + 有效生命/8」，含必须用增量基准与角色当前属性算的原因、木桩相关性实测（ρ 0.090→0.914）、LegacyScore 改名与审脚本迁移，以及由此暴露的暴击率词条边际价值为暴伤 7.5 倍、传说衣被稀有衣顶掉的失衡与三个候选调整方向。",
+      "status": "active",
+      "filename": "unity-autobattle-dps-4f6621d0.md",
+      "relativePath": "documents/active/unity-autobattle-dps-4f6621d0.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/EquipmentScore.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs",
+        "HelloWorldProject/Assets/Screenshots/score-new.png"
+      ],
+      "sessionIds": [
+        "19866104-a1e1-4b47-bd96-d11f97e7aaa1"
+      ],
+      "createdAt": "2026-10-12T17:45:44.584Z",
+      "updatedAt": "2026-10-12T17:45:44.584Z",
+      "lastAccessedAt": "2026-10-14T17:23:41.853Z",
+      "revision": 1,
+      "contentHash": "e457b7853b4552d9eddb58be0691ed2d008761091a05971de11047db2c91e666",
+      "sizeBytes": 6594,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "ab8f6186-b189-4fa8-9d4b-5708a9bde932",
+      "title": "Unity AutoBattle 传说主暴伤压低 + 词条收益/阈值复评（暴伤碾压暴击率的新失衡）",
+      "description": "HelloWorldProject 后续动作：WeaponCritDamagePerLevel 0.01f→0.00195f 把武器主暴伤压到 150%（角色总暴伤 643%→331%）；技能槽「就绪」重叠修法（槽高 50→58px）；新评分口径下逐属性 DPS 边际值、攻速 +60%/暴击 95%/穿透 80% 阈值实测，以及复评后暴露的三个平衡问题（攻速易溢出、穿透是唯一反递减属性、暴伤词条碾压暴击率 6.3 倍）与待用户选择的方向。",
+      "status": "active",
+      "filename": "unity-autobattle-ab8f6186.md",
+      "relativePath": "documents/active/unity-autobattle-ab8f6186.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/EquipmentScore.cs",
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs",
+        "HelloWorldProject/Assets/Screenshots/ui-skill-fix.png"
+      ],
+      "sessionIds": [
+        "56fcdd65-f8ce-482a-8e2d-048c8005896c"
+      ],
+      "createdAt": "2026-10-12T17:54:44.798Z",
+      "updatedAt": "2026-10-12T17:54:44.798Z",
+      "lastAccessedAt": "2026-10-15T04:45:12.902Z",
+      "revision": 1,
+      "contentHash": "d1ff98d74426569f017117061829494326d2bead449d4462a7d29e3aaf508dd6",
+      "sizeBytes": 7671,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "2ab3d6dc-ceb7-4405-b908-9cd6b792905d",
+      "title": "Unity AutoBattle 技能强度审计：15 个技能的边际贡献量化与平衡诊断",
+      "description": "HelloWorldProject 用 LateGameProbe.cs 新增的三套口径（SkillAudit 木桩 DPS 边际 / SurvivalAudit 裸武器存活 / ComboAudit 组合挤压）量化全部 15 个技能的强度：输出排名（狂暴 +30.2%、反击 +28.0%、巨人杀手 +23.3% 到不死之身 +0.1%，差距 300 倍）、生存区间断裂（Lv.110 三秒猝死 vs Lv.105 以下 2000 秒不死）、公共冷却并非瓶颈（挤压损失仅 -0.1~+1.1pt），以及六条调参方向。",
+      "status": "active",
+      "filename": "unity-autobattle-15-2ab3d6dc.md",
+      "relativePath": "documents/active/unity-autobattle-15-2ab3d6dc.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs"
+      ],
+      "sessionIds": [
+        "8f6e6055-d856-49cc-84f7-981c44f52cb9"
+      ],
+      "createdAt": "2026-10-13T18:02:20.360Z",
+      "updatedAt": "2026-10-13T18:02:20.360Z",
+      "lastAccessedAt": "2026-10-14T17:23:41.853Z",
+      "revision": 1,
+      "contentHash": "75a55bd1be02c861709980dbdab786b8b287592f7ab17d7c372af263fa40c2e2",
+      "sizeBytes": 7330,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "502f3c34-f9de-4354-93d1-ca0844fb51f1",
+      "title": "Unity AutoBattle 七项技能平衡改动落地：数值+机制（乘算暴伤/免死）+改后强度表",
+      "description": "HelloWorldProject 技能平衡的第二轮执行记录：7 项技能改动（含致命打击改乘算、濒死爆发改致死一击+5 秒免死两项机制改动）的具体代码位置、改后木桩 DPS/生存实测表、两次运行装备随机导致列间不可比的说明，以及未修复的吸血鬼/护盾生成失衡与巅峰缩放提醒。",
+      "status": "active",
+      "filename": "unity-autobattle-502f3c34.md",
+      "relativePath": "documents/active/unity-autobattle-502f3c34.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/Skills.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/BattleSystem.cs",
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs"
+      ],
+      "sessionIds": [
+        "6d4dee80-8bd3-4312-9f38-665c8e02b9ac"
+      ],
+      "createdAt": "2026-10-13T18:16:15.814Z",
+      "updatedAt": "2026-10-13T18:16:15.814Z",
+      "lastAccessedAt": "2026-10-16T04:28:13.665Z",
+      "revision": 1,
+      "contentHash": "78b05d372a90a2eb5f3ecb699a1196f3389872169181dc484f6e196285e47fd4",
+      "sizeBytes": 7403,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "6231bd5c-ca9e-454e-8f30-c67546e352d7",
+      "title": "Unity AutoBattle 第二轮技能平衡：技能数值固定化 + 七项数值加强（含护盾实现坑与改后强度曲线）",
+      "description": "HelloWorldProject 技能平衡第二轮执行记录：SkillLevelScale 归零使技能数值不再随巅峰放大、斩杀 1500%/钢铁之躯 +150%/濒死爆发 +100%/不死之身 70%/吸血鬼 30%/护盾 0.5s 10% 的落地位置、护盾 Mathf.Max 不叠加机制坑与日志节流、改后木桩 DPS 与生存实测表、胜率曲线变陡的成因、以及无武器口径低估吸血鬼的口径警告。",
+      "status": "active",
+      "filename": "unity-autobattle-6231bd5c.md",
+      "relativePath": "documents/active/unity-autobattle-6231bd5c.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/Skills.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/BattleSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs"
+      ],
+      "sessionIds": [
+        "37566946-7a8e-4a79-8c89-9237d12f50d4"
+      ],
+      "createdAt": "2026-10-13T18:27:02.371Z",
+      "updatedAt": "2026-10-13T18:27:02.371Z",
+      "lastAccessedAt": "2026-10-15T05:26:45.183Z",
+      "revision": 1,
+      "contentHash": "58e73aa1a76a30d4c234b4525cf02000583ba5d8f8d454c472c991ae3bb439ba",
+      "sizeBytes": 8351,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "97de0ef9-69eb-4411-aa2b-6829edf03482",
+      "title": "Unity AutoBattle 配置外部化（P0）：85 个 const 迁到 game_config.json + 反射加载与自动重载",
+      "description": "HelloWorldProject 的 P0 配置外部化执行记录：85 个 const 迁到 Assets/Resources/game_config.json，GameConfigData + GameConfig.Apply() 反射覆盖、双加载入口、AssetPostprocessor 自动重载与两个菜单项；含 8 项确定性回归断言、改文件不重编译实测、探针胜率回归，以及 SaveKey 保持 const、30 个 static readonly 数组不外部化的决策理由。",
+      "status": "active",
+      "filename": "unity-autobattle-p0-85-const-game-config-json-97de0ef9.md",
+      "relativePath": "documents/active/unity-autobattle-p0-85-const-game-config-json-97de0ef9.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Resources/game_config.json",
+        "HelloWorldProject/Assets/Scripts/GameConfigData.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Editor/GameConfigReloader.cs",
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs"
+      ],
+      "sessionIds": [
+        "93098946-8898-4605-bcef-5a39362e0698"
+      ],
+      "createdAt": "2026-10-14T16:34:03.130Z",
+      "updatedAt": "2026-10-14T16:34:03.130Z",
+      "lastAccessedAt": "2026-10-15T05:53:52.574Z",
+      "revision": 1,
+      "contentHash": "035cd41aaded6d827fe68a304598cfbf37b3c68112de9f057fa2176ada62f826",
+      "sizeBytes": 6825,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "bd713554-0919-4cdf-8426-557fc4ba4e4a",
+      "title": "Unity AutoBattle 技能获取改为三选一：State.SkillChoice、pendingSkillPicks 与候选面板",
+      "description": "HelloWorldProject 技能发放由「每 10 级巅峰随机送一个」改为「累计待选次数 + 暂停战斗的三选一面板」：新增 State.SkillChoice、pendingSkillPicks 存档字段、SkillChoiceCount 配置、GameUI 居中候选面板，含 Play 模式实测证据、跨多级累加口径与 LateGameProbe 未同步导致旧胜率表只是下界的警告。",
+      "status": "active",
+      "filename": "unity-autobattle-state-skillchoice-pendingskillp-bd713554.md",
+      "relativePath": "documents/active/unity-autobattle-state-skillchoice-pendingskillp-bd713554.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/SaveSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Resources/game_config.json",
+        "HelloWorldProject/Assets/Screenshots/skill-choice.png"
+      ],
+      "sessionIds": [
+        "07d8e4ad-85dd-481d-bcd3-716d7b59c7bb"
+      ],
+      "createdAt": "2026-10-14T16:51:08.798Z",
+      "updatedAt": "2026-10-14T16:51:08.798Z",
+      "lastAccessedAt": "2026-10-15T19:06:03.469Z",
+      "revision": 1,
+      "contentHash": "decce064a4464fad41ae90ef177aaca7cd40cef41f24733895f1c9e032a0a711",
+      "sizeBytes": 5463,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "8bb7e4c1-5ba6-4738-8ab6-4384c4e62219",
+      "title": "Unity AutoBattle 胜率表改为「模拟玩家三选一」：LateGameProbe 评分口径、新基线表与巅峰 100 回退诊断",
+      "description": "HelloWorldProject 的 LateGameProbe 从「随机送技能」改为模拟真人三选一（PickAndEquipBest + 三类型 Boss 击杀耗时评分），产出新胜率基线表、与旧口径逐档对比、巅峰 100 反常回退（82.5% vs 95.7%）的成因诊断，以及被实测否决的「满槽替换」方案与评分函数三轮迭代理由。",
+      "status": "active",
+      "filename": "unity-autobattle-lategameprobe-100-8bb7e4c1.md",
+      "relativePath": "documents/active/unity-autobattle-lategameprobe-100-8bb7e4c1.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs"
+      ],
+      "sessionIds": [
+        "7bedef49-f869-40e6-b9c4-59cc8ce78aef"
+      ],
+      "createdAt": "2026-10-14T16:57:04.101Z",
+      "updatedAt": "2026-10-14T16:57:04.101Z",
+      "lastAccessedAt": "2026-10-16T04:28:13.665Z",
+      "revision": 1,
+      "contentHash": "e3804c1fea978121b5a5cc2eba906290de79bc1ea219148ffc233781c9fafa3d",
+      "sizeBytes": 7248,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "7035e108-9fb2-4a33-8f12-8282b1db79d0",
+      "title": "Unity AutoBattle 战斗可读性层（P2）：Buff/Debuff 栏、伤害飘字、实时 DPS 的实现与两处坑",
+      "description": "HelloWorldProject 的 GameUI 战斗可读性改造执行记录：Buff/Debuff 状态栏的数据来源与行定义、伤害飘字池（颜色/字号/日志解析游标/日志截断处理）、日志行右侧实时 DPS 与期望 DPS、CreateRect 的「y 向下为正」坐标系坑、Play 模式下 AssetDatabase.Refresh 不一定重编译的验证纪律，以及收尾清理项。",
+      "status": "active",
+      "filename": "unity-autobattle-p2-buff-debuff-dps-7035e108.md",
+      "relativePath": "documents/active/unity-autobattle-p2-buff-debuff-dps-7035e108.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/BattleSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Screenshots/p2.png"
+      ],
+      "sessionIds": [
+        "1f4c5132-05e9-4ec9-9036-adc88d5cc4c7"
+      ],
+      "createdAt": "2026-10-14T17:13:51.632Z",
+      "updatedAt": "2026-10-14T17:13:51.632Z",
+      "lastAccessedAt": "2026-10-15T18:22:33.414Z",
+      "revision": 1,
+      "contentHash": "9a989927a40f429d7e25d5fbc5983de0b9f040e2bc50a4eca3ddd0b29fb1f02f",
+      "sizeBytes": 6855,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "418948ff-876f-4f76-90af-50e55a5c8727",
+      "title": "Unity AutoBattle 关卡/章节制改版（4a）：StageCatalog 规则、进度存档 v5 与阵亡重打",
+      "description": "HelloWorldProject 由「按击杀计数刷精英/Boss」改为「章节关卡推进」：新增 Stages.cs（StageCatalog 程序化生成 11 章 × 10 关、关底精英/Boss）、PlayerData 关卡进度字段、存档升 v5 迁移、GameController 推进与阵亡重置逻辑、GameUI 关卡显示，含 Play 模式实测证据与两个待用户决策的开放问题（EliteUnlockLevel/BossUnlockLevel 被绕过、关卡怪级是否加软上限）。",
+      "status": "active",
+      "filename": "unity-autobattle-4a-stagecatalog-v5-418948ff.md",
+      "relativePath": "documents/active/unity-autobattle-4a-stagecatalog-v5-418948ff.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/Stages.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/SaveSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Resources/game_config.json",
+        "HelloWorldProject/Assets/Screenshots/stage.png",
+        "HelloWorldProject/Assets/Screenshots/stage-ui.png"
+      ],
+      "sessionIds": [
+        "6b729242-d49d-427a-85f5-31b2ef6cfa08"
+      ],
+      "createdAt": "2026-10-14T17:40:32.201Z",
+      "updatedAt": "2026-10-14T17:40:32.201Z",
+      "lastAccessedAt": "2026-10-15T18:23:02.315Z",
+      "revision": 1,
+      "contentHash": "c44c7d2c3bcbb712151c8c70ab635afaa5ef9263443efc3a2389b23e1a92ee5c",
+      "sizeBytes": 7666,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "86f3fe99-d412-41f3-a55b-12811d5c3288",
+      "title": "Unity AutoBattle 选关面板（4b）：章节级解锁、SelectStage/IsStageUnlocked API 与面板冻结战斗",
+      "description": "HelloWorldProject 关卡制（4a）之上的选关面板实现：GameController 新增 StagePanelOpen/MaxChapterUnlocked/IsStageUnlocked/SelectStage/ToggleStagePanel，章节级解锁口径，与技能面板互斥、面板打开时 Update 整局冻结，四个实现坑（StageCatalog.Get 越界钳位、U+1F512 无字形、已过标记按进度线、浏览章节被每帧重置），以及 Play 模式逐项实测结果与遗留项。",
+      "status": "active",
+      "filename": "unity-autobattle-4b-selectstage-isstageunlocked--86f3fe99.md",
+      "relativePath": "documents/active/unity-autobattle-4b-selectstage-isstageunlocked--86f3fe99.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Screenshots/stage-panel.png",
+        "HelloWorldProject/Assets/Screenshots/stage-switch.png"
+      ],
+      "sessionIds": [
+        "76a59de8-851c-460f-b560-b57b6cf4ee7e"
+      ],
+      "createdAt": "2026-10-15T04:45:27.012Z",
+      "updatedAt": "2026-10-15T04:45:27.012Z",
+      "lastAccessedAt": "2026-10-15T19:06:03.469Z",
+      "revision": 1,
+      "contentHash": "8f803fcd2150a44243792c019849cc209575366f8c8cd147217c606fcc210f47",
+      "sizeBytes": 6271,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "763c8adf-09a9-48af-9ac6-607a7011a53c",
+      "title": "Unity AutoBattle 首通奖励与通关横幅（4c）：clearedStages 存档 v6、StageClearDelay 接线",
+      "description": "HelloWorldProject 关卡制（4a/4b）之上的 4c：首通奖励（只给金币的设计理由、120+80×(章-1)、章末+600）、PlayerData.clearedStages(List&lt;int&gt;, key=chapter*100+stage)与存档 v6、MarkStageFirstCleared 幂等、死配置 StageClearDelay 的发现与接线（_justClearedStage，默认 2→3 秒）、通关横幅合成单条与 CanvasGroup 覆盖浮层、选关面板首通汇总、Play 模式逐项实测，以及两个死配置/关卡怪级软上限遗留项。",
+      "status": "active",
+      "filename": "unity-autobattle-4c-clearedstages-v6-stagecleard-763c8adf.md",
+      "relativePath": "documents/active/unity-autobattle-4c-clearedstages-v6-stagecleard-763c8adf.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/SaveSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfigData.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Resources/game_config.json",
+        "HelloWorldProject/Assets/Screenshots/chapter-clear.png",
+        "HelloWorldProject/Assets/Screenshots/stage-panel.png"
+      ],
+      "sessionIds": [
+        "3b308f95-93bd-4533-987b-89f4862585ff"
+      ],
+      "createdAt": "2026-10-15T05:02:43.267Z",
+      "updatedAt": "2026-10-15T05:02:43.267Z",
+      "lastAccessedAt": "2026-10-15T19:06:03.469Z",
+      "revision": 1,
+      "contentHash": "51e08a05542027d99c975687699574c1e38692683baf269f456fa93c766e3a2c",
+      "sizeBytes": 8153,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "cf559a4d-9cb4-48a2-9691-1776e16deaf8",
+      "title": "Unity AutoBattle 章节进度总览与首通奖励汇总（4d）：奖励公式收敛到 StageCatalog、已领金币按当前规则重算",
+      "description": "HelloWorldProject 关卡制 4d 步：首通金币公式从 GameController 抽到 StageCatalog.FirstClearGold 单一来源、GrantFirstClearReward 签名由 (chapter, bool) 改为 (chapter, stage)、PlayerData.TotalFirstClearGoldClaimed/ClearedCountInChapter 采用「按当前配置重算而非记流水」、选关面板标题行改全局总览 + 左栏各章首通进度、Play 模式数值核对（26/110 关 · 4/11 章 · 6080/63800），以及面板开着时浏览章不重置的已知现象与两条遗留项。",
+      "status": "active",
+      "filename": "unity-autobattle-4d-stagecatalog-cf559a4d.md",
+      "relativePath": "documents/active/unity-autobattle-4d-stagecatalog-cf559a4d.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/Stages.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Resources/game_config.json",
+        "HelloWorldProject/Assets/Screenshots/stage-summary.png",
+        "HelloWorldProject/Assets/Screenshots/stage-fresh.png"
+      ],
+      "sessionIds": [
+        "5d510e12-f89d-45c6-816a-5ffef5f5a40d"
+      ],
+      "createdAt": "2026-10-15T05:13:00.577Z",
+      "updatedAt": "2026-10-15T05:13:00.577Z",
+      "lastAccessedAt": "2026-10-15T18:23:02.315Z",
+      "revision": 1,
+      "contentHash": "996963e67a397ee5527adcea4f346c9cb7947045c175edfbc06374f2de6479e0",
+      "sizeBytes": 6399,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "ddef4cfe-e205-4218-89cc-f2275afb6ecd",
+      "title": "Unity AutoBattle 代码审计落地（12 项）：存档正确性修复、GameConfig 三文件拆分、GameUI 每帧优化",
+      "description": "HelloWorldProject 全量代码质量审计（14 项清单）中已批准落地的 12 项：P0 六项存档/装备正确性 bug、Apply 逐条警告、GameConfig 拆 partial 三文件、死代码与魔数清理、GameUI 每帧开销与 UI 越权写状态收拢，含拆分前后配置链路一致性证据与 Play 实测。",
+      "status": "active",
+      "filename": "unity-autobattle-12-gameconfig-gameui-ddef4cfe.md",
+      "relativePath": "documents/active/unity-autobattle-12-gameconfig-gameui-ddef4cfe.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/SaveSystem.cs",
+        "HelloWorldProject/Assets/Scripts/EquipmentScore.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.Tables.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.Loader.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/Stages.cs"
+      ],
+      "sessionIds": [
+        "239fb6b1-35dc-4a06-a824-66b3597e14c0"
+      ],
+      "createdAt": "2026-10-15T05:54:08.043Z",
+      "updatedAt": "2026-10-15T05:54:08.043Z",
+      "lastAccessedAt": "2026-10-16T04:28:13.665Z",
+      "revision": 1,
+      "contentHash": "0074365192a9399e66fa4b89d55d0a3ef1b7e5404550784e93ce18d017dcd804",
+      "sizeBytes": 8078,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "5bc504d7-b419-45c9-b38d-e9f8ca91893e",
+      "title": "Unity AutoBattle 主角立绘：代码生成鲸鱼娘与「背景水印」接入",
+      "description": "HelloWorldProject 原创主角立绘的生产与接入记录：Pillow 代码生成（4× 超采样、双版本输出）、为何以左面板背景水印而非独立立绘框接入、Unity PNG 导入 Sprite 的坑、7 轮造型迭代的失败原因，以及待用户决策的正式立绘框两方案。",
+      "status": "active",
+      "filename": "unity-autobattle-5bc504d7.md",
+      "relativePath": "documents/active/unity-autobattle-5bc504d7.md",
+      "sourcePaths": [
+        "_art/make_hero.py",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Resources/HeroPortrait.png",
+        "HelloWorldProject/Assets/Resources/HeroPortraitFade.png",
+        "HelloWorldProject/Assets/Screenshots/hero.png"
+      ],
+      "sessionIds": [
+        "2e5baa72-31d6-4660-a1e7-d70bb41be6b6"
+      ],
+      "createdAt": "2026-10-15T12:23:31.343Z",
+      "updatedAt": "2026-10-15T12:23:31.343Z",
+      "lastAccessedAt": "2026-10-15T18:27:38.395Z",
+      "revision": 1,
+      "contentHash": "41330ab9d57332ac646e0ced9fbfce90f4ba843fcf67b7eef2e12f429433fbce",
+      "sizeBytes": 5375,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "e4783751-09e9-4165-924d-f1028c2261c0",
+      "title": "DSH image-gen 插件 seedream 通道：默认模型已下线、可用模型清单与透明底出图约束",
+      "description": "本机 desktop profile 下 image-gen 插件走火山方舟 seedream 出图时踩到的三个坑与修法：默认模型 404、需配置的模型 ID、透明背景参数对输入 PNG 的要求，附一次性修配置的路径与工作区里的两个 Pillow 预处理/后处理脚本。",
+      "status": "active",
+      "filename": "dsh-image-gen-seedream-e4783751.md",
+      "relativePath": "documents/active/dsh-image-gen-seedream-e4783751.md",
+      "sourcePaths": [
+        "_art/prep_ref.py",
+        "_art/finish_hero.py"
+      ],
+      "sessionIds": [
+        "4b1b03b3-e3d3-432d-bb1b-91f5e487cf90"
+      ],
+      "createdAt": "2026-10-15T18:18:34.584Z",
+      "updatedAt": "2026-10-15T18:18:34.584Z",
+      "lastAccessedAt": "2026-10-16T03:30:59.568Z",
+      "revision": 1,
+      "contentHash": "70c1426a9cb14a1e51fb432d1075711f9e464ce04fa579eda96cd908160e6577",
+      "sizeBytes": 4859,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "42b8694e-f097-43db-9f58-9d606e02cfd1",
+      "title": "Unity AutoBattle 项目现状总览与接手指南（新会话入口）",
+      "description": "HelloWorldProject 挂机自动战斗游戏的全局地图：代码文件职责、原始 12 步路线图（每步具体内容）与进度、关键设计约定与踩坑教训、既有 Mnemon 文档索引、当前待办。新会话开始开发前先读这份，再按索引跳到对应专题文档。",
+      "status": "active",
+      "filename": "unity-autobattle-42b8694e.md",
+      "relativePath": "documents/active/unity-autobattle-42b8694e.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/Stages.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/SaveSystem.cs",
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs",
+        "HelloWorldProject/Assets/Resources/HeroPortrait.png"
+      ],
+      "sessionIds": [
+        "session-820fee2d-3ea4-4964-9f54-6440131b1026"
+      ],
+      "createdAt": "2026-10-15T18:23:22.330Z",
+      "updatedAt": "2026-10-16T03:30:06.010Z",
+      "lastAccessedAt": "2026-10-16T04:28:13.665Z",
+      "revision": 2,
+      "contentHash": "eba2aab0b7db0d059e9ebd3c17f7158477ffa444dd0316dd27dd8c175139d6be",
+      "sizeBytes": 12139,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "cc30b461-fc35-4515-a393-f03aacb0d948",
+      "title": "Unity AutoBattle 多存档槽与自动化平衡回归测试（BalanceRegression 框架与反向验证）",
+      "description": "HelloWorldProject 两件工程化落地：SaveSystem 三存档槽（槽 0 兼容老档、零迁移）的设计与隔离实测；BalanceRegression 回归框架（固定种子逐位可复现、逐档种子、静态哨兵/胜率两层、0.5pp 容差）的三步反向验证证据、用法入口与仍未覆盖的中间章节缺口。",
+      "status": "active",
+      "filename": "unity-autobattle-balanceregression-cc30b461.md",
+      "relativePath": "documents/active/unity-autobattle-balanceregression-cc30b461.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/SaveSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Editor/BalanceRegression.cs",
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs",
+        "_balance/baseline.json"
+      ],
+      "sessionIds": [
+        "eedb56de-e60a-4b8d-8210-e69a21128a59"
+      ],
+      "createdAt": "2026-10-16T04:28:26.308Z",
+      "updatedAt": "2026-10-16T04:28:26.308Z",
+      "lastAccessedAt": "2026-10-16T04:28:26.308Z",
+      "revision": 1,
+      "contentHash": "6ba745dde0f5583a33aae6a4c669134a7ef80934f60f038c3b51c7e9825ca292",
+      "sizeBytes": 7792,
+      "memoryBodyIds": []
+    }
+  ]
+}

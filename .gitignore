@@ -1,0 +1,53 @@
+# Unity 自动生成的目录：体积巨大且可重建，绝不能提交
+HelloWorldProject/[Ll]ibrary/
+HelloWorldProject/[Tt]emp/
+HelloWorldProject/[Oo]bj/
+HelloWorldProject/[Bb]uild/
+HelloWorldProject/[Bb]uilds/
+HelloWorldProject/[Ll]ogs/
+HelloWorldProject/[Uu]serSettings/
+HelloWorldProject/[Mm]emoryCaptures/
+HelloWorldProject/[Rr]ecordings/
+
+# Unity 生成的工程文件（由 Assets / ProjectSettings 重新生成）
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# 构建产物
+*.apk
+*.aab
+*.unitypackage
+*.app
+crashlytics-build.properties
+sysinfo.txt
+
+# DSH 插件的工作目录：里面是生成结果，不是项目资产
+dsh-image-gen/
+
+# 素材调研的中间产物
+# _art/fish/ 是从 GitHub 素材库下载的 63 张候选图（约 25MB），只是调研用
+# whale_girl_v3* / hero_v2* 是被淘汰的立绘版本
+_art/fish/
+_art/whale_girl_v3*
+_art/hero_v2*
+_art/*.bak
+_balance/*.bak
+
+# 杂项
+*.bak
+*.tmp
+*~
+.vs/
+.idea/
+.vscode/
