@@ -52,6 +52,10 @@ namespace AutoBattle
         public float DropChance = 0.30f;
         public int SellBaseGold = 5;
         public float SellGoldPerLevel = 3f;
+        public float EnhanceBonusPerLevel = 0.03f;
+        public int EnhanceMaxLevel = 15;
+        public int EnhanceBaseCost = 150;
+        public int EnhanceCostPerLevel = 300;
         public int WeaponBaseAttack = 5;
         public float WeaponAttackPerLevel = 2.0f;
         public float WeaponBaseCritChance = 0.01f;

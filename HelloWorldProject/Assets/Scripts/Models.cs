@@ -12,6 +12,26 @@ namespace AutoBattle
         Armor,
     }
 
+    /// <summary>
+    /// 强化一次的结果。做成枚举而不是 bool，是为了让 UI 能对「为什么没强化成功」
+    /// 给出具体提示（金币不足和已达上限是两种完全不同的处境），
+    /// 而不是笼统地不响应点击。
+    /// </summary>
+    public enum EnhanceResult
+    {
+        /// <summary>强化成功，金币已扣、等级已升。</summary>
+        Success,
+
+        /// <summary>该槽位没有装备。</summary>
+        NoEquipment,
+
+        /// <summary>已经强化到上限 <see cref="GameConfig.EnhanceMaxLevel"/>。</summary>
+        MaxLevel,
+
+        /// <summary>金币不够支付本次费用。</summary>
+        NotEnoughGold,
+    }
+
     /// <summary>装备品质，顺序必须与 GameConfig 里的权重/倍率/名称数组一致（要求 12）。</summary>
     public enum EquipmentQuality
     {
@@ -129,6 +149,15 @@ namespace AutoBattle
         public int hp;
 
         /// <summary>
+        /// 强化等级，0 ~ <see cref="GameConfig.EnhanceMaxLevel"/>。
+        /// 强化**只提升主属性**（武器攻击 / 衣服防御与生命，见 <see cref="EnhancedAttack"/>
+        /// 等），既不碰下面这两个武器主词条（暴击率/暴击伤害），也不碰任何副词条。
+        /// 这样暴击流不会因为「有钱就能无限堆主属性」而失控，评分与自动换装的
+        /// 比较口径也保持稳定。
+        /// </summary>
+        public int enhanceLevel;
+
+        /// <summary>
         /// 武器主词条之一：暴击率加成（0.05 表示 +5%）。
         /// 武器主词条是「攻击 + 暴击率/暴击伤害随机一个」，所以这件装备上它和
         /// <see cref="critDamage"/> 只会有一个非 0。衣服恒为 0。
@@ -164,25 +193,70 @@ namespace AutoBattle
         /// <summary>形如「倍率 x2.34」，用来展示同品质内的强弱浮动。</summary>
         public string MultiplierText => $"倍率 x{qualityMultiplier:0.00}";
 
-        /// <summary>形如「稀有 武器 Lv.12」。</summary>
-        public string Title => $"{QualityName} {SlotName} Lv.{level}";
+        // ---- 强化（步骤 2）：只作用于主属性 ----
 
-        /// <summary>形如「攻击 +24」或「防御 +8  生命 +60」。</summary>
+        /// <summary>
+        /// 强化倍率 = 1 + 每级加成 × 强化等级。0 级时为 1（完全不改变原属性）。
+        /// 乘算而非加算：同品质两件装备的强弱差距在强化后不会被绝对值稀释掉。
+        /// </summary>
+        public float EnhanceMultiplier => 1f + GameConfig.EnhanceBonusPerLevel * enhanceLevel;
+
+        /// <summary>强化后的攻击（武器主属性）。未强化时等于 <see cref="attack"/>。</summary>
+        public int EnhancedAttack => Mathf.RoundToInt(attack * EnhanceMultiplier);
+
+        /// <summary>强化后的防御（衣服主属性）。未强化时等于 <see cref="defense"/>。</summary>
+        public int EnhancedDefense => Mathf.RoundToInt(defense * EnhanceMultiplier);
+
+        /// <summary>强化后的生命（衣服主属性）。未强化时等于 <see cref="hp"/>。</summary>
+        public int EnhancedHp => Mathf.RoundToInt(hp * EnhanceMultiplier);
+
+        /// <summary>是否还能继续强化。</summary>
+        public bool CanEnhance => enhanceLevel < GameConfig.EnhanceMaxLevel;
+
+        /// <summary>把当前等级再强化一级所需的金币；已满级返回 0。</summary>
+        public int EnhanceCost => CanEnhance ? GameConfig.EnhanceCost(enhanceLevel, quality) : 0;
+
+        /// <summary>形如「+3」的强化后缀；未强化时返回空串，便于直接拼进标题。</summary>
+        public string EnhanceText => enhanceLevel > 0 ? $" +{enhanceLevel}" : string.Empty;
+
+        /// <summary>强化后的主属性展示（形如「攻击 12 → 14」）；未强化时只给当前值。</summary>
+        public string EnhanceGainText
+        {
+            get
+            {
+                if (slot == EquipmentSlot.Weapon)
+                    return enhanceLevel > 0 ? $"攻击 {attack} → {EnhancedAttack}" : $"攻击 {attack}";
+                return enhanceLevel > 0
+                    ? $"防御 {defense} → {EnhancedDefense}   生命 {hp} → {EnhancedHp}"
+                    : $"防御 {defense}   生命 {hp}";
+            }
+        }
+
+        /// <summary>形如「稀有 武器 Lv.12 +3」。</summary>
+        public string Title => $"{QualityName} {SlotName} Lv.{level}{EnhanceText}";
+
+        /// <summary>
+        /// 形如「攻击 +24」或「防御 +8  生命 +60」。
+        /// 用强化后的主属性：角色属性面板读的就是 Enhanced*，装备明细若还写原始值，
+        /// 强化完会出现「总攻击涨了、下面拆出来的装备攻击没变」的矛盾观感。
+        /// 未强化时 Enhanced* 与原值相等，所以这里对掉落展示（LootSystem 的掉落日志、
+        /// 装备自检）没有任何影响。
+        /// </summary>
         public string StatLine
         {
             get
             {
                 var sb = new StringBuilder();
-                if (attack > 0) sb.Append($"攻击 +{attack}");
+                if (attack > 0) sb.Append($"攻击 +{EnhancedAttack}");
                 if (defense > 0)
                 {
                     if (sb.Length > 0) sb.Append("  ");
-                    sb.Append($"防御 +{defense}");
+                    sb.Append($"防御 +{EnhancedDefense}");
                 }
                 if (hp > 0)
                 {
                     if (sb.Length > 0) sb.Append("  ");
-                    sb.Append($"生命 +{hp}");
+                    sb.Append($"生命 +{EnhancedHp}");
                 }
                 if (critChance > 0f)
                 {
@@ -235,492 +309,7 @@ namespace AutoBattle
     }
 
     /// <summary>
-    /// 主角数据（要求 2）。基础属性由等级推导，最终属性 = 基础 + 装备加成。
-    /// </summary>
-    [Serializable]
-    public class PlayerData
-    {
-        public int level = 1;
-        public int exp = 0;
-
-        /// <summary>金币总数：卖掉弱于当前装备的掉落累积，单价见 GameConfig.SellPrice。</summary>
-        public int gold;
-
-        /// <summary>持有的生命药剂数量（上限见 GameConfig.PotionMaxCount）。</summary>
-        public int potionCount;
-
-        /// <summary>是否开启「自动购买」：持有数低于阈值且金币足够时自动补 1 瓶（交战时不补）。</summary>
-        public bool autoBuyPotion = true;
-
-        /// <summary>巅峰等级：满级（Lv.100）后继续累积经验提升，每级 +1 攻击 / +1 防御。</summary>
-        public int paragonLevel;
-
-        /// <summary>巅峰经验（只在满级后累积）。</summary>
-        public int paragonExp;
-
-        /// <summary>
-        /// 已获得的技能位掩码（第 N 位对应 SkillId N）。
-        /// 100 级前恒为 0（完全没有技能）；满级后每升 10 级巅峰获得一次「三选一」。
-        /// </summary>
-        public int ownedSkillMask;
-
-        /// <summary>
-        /// 还没兑现的技能三选一次数。巅峰升级时按里程碑差值补上，玩家每选一个减一。
-        /// 存进存档：中途退出不会丢应得的技能。
-        /// </summary>
-        public int pendingSkillPicks;
-
-        // ==================== 关卡 / 章节进度（步骤 4a） ====================
-
-        /// <summary>当前章节号，1 起。关卡怪物等级 = ChapterMonsterLevelStep × chapterIndex。</summary>
-        public int chapterIndex = 1;
-
-        /// <summary>当前章节内的关卡号，1 起。</summary>
-        public int stageIndex = 1;
-
-        /// <summary>本关已击杀的怪物数（主角阵亡重试时归零）。</summary>
-        public int stageKillCount;
-
-        /// <summary>历史解锁到的最高章节，选关界面用它判断锁定。</summary>
-        public int maxChapterUnlocked = 1;
-
-        // ==================== 首通记录（步骤 4c） ====================
-
-        /// <summary>
-        /// 已经拿过首通奖励的关卡，元素是 chapter * 100 + stage 的编码。
-        /// 用 List&lt;int&gt; 而不是 HashSet&lt;int&gt;：JsonUtility 不序列化 HashSet。
-        /// </summary>
-        public List<int> clearedStages = new List<int>();
-
-        /// <summary>把关卡编码成 clearedStages 里的整数。章节 &lt; 100，所以两位关卡号放得下。</summary>
-        public static int StageKey(int chapter, int stage) => chapter * 100 + stage;
-
-        /// <summary>
-        /// 编码方式的解码侧。和 StageKey 放在一起，改编码时只需看这两行
-        /// （原先 Stages.cs 里直接写着 / 100 和 % 100，改一处就会静默错位）。
-        /// </summary>
-        public static int ChapterOfKey(int stageKey) => stageKey / 100;
-
-        /// <summary>见 ChapterOfKey。</summary>
-        public static int StageOfKey(int stageKey) => stageKey % 100;
-
-        /// <summary>这一关是否已经拿过首通奖励。</summary>
-        public bool IsStageFirstCleared(int chapter, int stage)
-        {
-            return clearedStages != null && clearedStages.Contains(StageKey(chapter, stage));
-        }
-
-        /// <summary>标记首通。返回 true 表示这是头一回（调用方据此发奖励）。</summary>
-        public bool MarkStageFirstCleared(int chapter, int stage)
-        {
-            if (clearedStages == null) clearedStages = new List<int>();
-            int key = StageKey(chapter, stage);
-            if (clearedStages.Contains(key)) return false;
-            clearedStages.Add(key);
-            return true;
-        }
-
-        /// <summary>已首通的关卡总数。</summary>
-        public int ClearedStageCount => clearedStages != null ? clearedStages.Count : 0;
-
-        /// <summary>
-        /// 已经领到的首通金币总额（步骤 4d）。逐关按 StageCatalog 的公式累加，
-        /// 所以改了首通奖励配置之后这个数字会跟着变——它是「按规则重算」，
-        /// 不是另记一笔流水。
-        /// </summary>
-        public int TotalFirstClearGoldClaimed()
-        {
-            if (clearedStages == null) return 0;
-            int sum = 0;
-            for (int i = 0; i < clearedStages.Count; i++)
-            {
-                sum += StageCatalog.FirstClearGoldOfKey(clearedStages[i]);
-            }
-            return sum;
-        }
-
-        /// <summary>该章已经首通的关卡数。</summary>
-        public int ClearedCountInChapter(int chapter)
-        {
-            if (clearedStages == null) return 0;
-            int n = 0;
-            for (int s = 1; s <= StageCatalog.StagesPerChapter; s++)
-            {
-                if (clearedStages.Contains(StageKey(chapter, s))) n++;
-            }
-            return n;
-        }
-
-        /// <summary>本关是不是头一回打（还没拿过首通奖励）。</summary>
-        public bool IsCurrentStageFirstClear => !IsStageFirstCleared(chapterIndex, stageIndex);
-
-        /// <summary>当前关卡的定义（章节 / 关卡号会被夹到合法范围）。</summary>
-        public StageDef CurrentStage => StageCatalog.Get(chapterIndex, stageIndex);
-
-        /// <summary>本关还差几只怪通关。</summary>
-        public int StageKillsLeft => Mathf.Max(0, CurrentStage.killTarget - stageKillCount);
-
-        /// <summary>本关是否已经打满击杀数。</summary>
-        public bool IsStageCleared => stageKillCount >= CurrentStage.killTarget;
-
-        /// <summary>
-        /// 直接把进度放到某关（选关 / 读档 / 关卡结束推进都走这里）。
-        /// 会推进 maxChapterUnlocked，但不会回退它。
-        /// </summary>
-        public void EnterStage(int chapter, int stage)
-        {
-            chapterIndex = Mathf.Clamp(chapter, 1, GameConfig.ChapterCount);
-            stageIndex = Mathf.Clamp(stage, 1, GameConfig.StagesPerChapter);
-            stageKillCount = 0;
-            if (chapterIndex > maxChapterUnlocked) maxChapterUnlocked = chapterIndex;
-        }
-
-        /// <summary>
-        /// 通关推进：本章还有下一关就去下一关，否则进入下一章第一关。
-        /// 返回 false 表示已经是最后一关（终局），进度不动。
-        /// </summary>
-        public bool AdvanceStage()
-        {
-            int c = chapterIndex;
-            int s = stageIndex;
-            if (!StageCatalog.Advance(ref c, ref s)) return false;
-            EnterStage(c, s);
-            return true;
-        }
-
-        /// <summary>本关关底怪的档次（普通关精英、章末关 Boss）。</summary>
-        public MonsterTier StageClearTier => CurrentStage.clearTier;
-
-        // ---- 六个技能槽（-1 表示空）：0~1 主动、2~3 被动、4~5 触发 ----
-
-        public int skillActive0 = -1;
-        public int skillActive1 = -1;
-        public int skillPassive0 = -1;
-        public int skillPassive1 = -1;
-        public int skillTrigger0 = -1;
-        public int skillTrigger1 = -1;
-
-        /// <summary>当前生命。载入后由 GameController 夹到 MaxHp 范围内。</summary>
-        public int currentHp;
-
-        /// <summary>当前护盾（「护盾生成」技能给的）。运行时状态，不存档；受击时优先于生命被消耗。</summary>
-        [System.NonSerialized] public int shield;
-
-        public Equipment weapon;
-        public Equipment armor;
-
-        // ---- 基础属性（仅由等级决定）----
-
-        public int BaseMaxHp => GameConfig.PlayerBaseMaxHp + GameConfig.PlayerMaxHpPerLevel * (level - 1);
-        public int BaseAttack => GameConfig.PlayerBaseAttack + GameConfig.PlayerAttackPerLevel * (level - 1);
-        public int BaseDefense => GameConfig.PlayerBaseDefense + GameConfig.PlayerDefensePerLevel * (level - 1);
-        public int BaseSpeed => GameConfig.PlayerBaseSpeed + GameConfig.PlayerSpeedPerLevel * (level - 1);
-
-        // ---- 最终属性（基础 + 装备）----
-
-        /// <summary>副词条汇总：攻击速度加成（武器 + 衣服）。</summary>
-        public float EquipAttackSpeedBonus => (weapon != null ? weapon.affixAttackSpeed : 0f)
-                                             + (armor != null ? armor.affixAttackSpeed : 0f);
-
-        /// <summary>副词条汇总：全属性加成，按比例同时放大攻击、防御、生命。</summary>
-        public float AllStatsBonus => (weapon != null ? weapon.affixAllStats : 0f)
-                                    + (armor != null ? armor.affixAllStats : 0f);
-
-        /// <summary>副词条汇总：暴击率。</summary>
-        public float AffixCritChance => (weapon != null ? weapon.affixCritChance : 0f)
-                                      + (armor != null ? armor.affixCritChance : 0f);
-
-        /// <summary>副词条汇总：暴击伤害。</summary>
-        public float AffixCritDamage => (weapon != null ? weapon.affixCritDamage : 0f)
-                                      + (armor != null ? armor.affixCritDamage : 0f);
-
-        /// <summary>
-        /// 副词条汇总：护甲穿透（0.1 表示无视目标 10% 防御）。
-        /// 上限 80% —— 与暴击率 95% 上限同理，避免「完全无视防御」把防御属性变成废纸。
-        /// </summary>
-        public float ArmorPenetration => Mathf.Min(0.8f,
-            (weapon != null ? weapon.affixArmorPen : 0f) + (armor != null ? armor.affixArmorPen : 0f));
-
-        // ==================== 巅峰与技能汇总 ====================
-
-        /// <summary>当前技能等级（由巅峰等级推导：每 10 级 +1）。</summary>
-        public int SkillLevel => GameConfig.SkillLevel(paragonLevel);
-
-        /// <summary>巅峰提供的攻击加成（纯加算，不参与百分比乘区）。</summary>
-        public int ParagonAttackBonus => paragonLevel * GameConfig.ParagonAttackPerLevel;
-
-        /// <summary>巅峰提供的防御加成。</summary>
-        public int ParagonDefenseBonus => paragonLevel * GameConfig.ParagonDefensePerLevel;
-
-        /// <summary>巅峰提供的生命加成（每级 +50，纯加算）。</summary>
-        public int ParagonHpBonus => paragonLevel * GameConfig.ParagonHpPerLevel;
-
-        /// <summary>该技能是否已装在任意槽位。</summary>
-        public bool HasSkill(SkillId id)
-        {
-            int v = (int)id;
-            return skillActive0 == v || skillActive1 == v || skillPassive0 == v
-                || skillPassive1 == v || skillTrigger0 == v || skillTrigger1 == v;
-        }
-
-        /// <summary>取某个被动按技能等级放大后的数值；没装则返回 0。</summary>
-        public float PassiveValue(SkillId id)
-        {
-            if (!HasSkill(id)) return 0f;
-            return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value, SkillLevel);
-        }
-
-        // ---- 被动技能带来的属性 ----
-
-        /// <summary>钢铁之躯：防御 +50%。</summary>
-        public float SkillDefenseBonus => PassiveValue(SkillId.IronBody);
-
-        /// <summary>狂暴之心：暴击率 +8%。</summary>
-        public float SkillCritChanceBonus => PassiveValue(SkillId.BerserkHeart);
-
-        /// <summary>致命打击：暴击伤害乘区（基础 +20%，随技能等级放大）。</summary>
-        public float SkillCritDamageBonus => PassiveValue(SkillId.LethalStrike);
-
-        /// <summary>吸血鬼：吸血 +5%。</summary>
-        public float Lifesteal => PassiveValue(SkillId.Vampire);
-
-        /// <summary>迅捷：攻击速度 +8%。</summary>
-        public float SkillAttackSpeedBonus => PassiveValue(SkillId.Swiftness);
-
-        /// <summary>巨人杀手：对精英 / Boss 的伤害加成。</summary>
-        public float GiantSlayerBonus => PassiveValue(SkillId.GiantSlayer);
-
-        /// <summary>不死之身：低血时的减伤比例。</summary>
-        public float UndyingReduction => PassiveValue(SkillId.Undying);
-
-        /// <summary>不死之身的触发血线（未装备返回 0）。</summary>
-        public float UndyingThreshold => HasSkill(SkillId.Undying) ? SkillCatalog.Get(SkillId.Undying).extra : 0f;
-
-        /// <summary>攻击速度总加成 = 装备副词条 + 迅捷被动。</summary>
-        public float AttackSpeedBonus => EquipAttackSpeedBonus + SkillAttackSpeedBonus;
-
-        // ---- 最终属性 ----
-
-        // 全属性作用在「基础 + 装备」之和上；防御再吃一次钢铁之躯；巅峰加成是纯加算。
-        public int MaxHp => Mathf.RoundToInt((BaseMaxHp + (armor != null ? armor.hp : 0)) * (1f + AllStatsBonus))
-                          + ParagonHpBonus;
-
-        public int Attack => Mathf.RoundToInt((BaseAttack + (weapon != null ? weapon.attack : 0)) * (1f + AllStatsBonus))
-                           + ParagonAttackBonus;
-
-        public int Defense => Mathf.RoundToInt(
-                                Mathf.RoundToInt((BaseDefense + (armor != null ? armor.defense : 0)) * (1f + AllStatsBonus))
-                                * (1f + SkillDefenseBonus))
-                            + ParagonDefenseBonus;
-
-        /// <summary>速度本身不受全属性影响；攻速词条走独立的「攻击间隔乘区」。</summary>
-        public int Speed => BaseSpeed;
-
-        /// <summary>暴击率 = 初始 5% + 武器主属性 + 副词条 + 狂暴之心，并夹在 MaxCritChance 以内。</summary>
-        public float CritChance => Mathf.Min(
-            GameConfig.MaxCritChance,
-            GameConfig.PlayerBaseCritChance + (weapon != null ? weapon.critChance : 0f)
-            + AffixCritChance + SkillCritChanceBonus);
-
-        /// <summary>暴击伤害倍率 =（初始 150% + 武器主属性 + 副词条）× 致命打击乘区。</summary>
-        public float CritDamage => (GameConfig.PlayerBaseCritDamage
-                                 + (weapon != null ? weapon.critDamage : 0f) + AffixCritDamage)
-                                 * (1f + SkillCritDamageBonus);
-
-        /// <summary>当前等级升到下一级所需经验；满级返回 0（要求 3）。</summary>
-        public int ExpToNextLevel => level >= GameConfig.MaxLevel ? 0 : GameConfig.ExpToNextLevel(level);
-
-        public bool IsMaxLevel => level >= GameConfig.MaxLevel;
-
-        /// <summary>进度条填充比例 0~1：满级前是普通经验，满级后转为巅峰经验进度。</summary>
-        public float ExpProgress
-        {
-            get
-            {
-                if (IsMaxLevel)
-                {
-                    if (IsMaxParagon) return 1f;
-                    int needParagon = ParagonExpToNext;
-                    return needParagon <= 0 ? 1f : Mathf.Clamp01((float)paragonExp / needParagon);
-                }
-
-                int need = ExpToNextLevel;
-                return need <= 0 ? 0f : Mathf.Clamp01((float)exp / need);
-            }
-        }
-
-        public float HpProgress => MaxHp <= 0 ? 0f : Mathf.Clamp01((float)currentHp / MaxHp);
-
-        /// <summary>把当前生命补齐到上限（新开档或升级后调用）。</summary>
-        public void FillHp() => currentHp = MaxHp;
-
-        public Equipment GetEquipment(EquipmentSlot s) => s == EquipmentSlot.Weapon ? weapon : armor;
-
-        public void SetEquipment(Equipment e)
-        {
-            if (e == null) return;
-            if (e.slot == EquipmentSlot.Weapon) weapon = e;
-            else armor = e;
-        }
-
-        /// <summary>当前巅峰等级升到下一级所需经验；满巅峰返回 0。</summary>
-        public int ParagonExpToNext => IsMaxParagon ? 0 : GameConfig.ParagonExpToNext(paragonLevel);
-
-        public bool IsMaxParagon => paragonLevel >= GameConfig.MaxParagonLevel;
-
-        /// <summary>
-        /// 增加经验并处理升级。满级（Lv.100）之前走普通等级；满级之后经验转为巅峰经验。
-        /// 返回本次实际升了几级（含巅峰），供日志使用。
-        /// </summary>
-        public int AddExp(int amount)
-        {
-            if (amount <= 0) return 0;
-
-            if (IsMaxLevel)
-            {
-                // 已满级：全部转成巅峰经验。
-                return AddParagonExp(amount);
-            }
-
-            exp += amount;
-            int gained = 0;
-
-            // 用 while 支持一次击杀连升多级。
-            while (!IsMaxLevel && exp >= ExpToNextLevel)
-            {
-                exp -= ExpToNextLevel;
-                level++;
-                gained++;
-            }
-
-            if (IsMaxLevel) exp = 0; // 满级后清空经验条
-            return gained;
-        }
-
-        /// <summary>加巅峰经验并处理升级；返回本次升了几级巅峰。</summary>
-        public int AddParagonExp(int amount)
-        {
-            if (IsMaxParagon || amount <= 0) return 0;
-
-            paragonExp += amount;
-            int gained = 0;
-
-            while (!IsMaxParagon && paragonExp >= ParagonExpToNext)
-            {
-                paragonExp -= ParagonExpToNext;
-                paragonLevel++;
-                gained++;
-            }
-
-            if (IsMaxParagon) paragonExp = 0;
-            return gained;
-        }
-
-        /// <summary>该技能是否已获得（100 级前一个都没有）。</summary>
-        public bool IsSkillOwned(SkillId id) => (ownedSkillMask & (1 << (int)id)) != 0;
-
-        /// <summary>已获得的技能数量。</summary>
-        public int OwnedSkillCount
-        {
-            get
-            {
-                int count = 0;
-                for (int i = 0; i < SkillCatalog.All.Length; i++)
-                    if ((ownedSkillMask & (1 << i)) != 0) count++;
-                return count;
-            }
-        }
-
-        /// <summary>
-        /// 随机获得一个尚未拥有的技能（巅峰每 10 级触发一次）。
-        /// 返回获得的技能编号；十五个技能全部拥有时返回 (SkillId)(-1)。
-        /// </summary>
-        public SkillId GrantRandomSkill()
-        {
-            var pool = new List<SkillId>();
-            for (int i = 0; i < SkillCatalog.All.Length; i++)
-                if ((ownedSkillMask & (1 << i)) == 0) pool.Add((SkillId)i);
-
-            if (pool.Count == 0) return (SkillId)(-1);
-
-            SkillId pick = pool[UnityEngine.Random.Range(0, pool.Count)];
-            ownedSkillMask |= 1 << (int)pick;
-            return pick;
-        }
-
-        /// <summary>
-        /// 从「尚未拥有」的技能里随机抽 count 个作为候选（互不重复）。
-        /// 剩余不足 count 个时返回全部剩余，全拥有时返回空表。
-        /// </summary>
-        public List<SkillId> RollSkillCandidates(int count)
-        {
-            var pool = new List<SkillId>();
-            for (int i = 0; i < SkillCatalog.All.Length; i++)
-                if ((ownedSkillMask & (1 << i)) == 0) pool.Add((SkillId)i);
-
-            var result = new List<SkillId>();
-            for (int i = 0; i < count && pool.Count > 0; i++)
-            {
-                int k = UnityEngine.Random.Range(0, pool.Count);
-                result.Add(pool[k]);
-                pool.RemoveAt(k);   // 抽走就移出池子，保证候选不重复
-            }
-            return result;
-        }
-
-        /// <summary>授予指定技能（三选一的落点）。已拥有或编号非法时返回 false。</summary>
-        public bool GrantSkill(SkillId id)
-        {
-            int index = (int)id;
-            if (index < 0 || index >= SkillCatalog.All.Length) return false;
-            if ((ownedSkillMask & (1 << index)) != 0) return false;
-
-            ownedSkillMask |= 1 << index;
-            return true;
-        }
-
-        /// <summary>按精英 / Boss 档次判断是否为「巨人杀手」的目标。</summary>
-        public static bool IsEliteOrBoss(MonsterTier tier) => tier != MonsterTier.Normal;
-
-        // ---- 技能槽读写（0~1 主动、2~3 被动、4~5 触发；-1 表示空）----
-
-        public int GetSkillSlot(int index)
-        {
-            switch (index)
-            {
-                case 0: return skillActive0;
-                case 1: return skillActive1;
-                case 2: return skillPassive0;
-                case 3: return skillPassive1;
-                case 4: return skillTrigger0;
-                case 5: return skillTrigger1;
-                default: return -1;
-            }
-        }
-
-        public void SetSkillSlot(int index, int skillId)
-        {
-            switch (index)
-            {
-                case 0: skillActive0 = skillId; break;
-                case 1: skillActive1 = skillId; break;
-                case 2: skillPassive0 = skillId; break;
-                case 3: skillPassive1 = skillId; break;
-                case 4: skillTrigger0 = skillId; break;
-                case 5: skillTrigger1 = skillId; break;
-            }
-        }
-
-        /// <summary>某个技能当前装在哪个槽位；没装返回 -1。</summary>
-        public int FindSkillSlot(int skillId)
-        {
-            for (int i = 0; i < 6; i++) if (GetSkillSlot(i) == skillId) return i;
-            return -1;
-        }
-    }
-
-    /// <summary>
-    /// 怪物数据。等级始终等于主角等级（要求 4）。
+    /// 怪物数据。等级由所在关卡决定（第 c 章 Lv.10(c-1)+1 ~ 10c），不再跟随主角等级。
     /// 面板按三层连乘得出：等级基础 × 类型系数 × 精英/Boss 系数 × 词缀系数。
     /// </summary>
     [Serializable]

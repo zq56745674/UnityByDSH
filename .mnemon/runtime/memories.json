@@ -2,6 +2,20 @@
   "version": 1,
   "entries": [
     {
+      "content": "用户不接受用代码程序化绘制的人物立绘（评价\"太丑了\"），需要人物形象时要去网上找现成的 AI 生成图，而不是自己画。",
+      "created_at": "2026-10-15T12:41:27.468Z",
+      "updated_at": "2026-10-15T12:41:27.468Z",
+      "target": "user",
+      "importance": "normal"
+    },
+    {
+      "content": "用户禁止我自行对项目执行 git commit 或 push：只有在他明确说\"提交\"时才允许操作 git，尤其严禁未经许可推送到远程仓库（如 github.com/zq56745674/UnityByDSH）。多做本地 commit 后要问、不要直接推。",
+      "created_at": "2026-10-16T05:27:46.818Z",
+      "updated_at": "2026-10-16T05:27:46.818Z",
+      "target": "user",
+      "importance": "critical"
+    },
+    {
       "content": "dsh-univer-office 带入的 12 个 @univerjs-pro 平台二进制包单个 tarball 13MB+，走官方 registry.npmjs.org 实测仅 350–470KB/s，最容易触发该超时。2026-10-12 已在 ~/.dsh/profiles/desktop/.npmrc 写入 registry=https://registry.npmmirror.com/（用 DSH 自带 node 跑 `pnpm config get registry` 验证生效），该镜像实测 2.5–3.0MB/s。注意 DSH 桌面版没有独立 node，跑 pnpm 要用 `$env:ELECTRON_RUN_AS_NODE=1; & \"D:\\Program Files\\DSH\\DeepSeek Harness.exe\" --expose-internals \"D:\\Program Files\\DSH\\resources\\runtime\\pnpm\\bin\\pnpm.mjs\" ...`。",
       "created_at": "2026-10-12T12:29:34.057Z",
       "updated_at": "2026-10-12T12:37:12.878Z",
@@ -58,13 +72,6 @@
       "importance": "normal"
     },
     {
-      "content": "用户不接受用代码程序化绘制的人物立绘（评价\"太丑了\"），需要人物形象时要去网上找现成的 AI 生成图，而不是自己画。",
-      "created_at": "2026-10-15T12:41:27.468Z",
-      "updated_at": "2026-10-15T12:41:27.468Z",
-      "target": "user",
-      "importance": "normal"
-    },
-    {
       "content": "游戏主角立绘用的是\"蓝色鲸鱼娘\"——DeepSeek 的拟人化同人形象（原型是 2025-06 上善无形用 AI 创作的原创角色\"溟月\"）。当前成品由 dsh-image-gen 插件走火山方舟 Seedream 生成（seedreamBackground: transparent 直接给透明底，无需抠图），装在 HelloWorldProject/Assets/Resources/HeroPortrait.png（透明底原图）与 HeroPortraitFade.png（边缘淡出，左面板底纹用），803×1024。早期\"从 GitHub 素材库挑图\"与\"用 Pillow 代码手绘\"两条路都已废弃——前者可用立绘极少，后者被用户否决（评价\"太丑了\"）。生成用的提示词与参考图在 E:\\pytest\\unitydsh1\\_art\\。",
       "created_at": "2026-10-15T12:41:32.677Z",
       "updated_at": "2026-10-15T18:23:33.174Z",
@@ -79,23 +86,16 @@
       "importance": "normal"
     },
     {
-      "content": "Unity 工程 HelloWorldProject（E:\\pytest\\unitydsh1）的项目知识已沉淀为 23 份 Mnemon Documents，入口是《Unity AutoBattle 项目现状总览与接手指南》（id 42b8694e-f097-43db-9f58-9d606e02cfd1）——含代码结构、12 步路线图进度、关键设计约定、踩坑教训、专题文档索引与待办。在新会话里接手这个工程的开发前，先 mnemon_document_search 搜这份总览，不要仅凭源码重新推导架构（注释里只有局部理由，全局取舍在文档里）。",
-      "created_at": "2026-10-15T18:23:30.240Z",
-      "updated_at": "2026-10-15T18:23:30.240Z",
+      "content": "HelloWorldProject 的日志有两条写入路径：GameController.AddLog 维护 TotalLogEntries/LogVersion，BattleSystem.Tick 直接往传入的 Log 里 Add（不计数），差值由 GameController.TickFighting 补记。以后新增往 Log 写的地方必须同步这两个计数器，否则飘字/实时 DPS 静默停摆。Mnemon 文档 42b8694e 中「2026-10-17 全项目审查（未修项）」那段已部分过时：暂停/继续、技能面板冻结、浮层穿透、选关面板重建、飘字/DPS 均已修，详见新文档 a6ea98c9（飘字/实时 DPS 修复与 UI 冒烟）。",
+      "created_at": "2026-10-17T12:32:15.974Z",
+      "updated_at": "2026-10-17T12:32:15.974Z",
       "target": "memory",
       "importance": "normal"
     },
     {
-      "content": "火山方舟（ARK）图像模型现状（2026-10-16 实测 /api/v3/models）：可用的是 doubao-seedream-5-0-pro-260628、doubao-seedream-5-0-flash-260915、doubao-seedream-4-0-20260415；doubao-seedream-5-0-260128 与 doubao-seedream-4-0-250828 标 Retiring 且调用报 404 InvalidEndpointOrModel.NotFound；doubao-seedream-3-0-t2i-250415、doubao-seededit-3-0-i2i-250628 已 Shutdown。dsh-image-gen 插件的出厂默认 seedreamModel 恰是已下线的 doubao-seedream-5-0-260128，故开箱即报 404，需改 C:\\Users\\Administrator\\.dsh\\profiles\\desktop\\cordis.patch.yml 的 seedreamModel（该文件 image-gen 块在第 80-88 行）。",
-      "created_at": "2026-10-15T18:27:05.680Z",
-      "updated_at": "2026-10-15T18:27:05.680Z",
-      "target": "memory",
-      "importance": "normal"
-    },
-    {
-      "content": "dsh-image-gen（desktop profile）的 cordis.patch.yml 配置改动无需重启 DSH 即生效——实测在 DSH 主进程启动后修改 seedreamModel，下一次 edit_image 调用就用了新模型。判别\"配置到底有没有被插件加载\"的技巧：ARK 先校验模型名、后校验余额，所以不存在/已下线的模型名报 404 InvalidEndpointOrModel.NotFound，而模型名有效但账户欠费报 403 AccountOverdueError；插件报 403 即证明它已经在用新模型名（若仍用旧模型名会先撞 404）。",
-      "created_at": "2026-10-15T18:27:05.689Z",
-      "updated_at": "2026-10-15T18:27:05.689Z",
+      "content": "HelloWorldProject 的 game_config.json 必须与 GameConfigData 的 97 个字段一一对应（当前 97 键）；GameConfig.Loader 加载后会用 ReportMissingKeys 对缺键打警告，缺字段不再静默回退默认值。历史备份、拆分前旧代码与一次性开发截图统一放工作区根的 _archive/（已 gitignore，内含 README 说明），不要留在仓库根或 Assets 里。",
+      "created_at": "2026-10-17T14:05:42.289Z",
+      "updated_at": "2026-10-17T14:05:42.289Z",
       "target": "memory",
       "importance": "normal"
     }

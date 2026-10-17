@@ -18,8 +18,6 @@ Unity 工程 HelloWorldProject（E:\pytest\unitydsh1）：装备评分口径已�
 §
 本机 raw.githubusercontent.com 的 DNS 解析不通（"找不到请求的类型的数据"），从 GitHub 取二进制文件要改走 cdn.jsdelivr.net/gh/<owner>/<repo>@main/<path>（实测可用；但大文件偶发 503）或 ghproxy.net/https://raw.githubusercontent.com/...（实测可用）。github.com 的 API（api.github.com）本身是通的，可以作为最后手段（contents 接口返回 base64）。搜索类工具（web_fetch）只能拿网页文本，下载图片必须自己用 Invoke-WebRequest 打直链。另外 Unity 导入 PNG 默认 spriteImportMode=Multiple，必须显式改成 Single，否则 AssetDatabase.LoadAssetAtPath<Sprite> 拿不到完整贴图。
 §
-Unity 工程 HelloWorldProject（E:\pytest\unitydsh1）的项目知识已沉淀为 23 份 Mnemon Documents，入口是《Unity AutoBattle 项目现状总览与接手指南》（id 42b8694e-f097-43db-9f58-9d606e02cfd1）——含代码结构、12 步路线图进度、关键设计约定、踩坑教训、专题文档索引与待办。在新会话里接手这个工程的开发前，先 mnemon_document_search 搜这份总览，不要仅凭源码重新推导架构（注释里只有局部理由，全局取舍在文档里）。
+HelloWorldProject 的日志有两条写入路径：GameController.AddLog 维护 TotalLogEntries/LogVersion，BattleSystem.Tick 直接往传入的 Log 里 Add（不计数），差值由 GameController.TickFighting 补记。以后新增往 Log 写的地方必须同步这两个计数器，否则飘字/实时 DPS 静默停摆。Mnemon 文档 42b8694e 中「2026-10-17 全项目审查（未修项）」那段已部分过时：暂停/继续、技能面板冻结、浮层穿透、选关面板重建、飘字/DPS 均已修，详见新文档 a6ea98c9（飘字/实时 DPS 修复与 UI 冒烟）。
 §
-火山方舟（ARK）图像模型现状（2026-10-16 实测 /api/v3/models）：可用的是 doubao-seedream-5-0-pro-260628、doubao-seedream-5-0-flash-260915、doubao-seedream-4-0-20260415；doubao-seedream-5-0-260128 与 doubao-seedream-4-0-250828 标 Retiring 且调用报 404 InvalidEndpointOrModel.NotFound；doubao-seedream-3-0-t2i-250415、doubao-seededit-3-0-i2i-250628 已 Shutdown。dsh-image-gen 插件的出厂默认 seedreamModel 恰是已下线的 doubao-seedream-5-0-260128，故开箱即报 404，需改 C:\Users\Administrator\.dsh\profiles\desktop\cordis.patch.yml 的 seedreamModel（该文件 image-gen 块在第 80-88 行）。
-§
-dsh-image-gen（desktop profile）的 cordis.patch.yml 配置改动无需重启 DSH 即生效——实测在 DSH 主进程启动后修改 seedreamModel，下一次 edit_image 调用就用了新模型。判别"配置到底有没有被插件加载"的技巧：ARK 先校验模型名、后校验余额，所以不存在/已下线的模型名报 404 InvalidEndpointOrModel.NotFound，而模型名有效但账户欠费报 403 AccountOverdueError；插件报 403 即证明它已经在用新模型名（若仍用旧模型名会先撞 404）。
+HelloWorldProject 的 game_config.json 必须与 GameConfigData 的 97 个字段一一对应（当前 97 键）；GameConfig.Loader 加载后会用 ReportMissingKeys 对缺键打警告，缺字段不再静默回退默认值。历史备份、拆分前旧代码与一次性开发截图统一放工作区根的 _archive/（已 gitignore，内含 README 说明），不要留在仓库根或 Assets 里。

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using UnityEditor;
 using UnityEngine;
 
 namespace AutoBattle.EditorTools
@@ -128,6 +129,105 @@ namespace AutoBattle.EditorTools
             }
             for (int c = 0; c < acc.Length; c++) acc[c] /= trials;
             return acc;
+        }
+
+        /// <summary>
+        /// 按章节的胜率（功能缺口 2）：玩家等级 = 该章怪级（ChapterMonsterLevelStep × 章节），
+        /// 装备按「精英保底掉落」的品质权重采样，巅峰 0 级（满级前没有巅峰）。
+        ///
+        /// 补这个口径是因为原 RunWinrate 固定 Lv.100 传说套打 Lv.100/110 怪，
+        /// 只反映满级天花板，看不出中间章节是卡关还是过易。
+        /// 玩家等级取怪级而不是更高，理由是关卡制下经验来自击杀同级怪，
+        /// 推进到第 N 章时等级大致就落在这附近；这偏保守，但偏保守的胜率才有诊断价值。
+        /// </summary>
+        public static string RunChapterWinrate(int perType, bool resetHp, int trials)
+        {
+            var sb = new StringBuilder();
+            sb.Append($"每章 {perType} 场/类型 × {trials} 次独立装备采样；每场重置生命={resetHp}；加权 战45/弓30/盗25\n");
+            sb.Append("章节  怪级   装备品质   精英胜率    Boss胜率    (Boss 逐类型)\n");
+            for (int ch = 1; ch <= GameConfig.ChapterCount; ch++)
+                sb.Append(RunChapterWinrateCell(ch, perType, resetHp, trials)).Append("\n");
+            return sb.ToString();
+        }
+
+        /// <summary>单个章节的胜率行（拆出来是为了能分批调用）。</summary>
+        public static string RunChapterWinrateCell(int chapter, int perType, bool resetHp, int trials)
+        {
+            float[] acc = RunChapterWinrateRow(chapter, perType, resetHp, trials, out float avgQuality, out int[] accWin);
+            int monsterLevel = GameConfig.ChapterMonsterLevelStep * chapter;
+            var sb = new StringBuilder();
+            sb.Append($"{chapter,4}  {monsterLevel,4}   {avgQuality,8:0.00}   ");
+            for (int c = 0; c < acc.Length; c++) sb.Append($"{acc[c] * 100f,8:0.0}%  ");
+            int n = perType * trials;
+            sb.Append($"   战 {(float)accWin[0] / n * 100f:0.0}% / 弓 {(float)accWin[1] / n * 100f:0.0}% / 盗 {(float)accWin[2] / n * 100f:0.0}%");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 单个章节的两格胜率（0~1），顺序：精英 / Boss。
+        /// avgQuality 是 trials 次采样里的平均品质序号（0=普通 ~ 4=传说），
+        /// 用来观察「推到这一章时装备大概什么档次」——胜率异常时先看它是否偏离预期。
+        /// </summary>
+        public static float[] RunChapterWinrateRow(int chapter, int perType, bool resetHp, int trials,
+                                                   out float avgQuality, out int[] accWin)
+        {
+            var battle = new BattleSystem();
+            float[] w = { 0.45f, 0.30f, 0.25f };
+            MonsterTier[] tierArr = { MonsterTier.Elite, MonsterTier.Boss };
+
+            var acc = new float[tierArr.Length];
+            accWin = new int[3];
+            avgQuality = 0f;
+            for (int tr = 0; tr < trials; tr++)
+            {
+                var p = BuildForChapter(chapter);
+                avgQuality += (int)p.weapon.quality;
+                for (int c = 0; c < tierArr.Length; c++)
+                {
+                    for (int t = 0; t < 3; t++)
+                    {
+                        int wins = 0;
+                        var type = (MonsterType)t;
+                        for (int i = 0; i < perType; i++)
+                        {
+                            var m = MonsterData.CreateForLevel(
+                                GameConfig.ChapterMonsterLevelStep * chapter, type, tierArr[c], MonsterAffix.None);
+                            if (Fight(p, m, battle, resetHp)) wins++;
+                        }
+                        acc[c] += w[t] * ((float)wins / perType);
+                        if (c == tierArr.Length - 1) accWin[t] += wins;
+                    }
+                }
+            }
+            for (int c = 0; c < acc.Length; c++) acc[c] /= trials;
+            avgQuality /= trials;
+            return acc;
+        }
+
+        /// <summary>
+        /// 按章节构造主角：等级 = 该章怪级，武器与衣服各按「精英保底掉落」的品质权重抽一件。
+        /// 用精英权重而不是普通怪 QualityWeights，是因为普通怪 62.5% 出普通品质，
+        /// 玩家的可用装备其实来自精英与 Boss；用最保守的权重会得出「所有中期章节都必败」，
+        /// 那种结论没有诊断价值。巅峰技能给 0：满级前本来就没有巅峰。
+        /// </summary>
+        static PlayerData BuildForChapter(int chapter)
+        {
+            int level = Mathf.Min(GameConfig.ChapterMonsterLevelStep * chapter, GameConfig.MaxLevel);
+            float[] weights = GameConfig.MonsterTierDropQualityWeights[(int)MonsterTier.Elite];
+            var p = new PlayerData();
+            p.level = level;
+            p.paragonLevel = 0;
+            p.paragonExp = 0;
+            p.weapon = LootSystem.CreateEquipment(EquipmentSlot.Weapon, level, LootSystem.RollQualityWithWeights(weights));
+            p.armor = LootSystem.CreateEquipment(EquipmentSlot.Armor, level, LootSystem.RollQualityWithWeights(weights));
+            p.FillHp();
+            return p;
+        }
+
+        [MenuItem("Tools/平衡回归/章节胜率表（缺口 2）")]
+        static void MenuChapterWinrate()
+        {
+            Debug.Log("[ChapterWinrate]\n" + RunChapterWinrate(30, true, 12));
         }
 
         /// <summary>构造一个满级主角：传说武器 + 传说衣服 + 按「巅峰每 10 级随机一个技能」自动装备。</summary>

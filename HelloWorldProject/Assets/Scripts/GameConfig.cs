@@ -26,12 +26,26 @@ namespace AutoBattle
         public static int ExpToNextLevel(int level) => 30 + 15 * level + 2 * level * level;
 
         /// <summary>
-        /// 击杀怪物获得的经验（要求 8）：基础值 (10 + 5*等级) × 类型倍率 × 档次倍率，四舍五入取整。
+        /// 关卡制下的经验补偿系数：每高一级怪多给这么多经验。
+        /// 基础经验只随怪物等级线性增长，而升级成本是二次的（ExpToNextLevel = 30+15L+2L²），
+        /// 不补的话主角等级会被关卡越拉越远——实测只靠推进到 11 章只有 Lv.66，打不过 Lv.110 的怪。
+        /// 目标：每章末主角等级 ≈ 该章末尾的怪物等级。
+        /// </summary>
+        public static float ChapterExpScalePerLevel = 0.07f;
+
+        /// <summary>关卡经验补偿：Lv.1 → 1.0，Lv.110 → 约 8.6。</summary>
+        public static float ChapterExpFactor(int monsterLevel) =>
+            1f + (Mathf.Max(1, monsterLevel) - 1) * ChapterExpScalePerLevel;
+
+        /// <summary>
+        /// 击杀怪物获得的经验（要求 8）：基础值 (10 + 5*等级) × 类型倍率 × 档次倍率 × 关卡经验补偿，
+        /// 四舍五入取整。
         /// </summary>
         public static int MonsterExpReward(int monsterLevel, MonsterType type, MonsterTier tier) =>
             Mathf.RoundToInt((10 + 5 * monsterLevel)
                              * MonsterExpFactorByType[(int)type]
-                             * MonsterTierExpFactor[(int)tier]);
+                             * MonsterTierExpFactor[(int)tier]
+                             * ChapterExpFactor(monsterLevel));
 
         // ==================== 战斗 ====================
 
@@ -143,21 +157,21 @@ namespace AutoBattle
 
         // ==================== 关卡 / 章节（步骤 4a） ====================
 
-        /// <summary>章节总数。第 N 章的怪物等级 = ChapterMonsterLevelStep × N。</summary>
+        /// <summary>章节总数。第 N 章的怪物等级 = ChapterMonsterLevelStep×(N-1)+1 ~ ChapterMonsterLevelStep×N。</summary>
         public static int ChapterCount = 11;
 
         /// <summary>每章的关卡数。</summary>
         public static int StagesPerChapter = 10;
 
-        /// <summary>章节之间的怪物等级步长（第 1 章 Lv.10、第 11 章 Lv.110）。</summary>
+        /// <summary>章节之间的怪物等级步长（第 1 章 Lv.1~10、第 11 章 Lv.101~110）。</summary>
         public static int ChapterMonsterLevelStep = 10;
 
         /// <summary>
-        /// 怪物等级 → 章节号。关卡制下怪物等级恒等于 ChapterMonsterLevelStep × 章节号，
-        /// 所以从等级就能反推章节，不用把章节号一路传进怪物工厂。
+        /// 怪物等级 → 章节号。第 N 章的怪物等级落在 ChapterMonsterLevelStep×(N-1)+1 ~ ChapterMonsterLevelStep×N，
+        /// 所以按「向上取整」从等级反推章节，不用把章节号一路传进怪物工厂。
         /// </summary>
         public static int ChapterOfMonsterLevel(int monsterLevel) =>
-            Mathf.Clamp(Mathf.Max(1, monsterLevel) / ChapterMonsterLevelStep, 1, ChapterCount);
+            Mathf.Clamp(((Mathf.Max(1, monsterLevel) - 1) / ChapterMonsterLevelStep) + 1, 1, ChapterCount);
 
         /// <summary>怪物在它所属章节里的显示名（按类型取该章的族类名）。</summary>
         public static string MonsterNameOf(int monsterLevel, MonsterType type)
@@ -255,6 +269,42 @@ namespace AutoBattle
             Mathf.Max(1, Mathf.RoundToInt(
                 (SellBaseGold + SellGoldPerLevel * Mathf.Max(0, level - 1)) *
                 SellQualityMultipliers[(int)quality]));
+
+        // ==================== 装备强化（步骤 2） ====================
+        // 强化只提升主属性：武器加攻击，衣服加防御与生命。
+        // 明确**不**碰武器主词条里的暴击率/暴击伤害，也不碰任何副词条——
+        // 那两类已经由「品质决定条数 + 掉落随机」在管，再挂一个可无限投入的
+        // 成长轴，暴击流会失去上限，评分与自动换装的口径也会跟着失稳。
+        //
+        // 每级 +3% 走的是**乘算**（相对这件装备自己的主属性），不是加算。
+        // 乘算的好处是同品质强弱不同的两件装备，强化后强弱关系不会翻转：
+        // 加算会把「强装备的领先量」按绝对值稀释掉，越强化越趋同。
+        // +15 满级 = ×1.45，单级涨幅小、看得到、不破坏现有平衡档位。
+
+        /// <summary>强化每级的主属性加成（乘算，0.03 表示 +3%）。</summary>
+        public static float EnhanceBonusPerLevel = 0.03f;
+
+        /// <summary>强化等级上限。</summary>
+        public static int EnhanceMaxLevel = 15;
+
+        /// <summary>强化费用的基础值（从 +0 强化到 +1 的基准价，未乘品质系数）。</summary>
+        public static int EnhanceBaseCost = 150;
+
+        /// <summary>强化费用的等级成长：当前强化等级每高 1 级，本次费用多这么多。</summary>
+        public static int EnhanceCostPerLevel = 300;
+
+        /// <summary>
+        /// 从 enhanceLevel 强化到 enhanceLevel+1 所需金币：
+        /// (EnhanceBaseCost + EnhanceCostPerLevel × 当前等级) × 品质系数。
+        /// 例：普通 +0→+1 = 150 × 0.6 = 90；传说 +14→+15 = (150 + 300×14) × 1.6 = 6,960。
+        /// 单件从 +0 强化到 +15 的累计花费：普通约 20,250，传说约 54,000。
+        /// 这个量级是有意的——强化是金币的主要出口，装备掉落卖钱源源不断，
+        /// 若费用太低，中期开始金币就会溢出一地而没有用途。
+        /// </summary>
+        public static int EnhanceCost(int enhanceLevel, EquipmentQuality quality) =>
+            Mathf.Max(1, Mathf.RoundToInt(
+                (EnhanceBaseCost + EnhanceCostPerLevel * Mathf.Max(0, enhanceLevel)) *
+                EnhanceQualityFactors[(int)quality]));
 
         // ==================== 装备基础值（要求 9、10、13） ====================
 

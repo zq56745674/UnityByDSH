@@ -1,0 +1,879 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using UnityEngine.Events;
+
+namespace AutoBattle
+{
+    public partial class GameUI : MonoBehaviour
+    {
+        // ==================== 技能面板 ====================
+
+        /// <summary>
+        /// 技能三选一面板：巅峰升级发技能时弹出，从候选里挑一个。
+        /// 居中显示，不选完不消失（战斗在 State.SkillChoice 下暂停）。
+        /// </summary>
+        private void BuildSkillChoicePanel(Transform root)
+        {
+            int count = GameConfig.SkillChoiceCount;
+
+            _skillChoicePanel = CreatePanel(root, "SkillChoicePanel", 250, 232, 780, 244,
+                GameConfig.ScreenDim, true);
+
+            _skillChoiceTitle = CreateText(_skillChoicePanel, "SkillChoiceTitle", "", 24, 12, 732, 30, 20,
+                GameConfig.AccentBannerTitle, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+            CreateText(_skillChoicePanel, "SkillChoiceHint", "从下面选一个技能（选完自动装备并继续战斗）",
+                24, 44, 732, 22, 14, GameConfig.TextMuted, TextAnchor.MiddleCenter);
+
+            _skillChoiceButtons = new Button[count];
+            _skillChoiceLabels = new Text[count];
+
+            const float cardW = 236f;
+            const float cardH = 150f;
+            float gap = count > 1 ? (732f - cardW * count) / (count - 1) : 0f;
+
+            for (int i = 0; i < count; i++)
+            {
+                int captured = i;
+                float x = 24f + i * (cardW + gap);
+
+                _skillChoiceButtons[i] = CreateButton(_skillChoicePanel, $"SkillChoice{i}", "", x, 72f, cardW, cardH,
+                    GameConfig.RowBg, out _skillChoiceLabels[i]);
+
+                _skillChoiceLabels[i].fontSize = 15;
+                _skillChoiceLabels[i].alignment = TextAnchor.UpperLeft;
+                _skillChoiceLabels[i].rectTransform.offsetMin = new Vector2(12f, 10f);
+                _skillChoiceLabels[i].rectTransform.offsetMax = new Vector2(-12f, -10f);
+
+                _skillChoiceButtons[i].onClick.AddListener(() => OnSkillChoiceClicked(captured));
+            }
+
+            _skillChoicePanel.gameObject.SetActive(false);
+        }
+
+        private void OnSkillChoiceClicked(int index) => _game.ChooseSkill(index);
+
+        /// <summary>刷新技能三选一面板：候选项、标题里的待选次数。</summary>
+        private void RefreshSkillChoice()
+        {
+            if (_skillChoicePanel == null) return;
+
+            bool open = _game.IsChoosingSkill;
+            _skillChoicePanel.gameObject.SetActive(open);
+            if (!open) return;
+
+            IReadOnlyList<SkillId> choices = _game.SkillChoices;
+            int pending = _game.PendingSkillPicks;
+
+            _skillChoiceTitle.text = pending > 1
+                ? $"✧ 巅峰奖励 — 选择技能（还有 {pending} 次待选）"
+                : "✧ 巅峰奖励 — 选择技能";
+
+            for (int i = 0; i < _skillChoiceButtons.Length; i++)
+            {
+                bool valid = i < choices.Count;
+                _skillChoiceButtons[i].gameObject.SetActive(valid);
+                if (!valid) continue;
+
+                SkillDef def = SkillCatalog.Get(choices[i]);
+                _skillChoiceLabels[i].text =
+                    $"{def.name}\n<size=13><color=#AAB0BD>{KindShort((int)def.kind)}</color></size>\n\n{def.description}";
+                _skillChoiceLabels[i].color = def.color;
+            }
+        }
+        /// <summary>技能面板：点击技能栏槽位后弹出，列出整个技能池供装配。</summary>
+        private void BuildSkillPanel(Transform root)
+        {
+            _skillPanel = CreatePanel(root, "SkillPanel", 236, 96, 808, 508, GameConfig.InsetBg, true);
+
+            _skillPanelTitle = CreateText(_skillPanel, "SkillPanelTitle", "", 20, 12, 768, 30, 19,
+                GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+            CreateText(_skillPanel, "SkillPanelHint",
+                "点击技能装到当前槽位（类别不符会自动放进同类空槽）；点击已装备的技能可卸下",
+                20, 44, 768, 24, 13, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            const int columns = 3;
+            int total = SkillCatalog.All.Length;
+            _skillPoolButtons = new Button[total];
+            _skillPoolLabels = new Text[total];
+
+            for (int i = 0; i < total; i++)
+            {
+                int captured = i;
+                int col = i % columns;
+                int row = i / columns;
+                float x = 20f + col * 258f;
+                // 卡片间距从 82/高 74 改成 74/高 66：15 张卡是 3 列 5 行，原来的排法第 5 行
+                // 落在 y 402..476，正好压住右上角 (698,458) 的「关闭」按钮。
+                float y = 74f + row * 74f;
+
+                _skillPoolButtons[i] = CreateButton(_skillPanel, $"SkillPool{i}", "", x, y, 248, 66,
+                    GameConfig.RowBg, out _skillPoolLabels[i]);
+
+                _skillPoolLabels[i].fontSize = 13;
+                _skillPoolLabels[i].verticalOverflow = VerticalWrapMode.Truncate;
+                _skillPoolLabels[i].alignment = TextAnchor.MiddleLeft;
+                _skillPoolLabels[i].rectTransform.offsetMin = new Vector2(10f, 4f);
+                _skillPoolLabels[i].rectTransform.offsetMax = new Vector2(-8f, -4f);
+
+                _skillPoolButtons[i].onClick.AddListener(() => OnSkillPoolClicked(captured));
+            }
+
+            Button close = CreateButton(_skillPanel, "SkillPanelClose", "关闭", 698, 458, 90, 36,
+                GameConfig.CardDanger, out _);
+            close.onClick.AddListener(OnSkillPanelCloseClicked);
+
+            _skillPanel.gameObject.SetActive(false);
+        }
+
+        // ==================== 居中横幅（步骤 4c）====================
+
+        /// <summary>
+        /// 屏幕中央的提示横幅，首通奖励与章节解锁共用。
+        /// 挂在最后、带 CanvasGroup，所以能盖在选关 / 技能面板上面淡出。
+        /// </summary>
+        // ==================== 存档槽面板 ====================
+
+        /// <summary>
+        /// 存档槽面板：三个槽横排，点卡片切槽，卡片右下角删除。
+        /// 切槽会整体重置战斗状态，所以也走浮层（打开时冻结整局），不做成侧栏的常驻控件。
+        /// </summary>
+        private void BuildSavePanel(Transform root)
+        {
+            int slots = SaveSystem.SlotCount;
+            _savePanel = CreatePanel(root, "SavePanel", 300, 196, 680, 304, GameConfig.OverlayBg, true);
+
+            _savePanelTitle = CreateText(_savePanel, "SavePanelTitle", "", 20, 12, 640, 30, 19,
+                GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+            CreateText(_savePanel, "SavePanelHint",
+                "点卡片切换存档，各槽进度互不影响；「删除」清空该槽。切档会结束当前这局。",
+                20, 42, 640, 22, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+
+            _saveSlotButtons = new Button[slots];
+            _saveSlotLabels = new Text[slots];
+            _saveSlotDeleteLabels = new Text[slots];
+
+            const float cardW = 200f;
+            const float cardH = 158f;
+            const float gap = 14f;
+            const float y0 = 72f;
+
+            for (int i = 0; i < slots; i++)
+            {
+                int slot = i;
+                float x = 20f + i * (cardW + gap);
+
+                Button card = CreateButton(_savePanel, "SaveSlot" + slot, "", x, y0, cardW, cardH,
+                    GameConfig.CardBg, out Text cardLabel);
+
+                // CreateButton 把 label 拉满并居中；这里改成左上对齐 + 内缩。
+                cardLabel.alignment = TextAnchor.UpperLeft;
+                cardLabel.fontSize = 14;
+                cardLabel.fontStyle = FontStyle.Normal;
+                cardLabel.rectTransform.offsetMin = new Vector2(14f, 32f);
+                cardLabel.rectTransform.offsetMax = new Vector2(-12f, -12f);
+
+                card.onClick.AddListener(() => OnSaveSlotClicked(slot));
+
+                Button del = CreateButton(_savePanel, "SaveSlotDel" + slot, "删除", x + 112f, y0 + cardH - 34f, 76f, 26f,
+                    GameConfig.BtnDanger, out _saveSlotDeleteLabels[slot]);
+                _saveSlotDeleteLabels[slot].fontSize = 13;
+                del.onClick.AddListener(() => OnSaveSlotDeleteClicked(slot));
+
+                _saveSlotButtons[slot] = card;
+                _saveSlotLabels[slot] = cardLabel;
+            }
+
+            Button close = CreateButton(_savePanel, "SavePanelClose", "关闭", 586, 250, 74, 34,
+                GameConfig.CardBtn, out _);
+            close.onClick.AddListener(() => _game.CloseSavePanel());
+
+            _savePanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// 刷新存档槽面板。摘要要解析 JSON，不能每帧做——只在刚打开或刚操作过时重算。
+        /// </summary>
+        private void RefreshSavePanel()
+        {
+            if (_savePanel == null || _game == null) return;
+
+            bool open = _game.SavePanelOpen;
+            _savePanel.gameObject.SetActive(open);
+            if (!open)
+            {
+                _savePanelWasOpen = false;
+                return;
+            }
+
+            bool justOpened = !_savePanelWasOpen;
+            _savePanelWasOpen = true;
+            if (!justOpened && !_savePanelDirty) return;
+            _savePanelDirty = false;
+
+            int current = _game.SaveSlot;
+            _savePanelTitle.text = $"存档槽 —— 当前 存档 {current + 1}";
+
+            int totalStages = StageCatalog.ChapterCount * StageCatalog.StagesPerChapter;
+            for (int i = 0; i < _saveSlotButtons.Length; i++)
+            {
+                SaveSystem.SlotInfo info = SaveSystem.Describe(i);
+                bool isCurrent = i == current;
+
+                _saveSlotLabels[i].text = (isCurrent ? $"▶ 存档 {i + 1}（当前）" : $"存档 {i + 1}")
+                    + "\n" + DescribeSlotText(info, totalStages);
+
+                var bg = _saveSlotButtons[i].targetGraphic as Image;
+                if (bg != null)
+                {
+                    bg.color = isCurrent
+                        ? GameConfig.CardBgActive
+                        : GameConfig.CardBg;
+                }
+
+                _saveSlotDeleteLabels[i].color = info.exists ? Color.white : GameConfig.TextDisabled;
+            }
+        }
+
+        /// <summary>槽摘要排成卡片里的几行。</summary>
+        private static string DescribeSlotText(SaveSystem.SlotInfo info, int totalStages)
+        {
+            if (!info.exists) return "\n（空档）\n\n点击开始新游戏";
+            if (info.broken) return "\n⚠ 存档损坏\n\n点击重开新档";
+
+            return $"\nLv.{info.level}   巅峰 {info.paragonLevel}\n" +
+                   $"第 {info.chapter} 章 {info.chapter}-{info.stage}\n" +
+                   $"金币 {info.gold:N0}\n" +
+                   $"首通 {info.clearedCount}/{totalStages} 关";
+        }
+
+        private void OnSaveButtonClicked()
+        {
+            _savePanelDirty = true;
+            _game.ToggleSavePanel();
+        }
+
+        private void OnSaveSlotClicked(int slot)
+        {
+            if (slot == _game.SaveSlot) return;
+            _game.SwitchSlot(slot);
+            _savePanelDirty = true;
+        }
+
+        /// <summary>
+        /// 删档同样要点两次：第一次只把该槽的「删除」改成「确认？」，3 秒内再点同一槽才真删；
+        /// 点别的槽或超时都会把文字复原（CancelDeleteConfirm 由 TickConfirms 调用）。
+        /// </summary>
+        private void OnSaveSlotDeleteClicked(int slot)
+        {
+            if (_deleteConfirmSlot == slot && Time.unscaledTime < _deleteConfirmUntil)
+            {
+                _deleteConfirmSlot = -1;
+                _deleteConfirmUntil = 0f;
+                if (_saveSlotDeleteLabels != null && slot < _saveSlotDeleteLabels.Length)
+                    _saveSlotDeleteLabels[slot].text = "删除";
+                _game.DeleteSlot(slot);
+                _savePanelDirty = true;
+                return;
+            }
+
+            CancelDeleteConfirm();
+            _deleteConfirmSlot = slot;
+            _deleteConfirmUntil = Time.unscaledTime + ConfirmWindow;
+            if (_saveSlotDeleteLabels != null && slot < _saveSlotDeleteLabels.Length)
+                _saveSlotDeleteLabels[slot].text = "确认？";
+            _game.AddLog($"⚠ 删除会清空存档 {slot + 1}：3 秒内再点一次「确认？」才会生效", GameConfig.LogWarn);
+        }
+
+        /// <summary>取消删档确认：把「确认？」的按钮文字还原成「删除」。</summary>
+        private void CancelDeleteConfirm()
+        {
+            if (_deleteConfirmSlot >= 0 && _saveSlotDeleteLabels != null
+                && _deleteConfirmSlot < _saveSlotDeleteLabels.Length)
+            {
+                Text label = _saveSlotDeleteLabels[_deleteConfirmSlot];
+                if (label != null) label.text = "删除";
+            }
+
+            _deleteConfirmSlot = -1;
+            _deleteConfirmUntil = 0f;
+        }
+
+        // ==================== 装备强化面板（步骤 2） ====================
+
+        /// <summary>
+        /// 强化面板：两件装备各一张卡片，卡片显示强化后的主属性变化与本次费用，
+        /// 卡片本身和卡片内的按钮都是「升一级」。
+        /// 做成浮层而不是常驻侧栏有两个原因：装备区（武器 334~420 / 衣服 424~510）
+        /// 已经排满，横向也没有空位；而强化是低频操作——有钱了进来点几下，
+        /// 不需要一直占着屏幕，反而会把装备说明挤掉。
+        /// 面板打开时整局冻结（见 GameController.Update 的浮层判断），避免边打边强化。
+        /// </summary>
+        private void BuildEnhancePanel(Transform root)
+        {
+            _enhancePanel = CreatePanel(root, "EnhancePanel", 300, 186, 680, 324, GameConfig.OverlayBg, true);
+
+            _enhancePanelTitle = CreateText(_enhancePanel, "EnhancePanelTitle", "", 20, 12, 640, 30, 19,
+                GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+            CreateText(_enhancePanel, "EnhancePanelHint",
+                "强化只提升主属性（武器攻击 / 衣服防御与生命），不影响暴击、暴击伤害与副词条。",
+                20, 42, 640, 22, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+
+            _enhanceSlotButtons = new Button[2];
+            _enhanceSlotLabels = new Text[2];
+            _enhanceActionButtons = new Button[2];
+            _enhanceActionLabels = new Text[2];
+
+            const float cardW = 310f;
+            const float cardH = 176f;
+            const float gap = 20f;
+            const float y0 = 74f;
+
+            for (int i = 0; i < 2; i++)
+            {
+                EquipmentSlot slot = i == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
+                float x = 20f + i * (cardW + gap);
+
+                // 卡片本身就是按钮，label 改成左上对齐的多行文本（同存档卡片手法）。
+                Button card = CreateButton(_enhancePanel, "EnhanceSlot" + i, "", x, y0, cardW, cardH,
+                    GameConfig.CardBg, out Text cardLabel);
+                cardLabel.alignment = TextAnchor.UpperLeft;
+                cardLabel.fontSize = 14;
+                cardLabel.fontStyle = FontStyle.Normal;
+                cardLabel.rectTransform.offsetMin = new Vector2(14f, 44f);
+                cardLabel.rectTransform.offsetMax = new Vector2(-12f, -12f);
+                card.onClick.AddListener(() => OnEnhanceSlotClicked(slot));
+
+                Button act = CreateButton(_enhancePanel, "EnhanceAction" + i, "强化", x + 14f, y0 + cardH - 36f, 116f, 28f,
+                    GameConfig.BtnGold, out _enhanceActionLabels[i]);
+                _enhanceActionLabels[i].fontSize = 14;
+                act.onClick.AddListener(() => OnEnhanceSlotClicked(slot));
+
+                _enhanceSlotButtons[i] = card;
+                _enhanceSlotLabels[i] = cardLabel;
+                _enhanceActionButtons[i] = act;
+            }
+
+            Button close = CreateButton(_enhancePanel, "EnhancePanelClose", "关闭", 586, 282, 74, 34,
+                GameConfig.CardBtn, out _);
+            close.onClick.AddListener(() => _game.CloseEnhancePanel());
+
+            _enhancePanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// 刷新强化面板。费用与强化后属性都是纯计算，重算代价极低；
+        /// 面板关着时直接跳过，不参与每帧开销。
+        /// </summary>
+        private void RefreshEnhancePanel()
+        {
+            if (_enhancePanel == null || _game == null) return;
+
+            bool open = _game.EnhancePanelOpen;
+            _enhancePanel.gameObject.SetActive(open);
+            if (!open)
+            {
+                _enhancePanelWasOpen = false;
+                return;
+            }
+
+            bool justOpened = !_enhancePanelWasOpen;
+            _enhancePanelWasOpen = true;
+            if (!justOpened && !_enhancePanelDirty) return;
+            _enhancePanelDirty = false;
+
+            PlayerData p = _game.Player;
+            _enhancePanelTitle.text = $"强化装备 —— 金币 {p.gold:N0}";
+
+            for (int i = 0; i < 2; i++)
+            {
+                EquipmentSlot slot = i == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
+                Equipment e = p.GetEquipment(slot);
+                _enhanceSlotLabels[i].text = DescribeEnhanceCard(e, slot, p.gold);
+
+                bool canPay = e != null && e.CanEnhance && p.gold >= e.EnhanceCost;
+                _enhanceActionLabels[i].text = e == null ? "无装备"
+                    : !e.CanEnhance ? "已满级"
+                    : $"强化 {e.EnhanceCost:N0}";
+
+                // 按钮压暗 + 文字变灰表示「这次点不动」，比点了没反应友好。
+                var bg = _enhanceActionButtons[i].targetGraphic as Image;
+                if (bg != null)
+                {
+                    bg.color = canPay
+                        ? GameConfig.BtnGold
+                        : GameConfig.BtnDisabled;
+                }
+                _enhanceActionLabels[i].color = canPay ? Color.white : GameConfig.BtnDisabledText;
+            }
+        }
+
+        /// <summary>一张强化卡片里的正文。</summary>
+        private static string DescribeEnhanceCard(Equipment e, EquipmentSlot slot, int gold)
+        {
+            string slotName = slot == EquipmentSlot.Weapon ? "武器" : "衣服";
+            if (e == null) return $"{slotName}\n\n（空）\n掉落装备会自动穿上，之后即可强化";
+            if (!e.CanEnhance) return $"{e.Title}\n\n{e.EnhanceGainText}\n已强化到上限 +{GameConfig.EnhanceMaxLevel}";
+
+            int cost = e.EnhanceCost;
+            string costLine = gold >= cost ? $"费用 {cost:N0} 金币" : $"费用 {cost:N0} 金币（不足）";
+            return $"{e.Title}\n\n{e.EnhanceGainText}\n{costLine}\n+{e.enhanceLevel} → +{e.enhanceLevel + 1}";
+        }
+
+        private void OnEnhanceEntryClicked()
+        {
+            _enhancePanelDirty = true;
+            _game.ToggleEnhancePanel();
+        }
+
+        private void OnEnhanceSlotClicked(EquipmentSlot slot)
+        {
+            EnhanceResult result = _game.EnhanceEquipment(slot);
+            _enhancePanelDirty = true;
+
+            if (result == EnhanceResult.NotEnoughGold)
+                _game.AddLog("金币不足，无法强化。", GameConfig.LogWarn);
+            else if (result == EnhanceResult.NoEquipment)
+                _game.AddLog("该槽位还没有装备。", GameConfig.LogWarn);
+        }
+
+        private void BuildBanner(Transform root)
+        {
+            _bannerPanel = CreatePanel(root, "Banner", 340, 186, 600, 120,
+                GameConfig.ScreenDim);
+
+            // 金边：横幅要盖在日志上，光靠半透明底色压不住下面的字。
+            CreatePanel(_bannerPanel, "BannerEdgeTop", 0, 0, 600, 3, GameConfig.AccentBanner);
+            CreatePanel(_bannerPanel, "BannerEdgeBottom", 0, 117, 600, 3, GameConfig.AccentBanner);
+            CreatePanel(_bannerPanel, "BannerEdgeLeft", 0, 0, 3, 120, GameConfig.AccentBanner);
+            CreatePanel(_bannerPanel, "BannerEdgeRight", 597, 0, 3, 120, GameConfig.AccentBanner);
+
+            _bannerGroup = _bannerPanel.gameObject.AddComponent<CanvasGroup>();
+            _bannerGroup.blocksRaycasts = false;
+            _bannerGroup.interactable = false;
+
+            _bannerTitle = CreateText(_bannerPanel, "BannerTitle", "", 16, 20, 568, 46, 28,
+                GameConfig.AccentBannerTitle, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+            _bannerSubtitle = CreateText(_bannerPanel, "BannerSubtitle", "", 16, 68, 568, 34, 17,
+                GameConfig.TextInfo, TextAnchor.MiddleCenter);
+
+            _bannerPanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>刷新横幅：内容、显隐、最后 0.6 秒淡出。</summary>
+        private void RefreshBanner()
+        {
+            if (_bannerPanel == null || _game == null) return;
+
+            bool show = !string.IsNullOrEmpty(_game.BannerTitle) && _game.BannerTimeLeft > 0f;
+            _bannerPanel.gameObject.SetActive(show);
+            if (!show) return;
+
+            _bannerTitle.text = _game.BannerTitle;
+            _bannerSubtitle.text = _game.BannerSubtitle;
+
+            const float fadeWindow = 0.6f;
+            _bannerGroup.alpha = Mathf.Clamp01(_game.BannerTimeLeft / fadeWindow);
+        }
+
+
+
+        // ==================== 选关面板（4b）====================
+
+        /// <summary>
+        /// 选关面板：左侧章节列表、右侧该章 10 个关卡，下方是选中章的详情。
+        /// 章节级解锁——解锁某章即该章全可打；已通关的关卡随时能回头刷。
+        /// </summary>
+        private void BuildStagePanel(Transform root)
+        {
+            int chapters = StageCatalog.ChapterCount;
+            int stages = StageCatalog.StagesPerChapter;
+
+            _stagePanel = CreatePanel(root, "StagePanel", 236, 96, 808, 508, GameConfig.OverlayBg, true);
+
+            _stagePanelTitle = CreateText(_stagePanel, "StagePanelTitle", "", 20, 12, 768, 30, 19,
+                GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+            // 这一行原来是静态操作提示，改成全局进度总览——操作提示在下方详情里已经有一份了。
+            _stageSummaryText = CreateText(_stagePanel, "StagePanelSummary", "", 20, 44, 768, 24, 13,
+                GameConfig.TextInfo, TextAnchor.MiddleLeft);
+
+            // 左栏：11 个章节按钮，每个 31 高、间距 3。
+            _stageChapterButtons = new Button[chapters];
+            _stageChapterLabels = new Text[chapters];
+
+            for (int i = 0; i < chapters; i++)
+            {
+                int captured = i;
+                float y = 76f + i * 34f;
+
+                _stageChapterButtons[i] = CreateButton(_stagePanel, $"StageChapter{i}", "", 20f, y, 148f, 31f,
+                    GameConfig.RowBgDim, out _stageChapterLabels[i]);
+
+                _stageChapterLabels[i].fontSize = 13;
+                _stageChapterLabels[i].alignment = TextAnchor.MiddleLeft;
+                _stageChapterLabels[i].rectTransform.offsetMin = new Vector2(10f, 2f);
+                _stageChapterLabels[i].rectTransform.offsetMax = new Vector2(-8f, -2f);
+
+                _stageChapterButtons[i].onClick.AddListener(() => OnStageChapterClicked(captured));
+            }
+
+            // 右栏：该章 10 个关卡，5 列 2 行，每格 110×76。
+            _stageSlotButtons = new Button[stages];
+            _stageSlotLabels = new Text[stages];
+
+            for (int i = 0; i < stages; i++)
+            {
+                int captured = i;
+                int col = i % 5;
+                int row = i / 5;
+                float x = 188f + col * 122f;
+                float y = 76f + row * 88f;
+
+                _stageSlotButtons[i] = CreateButton(_stagePanel, $"StageSlot{i}", "", x, y, 110f, 76f,
+                    GameConfig.RowBg, out _stageSlotLabels[i]);
+
+                _stageSlotLabels[i].fontSize = 14;
+                _stageSlotLabels[i].alignment = TextAnchor.MiddleCenter;
+
+                _stageSlotButtons[i].onClick.AddListener(() => OnStageSlotClicked(captured));
+            }
+
+            _stageInfoText = CreateText(_stagePanel, "StageInfo", "", 188, 252, 600, 180, 14,
+                GameConfig.TextMuted, TextAnchor.UpperLeft);
+
+            Button close = CreateButton(_stagePanel, "StagePanelClose", "关闭", 698, 458, 90, 36,
+                GameConfig.CardDanger, out _);
+            close.onClick.AddListener(OnStagePanelCloseClicked);
+
+            _stagePanel.gameObject.SetActive(false);
+        }
+
+        private void OnStageButtonClicked() => _game.ToggleStagePanel();
+
+        private void OnStagePanelCloseClicked()
+        {
+            if (_game != null) _game.CloseStagePanel();
+        }
+
+        private void OnStageChapterClicked(int index)
+        {
+            _stageViewChapter = index + 1;
+        }
+
+        private void OnStageSlotClicked(int index)
+        {
+            if (_game == null) return;
+            _game.SelectStage(_stageViewChapter, index + 1);
+        }
+
+        /// <summary>刷新选关面板：章节解锁态、关卡按钮、当前章详情。</summary>
+        private void RefreshStagePanel()
+        {
+            if (_stagePanel == null || _game == null || _game.Player == null) return;
+
+            StageDef current = _game.Player.CurrentStage;
+            int currentKey = current != null ? current.chapter * 100 + current.stage : -1;
+
+            // 入口按钮上的关卡速览：面板不开也要对，但只有关卡真的换了才重写。
+            if (_stageButtonLabel != null && _stageButtonStageKey != currentKey)
+            {
+                _stageButtonStageKey = currentKey;
+                _stageButtonLabel.text = current != null
+                    ? $"关卡 {current.Code} · 怪 Lv.{current.monsterLevel}"
+                    : "关卡 —";
+            }
+
+            bool open = _game.StagePanelOpen;
+            _stagePanel.gameObject.SetActive(open);
+
+            if (!open)
+            {
+                _stagePanelWasOpen = false;
+                return;
+            }
+
+            // 只在「刚打开」这一帧把浏览章节拨到玩家当前所在的章；
+            // 否则玩家一点别的章节，就会被每帧刷新弹回去。
+            if (!_stagePanelWasOpen && current != null)
+            {
+                _stageViewChapter = Mathf.Clamp(current.chapter, 1, StageCatalog.ChapterCount);
+            }
+            _stagePanelWasOpen = true;
+
+            // 面板开着时整局冻结（GameController.Update 直接 return），数据不会自己变；
+            // 只有玩家点章节或关卡才会变。早先这里每帧全量重建——11 次首通金币、
+            // 11 次章节进度、10 次 StageCatalog.Get（每次都 new StageDef）+ 十余段字符串拼接，
+            // 全是白烧。用签名挡住重复重建。
+            int sig = _stageViewChapter * 1000003 + _game.MaxChapterUnlocked * 1009 + currentKey
+                      + (_game.Player.ClearedStageCount & 0xFFFF) * 101;
+            if (sig == _stagePanelSig) return;
+            _stagePanelSig = sig;
+
+            int maxCh = _game.MaxChapterUnlocked;
+
+            _stagePanelTitle.text =
+                $"关卡选择 —— 当前 {current.Title}（怪 Lv.{current.monsterLevel}）    已解锁至 第 {maxCh} 章";
+
+            // 全局进度总览（步骤 4d）：关卡数、章节数、首通金币三档进度放在一行。
+            int totalStages = StageCatalog.ChapterCount * StageCatalog.StagesPerChapter;
+            int clearedStages = _game.Player.ClearedStageCount;
+            int claimedGold = _game.Player.TotalFirstClearGoldClaimed();
+            int allGold = StageCatalog.TotalFirstClearGold(StageCatalog.ChapterCount);
+
+            if (_stageSummaryText != null)
+            {
+                _stageSummaryText.text =
+                    $"<color=#AAB4C6>总进度：</color>首通 <color=#9FD8A0>{clearedStages}</color>/{totalStages} 关 · " +
+                    $"解锁 <color=#FFE08A>{maxCh}</color>/{StageCatalog.ChapterCount} 章 · " +
+                    $"首通金币 <color=#FFD98A>{claimedGold:N0}</color> / {allGold:N0}";
+            }
+
+            for (int i = 0; i < _stageChapterButtons.Length; i++)
+            {
+                int chapter = i + 1;
+                bool unlocked = chapter <= maxCh;
+                bool viewing = _stageViewChapter == chapter;
+
+                // 锁形 emoji 在 Unity 默认字体里没有字形，会渲染成空白方块，所以用「×」代替。
+                // 已解锁的章带上该章首通进度：关卡能回头重刷，光看「已过」分不清哪章还没打满。
+                int clearedInThis = unlocked ? _game.Player.ClearedCountInChapter(chapter) : 0;
+                _stageChapterLabels[i].text = unlocked
+                    ? $"第 {chapter} 章<size=11><color=#9FD8A0> {clearedInThis}/{StageCatalog.StagesPerChapter}</color></size>"
+                    : $"× 第 {chapter} 章";
+                _stageChapterLabels[i].color = unlocked
+                    ? (viewing ? GameConfig.AccentBannerTitle : GameConfig.TextInfo)
+                    : GameConfig.TextDisabled;
+                _stageChapterLabels[i].fontStyle = current.chapter == chapter ? FontStyle.Bold : FontStyle.Normal;
+
+                // Button.image 就是 targetGraphic，建按钮时已经设好；这里不必每帧再 GetComponent。
+                Image bg = _stageChapterButtons[i].image;
+                if (bg != null)
+                {
+                    bg.color = viewing
+                        ? GameConfig.RowBgSelected
+                        : GameConfig.RowBgDim;
+                }
+            }
+
+            for (int i = 0; i < _stageSlotButtons.Length; i++)
+            {
+                int stageNo = i + 1;
+                StageDef def = StageCatalog.Get(_stageViewChapter, stageNo);
+
+                bool unlocked = _game.IsStageUnlocked(_stageViewChapter, stageNo);
+                bool isCurrent = current.chapter == def.chapter && current.stage == def.stage;
+                // 「已过」以当前进度线划线：当前章之前的章全算过，当前章内按关卡号比。
+                // 回头看低章重刷时，之后的章其实也通关了，但那里不标——玩家正站在
+                // 低章，把高章标成「已过」只会让人看花。
+                bool passed = def.chapter < current.chapter
+                    || (def.chapter == current.chapter && def.stage < current.stage);
+
+                string title = def.IsChapterFinal
+                    ? $"{def.Code}<size=11> 章末</size>"
+                    : def.Code;
+
+                _stageSlotLabels[i].text = unlocked
+                    ? $"{title}\n<size=11><color=#AAB0BD>Lv.{def.monsterLevel}</color></size>\n" +
+                      (isCurrent ? "<color=#FFE08A>▶ 当前</color>" : (passed ? "<color=#9FD8A0>✔ 已过</color>" : " "))
+                    : $"{def.Code}\n<size=11><color=#6E7280>Lv.{def.monsterLevel} 锁定</color></size>\n ";
+
+                _stageSlotLabels[i].color = unlocked
+                    ? (isCurrent ? Color.white : (passed ? GameConfig.TextPassed : GameConfig.TextNormal))
+                    : GameConfig.TextDisabled;
+            }
+
+            // 详情：选中章的规则一览。
+            bool viewUnlocked = _stageViewChapter <= maxCh;
+            StageDef sample = StageCatalog.Get(_stageViewChapter, 1);
+            MonsterTier finalTier = StageCatalog.ClearTierOf(_stageViewChapter, StageCatalog.StagesPerChapter);
+            string tierName = finalTier == MonsterTier.Boss ? "BOSS" : "精英怪";
+
+            int clearedInChapter = _game.Player.ClearedCountInChapter(_stageViewChapter);
+
+            int firstClearGold = StageCatalog.FirstClearGold(_stageViewChapter, 1);
+
+            _stageInfoText.text =
+                $"<size=17><b>第 {_stageViewChapter} 章</b></size>\n\n" +
+                $"怪物等级：<color=#FFD98A>Lv.{sample.monsterLevel}</color>\n" +
+                $"每关击杀：{sample.killTarget} 只（关底放 {tierName}）\n" +
+                $"关卡数：{StageCatalog.StagesPerChapter} 关\n" +
+                $"已首通：<color=#9FD8A0>{clearedInChapter}/{StageCatalog.StagesPerChapter}</color>\n" +
+                $"首通奖励：<color=#FFD98A>{firstClearGold}</color> 金币" +
+                (_stageViewChapter > 1 ? $"（关末再 +{GameConfig.ChapterClearGoldBonus}）" : "\n") +
+                "\n" +
+                (viewUnlocked
+                    ? "<color=#9FD8A0>该章已解锁：点上方任意关卡开打；已通关的可以反复刷。</color>"
+                    : $"<color=#E0A080>尚未解锁：先把第 {maxCh} 章打完。</color>");
+        }
+
+        private void OnSkillSlotClicked(int slot)
+        {
+            _selectedSkillSlot = slot;
+            // 开技能面板要关掉选关面板，这条互斥规则归控制器一份。
+            _game.OpenSkillPanel();
+            RefreshSkillPanel();
+            RefreshSkillChoice();
+        }
+
+        private void OnSkillPanelCloseClicked()
+        {
+            _game.CloseSkillPanel();
+            RefreshSkillPanel();
+            RefreshSkillChoice();
+        }
+
+        /// <summary>点击技能池里的技能：装到当前槽位（类别不符则放进同类空槽）。</summary>
+        private void OnSkillPoolClicked(int skillIndex)
+        {
+            PlayerData p = _game.Player;
+            SkillDef def = SkillCatalog.All[skillIndex];
+
+            // 已经装在选中槽位上 → 再点一次就是卸下。
+            if (p.GetSkillSlot(_selectedSkillSlot) == skillIndex)
+            {
+                _game.UnequipSkill(_selectedSkillSlot);
+                RefreshSkillPanel();
+            RefreshSkillChoice();
+                return;
+            }
+
+            int slot = _selectedSkillSlot;
+            int slotKind = slot / GameConfig.SkillSlotsPerKind;
+
+            if ((int)def.kind != slotKind)
+            {
+                // 类别不符：优先放进同类空槽，全满则替换该类的第一个槽。
+                int baseSlot = (int)def.kind * GameConfig.SkillSlotsPerKind;
+                slot = baseSlot;
+                for (int i = 0; i < GameConfig.SkillSlotsPerKind; i++)
+                {
+                    if (p.GetSkillSlot(baseSlot + i) < 0) { slot = baseSlot + i; break; }
+                }
+            }
+
+            _game.EquipSkill(slot, def.id);
+            _selectedSkillSlot = slot;
+            RefreshSkillPanel();
+            RefreshSkillChoice();
+        }
+
+        /// <summary>刷新技能栏：名称、冷却秒数、冷却进度条。</summary>
+        private void RefreshSkillBar(PlayerData p)
+        {
+            for (int i = 0; i < _skillSlotButtons.Length; i++)
+            {
+                int id = p.GetSkillSlot(i);
+
+                if (id < 0 || id >= SkillCatalog.All.Length)
+                {
+                    _skillSlotLabels[i].text = "空";
+                    _skillSlotLabels[i].color = GameConfig.TextDisabled;
+                    _skillSlotStates[i].text = "";
+                    _skillSlotButtons[i].image.color = GameConfig.CardBgDim;
+                    _skillSlotFills[i].rectTransform.sizeDelta = new Vector2(0f, 6f);
+                    continue;
+                }
+
+                SkillDef def = SkillCatalog.All[id];
+                _skillSlotLabels[i].text = def.name;
+                _skillSlotLabels[i].color = def.color;
+                _skillSlotButtons[i].image.color =
+                    new Color(def.color.r * 0.30f, def.color.g * 0.30f, def.color.b * 0.34f);
+
+                float cd = def.IsActive ? _game.SkillCooldown(i) : 0f;
+                float total = def.cooldown;
+
+                _skillSlotStates[i].text = cd > 0f ? $"{cd:0.0}s" : "就绪";
+                _skillSlotStates[i].color = cd > 0f ? GameConfig.FillSkillCooldown : GameConfig.FillSkillReady;
+
+                float ratio = total > 0f ? Mathf.Clamp01(1f - cd / total) : 1f;
+                _skillSlotFills[i].rectTransform.sizeDelta = new Vector2(60f * ratio, 6f);
+                _skillSlotFills[i].color = cd > 0f
+                    ? GameConfig.AccentSlotHighlight
+                    : GameConfig.AccentSlotReady;
+            }
+        }
+
+        /// <summary>刷新技能面板的可见性与技能池按钮状态。</summary>
+        private void RefreshSkillPanel()
+        {
+            bool open = _game.SkillPanelOpen;
+            _skillPanel.gameObject.SetActive(open);
+            if (!open) return;
+
+            PlayerData p = _game.Player;
+            int sel = _selectedSkillSlot;
+
+            _skillPanelTitle.text =
+                $"技能面板 — 槽位 {sel + 1}（{KindShort(sel / GameConfig.SkillSlotsPerKind)}）" +
+                $"    巅峰 {p.paragonLevel}    已获得技能 {p.OwnedSkillCount}/{SkillCatalog.All.Length}";
+
+            for (int i = 0; i < SkillCatalog.All.Length; i++)
+            {
+                SkillDef def = SkillCatalog.All[i];
+                bool equipped = p.FindSkillSlot((int)def.id) >= 0;
+                bool unlocked = p.IsSkillOwned(def.id);
+                bool inSlot = p.GetSkillSlot(sel) == i;
+
+                string mark = inSlot ? "▶ " : (equipped ? "● " : "");
+                string lockNote = unlocked ? "" : "（未获得）";
+                _skillPoolLabels[i].text = $"{mark}{def.name}{lockNote}\n{def.description}";
+
+                if (!unlocked) _skillPoolLabels[i].color = GameConfig.TextDisabled;
+                else if (inSlot) _skillPoolLabels[i].color = GameConfig.LogGold;
+                else if (equipped) _skillPoolLabels[i].color = GameConfig.LogSuccess;
+                else _skillPoolLabels[i].color = Color.white;
+
+                _skillPoolButtons[i].image.color = unlocked
+                    ? GameConfig.RowBg
+                    : GameConfig.CardBgDim;
+            }
+        }
+
+        private void OnBuyClicked() => _game.BuyPotion();
+
+        private void OnAutoBuyClicked() => _game.ToggleAutoBuyPotion();
+
+        /// <summary>刷新商店区：金币、价格、持有数、按钮可用态与提示文本。</summary>
+        private void RefreshShop(PlayerData p)
+        {
+            int price = _game.PotionPrice;
+            bool open = _game.IsShopOpen;
+
+            _shopGoldText.text = $"金币 {p.gold}";
+            _shopPotionText.text = $"生命药剂    价格 {price}    持有 {p.potionCount}/{GameConfig.PotionMaxCount}";
+
+            bool canBuy = open && p.gold >= price && p.potionCount < GameConfig.PotionMaxCount;
+            _buyButton.image.color = canBuy
+                ? GameConfig.BtnPrimary
+                : GameConfig.CardBtn;
+
+            _autoBuyLabel.text = _game.AutoBuyPotion ? "[✓] 自动购买" : "[  ] 自动购买";
+            _autoBuyLabel.color = _game.AutoBuyPotion
+                ? GameConfig.LogHeal
+                : GameConfig.TextMuted;
+
+            // 开放时显示倒计时；关闭时显示提示（没有提示就说明当前不开放）。
+            if (open)
+            {
+                _shopTipText.color = GameConfig.LogGold;
+                _shopTipText.text = $"商店开放中（剩 {_game.ShopTimeLeft:0.0} 秒）—— 精英/Boss 即将出现";
+            }
+            else
+            {
+                _shopTipText.color = GameConfig.LogWarn;
+                _shopTipText.text = string.IsNullOrEmpty(_game.ShopMessage)
+                    ? "商店只在精英/Boss 出现前开放"
+                    : _game.ShopMessage;
+            }
+        }
+
+    }
+}

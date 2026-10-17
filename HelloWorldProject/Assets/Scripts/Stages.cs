@@ -67,7 +67,7 @@ namespace AutoBattle
             {
                 chapter = c,
                 stage = s,
-                monsterLevel = GameConfig.ChapterMonsterLevelStep * c,
+                monsterLevel = GameConfig.ChapterMonsterLevelStep * (c - 1) + s,
                 killTarget = KillTargetOf(c),
                 clearTier = ClearTierOf(c, s),
             };

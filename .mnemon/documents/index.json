@@ -33,7 +33,7 @@
       ],
       "createdAt": "2026-10-12T12:57:15.169Z",
       "updatedAt": "2026-10-12T12:57:15.169Z",
-      "lastAccessedAt": "2026-10-16T03:30:59.568Z",
+      "lastAccessedAt": "2026-10-16T05:26:24.296Z",
       "revision": 1,
       "contentHash": "bf0683fb1e166372f4ea7886ec467b8424757a6e98fbebb11632f92f6c999575",
       "sizeBytes": 6265,
@@ -101,7 +101,7 @@
       ],
       "createdAt": "2026-10-12T16:57:51.394Z",
       "updatedAt": "2026-10-12T16:57:51.394Z",
-      "lastAccessedAt": "2026-10-15T18:18:23.972Z",
+      "lastAccessedAt": "2026-10-16T05:26:24.296Z",
       "revision": 1,
       "contentHash": "60c0042d34a7bb6c94dc3702789df7ead8138d1843bc26411976cf8a17569197",
       "sizeBytes": 7302,
@@ -154,7 +154,7 @@
       ],
       "createdAt": "2026-10-12T17:45:44.584Z",
       "updatedAt": "2026-10-12T17:45:44.584Z",
-      "lastAccessedAt": "2026-10-14T17:23:41.853Z",
+      "lastAccessedAt": "2026-10-16T07:56:17.947Z",
       "revision": 1,
       "contentHash": "e457b7853b4552d9eddb58be0691ed2d008761091a05971de11047db2c91e666",
       "sizeBytes": 6594,
@@ -202,7 +202,7 @@
       ],
       "createdAt": "2026-10-13T18:02:20.360Z",
       "updatedAt": "2026-10-13T18:02:20.360Z",
-      "lastAccessedAt": "2026-10-14T17:23:41.853Z",
+      "lastAccessedAt": "2026-10-16T05:45:48.372Z",
       "revision": 1,
       "contentHash": "75a55bd1be02c861709980dbdab786b8b287592f7ab17d7c372af263fa40c2e2",
       "sizeBytes": 7330,
@@ -277,7 +277,7 @@
       ],
       "createdAt": "2026-10-14T16:34:03.130Z",
       "updatedAt": "2026-10-14T16:34:03.130Z",
-      "lastAccessedAt": "2026-10-15T05:53:52.574Z",
+      "lastAccessedAt": "2026-10-16T15:30:53.527Z",
       "revision": 1,
       "contentHash": "035cd41aaded6d827fe68a304598cfbf37b3c68112de9f057fa2176ada62f826",
       "sizeBytes": 6825,
@@ -353,7 +353,7 @@
       ],
       "createdAt": "2026-10-14T17:13:51.632Z",
       "updatedAt": "2026-10-14T17:13:51.632Z",
-      "lastAccessedAt": "2026-10-15T18:22:33.414Z",
+      "lastAccessedAt": "2026-10-17T14:05:42.280Z",
       "revision": 1,
       "contentHash": "9a989927a40f429d7e25d5fbc5983de0b9f040e2bc50a4eca3ddd0b29fb1f02f",
       "sizeBytes": 6855,
@@ -382,7 +382,7 @@
       ],
       "createdAt": "2026-10-14T17:40:32.201Z",
       "updatedAt": "2026-10-14T17:40:32.201Z",
-      "lastAccessedAt": "2026-10-15T18:23:02.315Z",
+      "lastAccessedAt": "2026-10-17T11:50:22.360Z",
       "revision": 1,
       "contentHash": "c44c7d2c3bcbb712151c8c70ab635afaa5ef9263443efc3a2389b23e1a92ee5c",
       "sizeBytes": 7666,
@@ -406,7 +406,7 @@
       ],
       "createdAt": "2026-10-15T04:45:27.012Z",
       "updatedAt": "2026-10-15T04:45:27.012Z",
-      "lastAccessedAt": "2026-10-15T19:06:03.469Z",
+      "lastAccessedAt": "2026-10-16T05:42:56.851Z",
       "revision": 1,
       "contentHash": "8f803fcd2150a44243792c019849cc209575366f8c8cd147217c606fcc210f47",
       "sizeBytes": 6271,
@@ -462,7 +462,7 @@
       ],
       "createdAt": "2026-10-15T05:13:00.577Z",
       "updatedAt": "2026-10-15T05:13:00.577Z",
-      "lastAccessedAt": "2026-10-15T18:23:02.315Z",
+      "lastAccessedAt": "2026-10-17T11:50:22.360Z",
       "revision": 1,
       "contentHash": "996963e67a397ee5527adcea4f346c9cb7947045c175edfbc06374f2de6479e0",
       "sizeBytes": 6399,
@@ -490,7 +490,7 @@
       ],
       "createdAt": "2026-10-15T05:54:08.043Z",
       "updatedAt": "2026-10-15T05:54:08.043Z",
-      "lastAccessedAt": "2026-10-16T04:28:13.665Z",
+      "lastAccessedAt": "2026-10-16T05:12:40.234Z",
       "revision": 1,
       "contentHash": "0074365192a9399e66fa4b89d55d0a3ef1b7e5404550784e93ce18d017dcd804",
       "sizeBytes": 8078,
@@ -561,20 +561,21 @@
         "HelloWorldProject/Assets/Resources/HeroPortrait.png"
       ],
       "sessionIds": [
-        "session-820fee2d-3ea4-4964-9f54-6440131b1026"
+        "session-820fee2d-3ea4-4964-9f54-6440131b1026",
+        "session-1c2b95c0-d836-4a67-b085-d00b734a2069"
       ],
       "createdAt": "2026-10-15T18:23:22.330Z",
-      "updatedAt": "2026-10-16T03:30:06.010Z",
-      "lastAccessedAt": "2026-10-16T04:28:13.665Z",
-      "revision": 2,
-      "contentHash": "eba2aab0b7db0d059e9ebd3c17f7158477ffa444dd0316dd27dd8c175139d6be",
-      "sizeBytes": 12139,
+      "updatedAt": "2026-10-17T12:07:38.060Z",
+      "lastAccessedAt": "2026-10-17T12:07:38.060Z",
+      "revision": 5,
+      "contentHash": "411dcf1db1346cb896705cbfd9bc3a550f6ab5fe81c048af8151f494f3a396f7",
+      "sizeBytes": 20164,
       "memoryBodyIds": []
     },
     {
       "id": "cc30b461-fc35-4515-a393-f03aacb0d948",
       "title": "Unity AutoBattle 多存档槽与自动化平衡回归测试（BalanceRegression 框架与反向验证）",
-      "description": "HelloWorldProject 两件工程化落地：SaveSystem 三存档槽（槽 0 兼容老档、零迁移）的设计与隔离实测；BalanceRegression 回归框架（固定种子逐位可复现、逐档种子、静态哨兵/胜率两层、0.5pp 容差）的三步反向验证证据、用法入口与仍未覆盖的中间章节缺口。",
+      "description": "HelloWorldProject 两件工程化落地：SaveSystem 三存档槽（槽 0 兼容老档、零迁移）的设计与隔离实测；BalanceRegression 回归框架（固定种子逐位可复现、逐档种子、静态哨兵/新档过渡/胜率三层、0.5pp 容差）的三步反向验证证据、用法入口，以及 2026-10-17 补入的新档过渡门禁（transition 小节 + CheckInvariants 硬约束）。",
       "status": "active",
       "filename": "unity-autobattle-balanceregression-cc30b461.md",
       "relativePath": "documents/active/unity-autobattle-balanceregression-cc30b461.md",
@@ -587,14 +588,120 @@
         "_balance/baseline.json"
       ],
       "sessionIds": [
-        "eedb56de-e60a-4b8d-8210-e69a21128a59"
+        "eedb56de-e60a-4b8d-8210-e69a21128a59",
+        "session-1c2b95c0-d836-4a67-b085-d00b734a2069"
       ],
       "createdAt": "2026-10-16T04:28:26.308Z",
-      "updatedAt": "2026-10-16T04:28:26.308Z",
-      "lastAccessedAt": "2026-10-16T04:28:26.308Z",
+      "updatedAt": "2026-10-17T12:07:17.687Z",
+      "lastAccessedAt": "2026-10-17T14:05:42.280Z",
+      "revision": 2,
+      "contentHash": "3610258575d88d246b621cd8875895fc2bad1b1eed110bccb3127de2234372b0",
+      "sizeBytes": 10737,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "bac0e7a8-2b43-4d5e-a78f-41ce570585c4",
+      "title": "Unity AutoBattle 装备强化（步骤 2）：只加主属性的 +1~+15、品质费用系数、评分缓存键修复",
+      "description": "HelloWorldProject 步骤 2 装备强化的完整落地记录：六处配置项与公式（EnhanceBonusPerLevel 0.03 / EnhanceMaxLevel 15 / 品质费用系数表）、Equipment 的强化学派生口径、面板与入口按钮位置、Play 实测数值（+15 倍率 1.45×、暴击暴伤不动、金币不足拦截）、以及「评分缓存按引用比较必须把 enhanceLevel 纳入键」这个必踩的坑与平衡回归 PASS 结论。",
+      "status": "active",
+      "filename": "unity-autobattle-2-1-15-bac0e7a8.md",
+      "relativePath": "documents/active/unity-autobattle-2-1-15-bac0e7a8.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/Models.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.Tables.cs",
+        "HelloWorldProject/Assets/Editor/BalanceRegression.cs",
+        "HelloWorldProject/Assets/Screenshots/enhance-panel.png",
+        "HelloWorldProject/Assets/Screenshots/enhance-entry.png"
+      ],
+      "sessionIds": [
+        "session-820fee2d-3ea4-4964-9f54-6440131b1026"
+      ],
+      "createdAt": "2026-10-16T05:44:44.411Z",
+      "updatedAt": "2026-10-16T07:37:59.895Z",
+      "lastAccessedAt": "2026-10-17T09:45:07.231Z",
+      "revision": 2,
+      "contentHash": "9db8f5b3ad0f573df6ecb9f8076cbf162adb29c961c6a720482e2aa6f7cd9bb0",
+      "sizeBytes": 8429,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "80f2ed5c-7d2a-42e0-81fd-72c0c442d3ae",
+      "title": "Unity AutoBattle 收尾三件套：技能表外置（缺口 1）、章节胜率探针（缺口 2）、上帝类拆分与颜色常量表",
+      "description": "用户 m06081「完成功能缺口 1和2 + 代码质量遗留都处理好」的完整交付记录：skills.json 热改机制与三类坏档回退、LateGameProbe 章节胜率探针与第 1~11 章实测表（含第 11 章断崖）、GameConfig.Colors 64 条语义色、GameUI/PlayerData partial 拆分、HandleMonsterKilled 拆成 6 个方法、eval 的 CS0162 坑。改这些文件前先读本篇。",
+      "status": "active",
+      "filename": "unity-autobattle-1-2-80f2ed5c.md",
+      "relativePath": "documents/active/unity-autobattle-1-2-80f2ed5c.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/SkillCatalog.Loader.cs",
+        "HelloWorldProject/Assets/Editor/SkillTableVerify.cs",
+        "HelloWorldProject/Assets/Editor/LateGameProbe.cs",
+        "HelloWorldProject/Assets/Editor/BalanceRegression.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfig.Colors.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.Panels.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.Core.cs",
+        "HelloWorldProject/Assets/Scripts/Models.PlayerData.cs",
+        "HelloWorldProject/Assets/Resources/skills.json"
+      ],
+      "sessionIds": [
+        "session-820fee2d-3ea4-4964-9f54-6440131b1026"
+      ],
+      "createdAt": "2026-10-16T15:29:49.216Z",
+      "updatedAt": "2026-10-16T15:29:49.216Z",
+      "lastAccessedAt": "2026-10-16T15:30:53.527Z",
       "revision": 1,
-      "contentHash": "6ba745dde0f5583a33aae6a4c669134a7ef80934f60f038c3b51c7e9825ca292",
-      "sizeBytes": 7792,
+      "contentHash": "ba70cbccbb5291692db315fc46135c4d2873f1441737e8f002f75dfca29aa63f",
+      "sizeBytes": 13582,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "a6ea98c9-ec86-4719-9d50-46bdfd91f933",
+      "title": "Unity AutoBattle：飘字/实时 DPS 修复与 UI 冒烟（P1-6）",
+      "description": "记录 2026-10-17 定位的「日志两条写入路径导致飘字与实时 DPS 永久停摆」缺陷、修复点（TickFighting 补记计数器、飘字改真实时间、重置/删档二次确认）与冒烟验证方式，供后续改日志或 UI 时参考。",
+      "status": "active",
+      "filename": "unity-autobattle-dps-ui-p1-6-a6ea98c9.md",
+      "relativePath": "documents/active/unity-autobattle-dps-ui-p1-6-a6ea98c9.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/GameController.cs",
+        "HelloWorldProject/Assets/Scripts/BattleSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.Core.cs"
+      ],
+      "sessionIds": [
+        "session-1c2b95c0-d836-4a67-b085-d00b734a2069"
+      ],
+      "createdAt": "2026-10-17T12:31:53.264Z",
+      "updatedAt": "2026-10-17T12:31:53.264Z",
+      "lastAccessedAt": "2026-10-17T12:31:53.264Z",
+      "revision": 1,
+      "contentHash": "c41ae1e26f4f69d470bfa203f4a2c09ed06b3b9a8cfad58a56b64241184ab149",
+      "sizeBytes": 3866,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "3a5688f1-e1b1-48ea-8f2b-a0a4d0157734",
+      "title": "Unity AutoBattle：P2 工程卫生清扫（2026-10-17）",
+      "description": "记录 P2 工程卫生这一轮的改动：死代码（BattleSystem 三目、HelloWorldSpinner 删除）、注释漂移、game_config.json 补齐 4 个强化字段并在加载器里加缺键警告、_archive 归档与 gitignore、README 结构重写；以及仍需提交才能解决的未跟踪源码问题。",
+      "status": "active",
+      "filename": "unity-autobattle-p2-2026-10-17-3a5688f1.md",
+      "relativePath": "documents/active/unity-autobattle-p2-2026-10-17-3a5688f1.md",
+      "sourcePaths": [
+        "README.md",
+        ".gitignore",
+        "HelloWorldProject/Assets/Scripts/GameConfig.Loader.cs",
+        "HelloWorldProject/Assets/Resources/game_config.json"
+      ],
+      "sessionIds": [
+        "session-1c2b95c0-d836-4a67-b085-d00b734a2069"
+      ],
+      "createdAt": "2026-10-17T14:05:27.872Z",
+      "updatedAt": "2026-10-17T14:05:27.872Z",
+      "lastAccessedAt": "2026-10-17T14:05:27.872Z",
+      "revision": 1,
+      "contentHash": "0d9d6e482434ae1823879c5b28d34d5183f93c30d9b83c439f13a9be7583fb06",
+      "sizeBytes": 4304,
       "memoryBodyIds": []
     }
   ]
