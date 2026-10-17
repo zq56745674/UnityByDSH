@@ -53,9 +53,6 @@ namespace AutoBattle
         /// <summary>护盾生成的计时。</summary>
         private float _shieldTimer;
 
-        /// <summary>「斩杀」的释放血线（怪物生命低于该比例才放）。</summary>
-        private const float ExecuteHpThreshold = 0.30f;
-
         /// <summary>清空全部技能运行状态（新游戏 / 读档 / 重置时调用）。</summary>
         public void ResetSkillState()
         {
@@ -177,7 +174,7 @@ namespace AutoBattle
         {
             float chance = player.CritChance;
             if (_berserkTimer > 0f)
-                chance += GameConfig.ScaleSkillValue(SkillCatalog.Get(SkillId.Berserk).extra, player.SkillLevel);
+                chance += GameConfig.ScaleSkillValue(SkillCatalog.Get(SkillId.Berserk).critBonus, player.SkillLevel);
             return Mathf.Min(GameConfig.MaxCritChance, chance);
         }
 
@@ -232,7 +229,7 @@ namespace AutoBattle
 
                 log.Add(new LogEntry(
                     $"主角 → 怪物  {(crit ? "暴击 " : "")}{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp}{shieldLeft})",
-                    crit ? new Color(1f, 0.93f, 0.5f) : new Color(0.75f, 0.88f, 1f)));
+                    crit ? GameConfig.LogGold : GameConfig.LogInfo));
 
                 // 吸血鬼：按实际造成的伤害（含护盾吸收部分）回血。
                 int healed = ApplyLifesteal(player, dmg);
@@ -244,7 +241,7 @@ namespace AutoBattle
                 if (crit && !monster.IsDead && player.HasSkill(SkillId.CritChain))
                 {
                     SkillDef chain = SkillCatalog.Get(SkillId.CritChain);
-                    if (Random.value < GameConfig.ScaleSkillValue(chain.extra, player.SkillLevel))
+                    if (Random.value < GameConfig.ScaleSkillValue(chain.triggerChance, player.SkillLevel))
                         DealSkillDamage(player, monster, giant, chain, attack, log);
                 }
 
@@ -305,13 +302,13 @@ namespace AutoBattle
 
                 log.Add(new LogEntry(
                     $"怪物 → 主角  {(crit ? "暴击 " : "")}{dmg} 伤害{notes}   (主角 {player.currentHp}/{player.MaxHp})",
-                    crit ? new Color(1f, 0.45f, 0.4f) : new Color(1f, 0.75f, 0.75f)));
+                    crit ? GameConfig.LogDanger : GameConfig.LogWarn));
 
                 // 反击：受击时按概率反弹伤害。
                 if (player.HasSkill(SkillId.Counter) && !monster.IsDead && player.currentHp > 0)
                 {
                     SkillDef counter = SkillCatalog.Get(SkillId.Counter);
-                    if (Random.value < GameConfig.ScaleSkillValue(counter.extra, player.SkillLevel))
+                    if (Random.value < GameConfig.ScaleSkillValue(counter.triggerChance, player.SkillLevel))
                         DealSkillDamage(player, monster, giant, counter, EffectiveAttack(player), log);
                 }
 
@@ -392,8 +389,8 @@ namespace AutoBattle
                 if (!def.IsActive) continue;
                 if (_activeCooldown[slot] > 0f) continue;
 
-                // 斩杀只在怪物残血时放，否则留着。
-                if (def.id == SkillId.Execute && monster.currentHp > monster.maxHp * ExecuteHpThreshold)
+                // 斩杀只在怪物残血时放，否则留着。血线来自技能表（skills.json 可改）。
+                if (def.id == SkillId.Execute && monster.currentHp > monster.maxHp * def.hpThreshold)
                     continue;
 
                 CastActive(player, monster, def, slot, log);
@@ -412,7 +409,7 @@ namespace AutoBattle
                 _berserkTimer = def.duration;
 
                 int atkPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.value, player.SkillLevel) * 100f);
-                int critPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.extra, player.SkillLevel) * 100f);
+                int critPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.critBonus, player.SkillLevel) * 100f);
                 log.Add(new LogEntry($"✦ 狂暴！{def.duration:0} 秒内攻击 +{atkPct}%、暴击率 +{critPct}%", def.color));
                 return;
             }
@@ -441,7 +438,7 @@ namespace AutoBattle
             if (hpDamage > 0) monster.currentHp = Mathf.Max(0, monster.currentHp - hpDamage);
 
             string shieldNote = absorbed > 0 ? $"  (护盾吸收 {absorbed})" : "";
-            string label = def.kind == SkillKind.Active ? def.name : def.name;
+            string label = def.name;
             log.Add(new LogEntry(
                 $"✦ {label}！{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp})",
                 def.color));

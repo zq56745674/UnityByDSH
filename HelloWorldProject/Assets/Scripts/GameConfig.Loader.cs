@@ -49,8 +49,29 @@ namespace AutoBattle
                 return false;
             }
             ApplyJson(asset.text);
+            ReportMissingKeys(asset.text);
             ConfigLoaded = true;
             return true;
+        }
+
+        /// <summary>
+        /// 外部 JSON 缺字段时 <c>JsonUtility</c> 会静默保留 <see cref="GameConfigData"/> 的默认值，
+        /// 于是同一个数值要维护两份。这里把缺的键点名打出来：新增配置项忘了写进 json 时能立刻看见
+        /// （2026-10 的四个强化字段就是这么漏掉的，一直靠代码默认值兜底）。
+        /// </summary>
+        private static void ReportMissingKeys(string json)
+        {
+            const System.Reflection.BindingFlags inst =
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance;
+
+            var missing = new System.Collections.Generic.List<string>();
+            foreach (var f in typeof(GameConfigData).GetFields(inst))
+                if (json.IndexOf("\"" + f.Name + "\"", System.StringComparison.Ordinal) < 0)
+                    missing.Add(f.Name);
+
+            if (missing.Count == 0) return;
+            Debug.LogWarning($"[GameConfig] game_config.json 缺 {missing.Count} 个配置项，"
+                + "这些项会用 GameConfigData 的默认值：" + string.Join("、", missing));
         }
 
         /// <summary>用一段 JSON 覆盖可调数值，返回被覆盖的字段数。</summary>

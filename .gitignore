@@ -44,6 +44,9 @@ _art/hero_v2*
 _art/*.bak
 _balance/*.bak
 
+# 归档区：拆分前的备份、早期截图，保留在本地但不入库
+_archive/
+
 # 杂项
 *.bak
 *.tmp

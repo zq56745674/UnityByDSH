@@ -216,6 +216,20 @@ namespace AutoBattle
         /// <summary>品质卖价倍率，顺序与 EquipmentQuality 一致；品质越高卖得越多。</summary>
         public static readonly float[] SellQualityMultipliers = { 1f, 2f, 4f, 8f, 16f };
 
+        // ==================== 装备强化（步骤 2）====================
+
+        /// <summary>
+        /// 强化费用的品质倍率，顺序与 EquipmentQuality 一致：
+        /// 普通 0.6 / 优秀 0.8 / 稀有 1.0 / 史诗 1.3 / 传说 1.6。
+        /// 高品质装备的主属性基数更大，每级 +3% 换来的绝对值也更大，
+        /// 所以费用跟着品质走，否则「强化传说」会成为性价比碾压一切的选择。
+        /// 注意这里和 SellQualityMultipliers（1/2/4/8/16）刻意拉得很开：
+        /// 卖价差 16 倍是「掉落品质之间的价值差」，强化费只差 2.7 倍是
+        /// 「同一件装备打磨到顶的代价」，两者不是一回事——费用若也按 16 倍走，
+        /// 传说装备的强化会贵到没人强化得起，等于把高品质装备的成长空间废掉。
+        /// </summary>
+        public static readonly float[] EnhanceQualityFactors = { 0.6f, 0.8f, 1.0f, 1.3f, 1.6f };
+
         // ==================== 装备副词条 ====================
 
         /// <summary>副词条显示名，顺序与 EquipmentAffix 一致。</summary>
@@ -236,7 +250,7 @@ namespace AutoBattle
         /// <summary>
         /// 各品质的副词条条数上限：普通 1 / 优秀 2 / 稀有 2 / 史诗 3 / 传说 4。
         /// 只有优秀档是 1~2 条随机，其余品质上下限相同。
-        /// 同一件装备内不会重复出现同一种词条（词条池共 4 种）。
+        /// 同一件装备内不会重复出现同一种词条（词条池共 5 种：暴击率 / 暴击伤害 / 攻速 / 全属性 / 护甲穿透）。
         /// </summary>
         public static readonly int[] EquipAffixCountMax = { 1, 2, 2, 3, 4 };
 
