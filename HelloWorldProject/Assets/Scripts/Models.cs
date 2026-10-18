@@ -32,6 +32,29 @@ namespace AutoBattle
         NotEnoughGold,
     }
 
+    /// <summary>
+    /// 洗练一次的结果。与 <see cref="EnhanceResult"/> 同理：UI 要能区分
+    /// 「没装备」「没有词条可洗」「金币不够」，而不是笼统地不响应点击。
+    /// 洗练没有次数上限，所以没有 MaxLevel 一档。
+    /// </summary>
+    public enum ReforgeResult
+    {
+        /// <summary>洗练成功，金币已扣、副词条已重抽。</summary>
+        Success,
+
+        /// <summary>该槽位没有装备。</summary>
+        NoEquipment,
+
+        /// <summary>装备没有任何副词条（理论上不会发生，普通品质也保底 1 条）。</summary>
+        NoAffix,
+
+        /// <summary>金币不够支付本次费用。</summary>
+        NotEnoughGold,
+
+        /// <summary>全部词条都被锁住了——没有可重抽的词条，拒绝扣钱。</summary>
+        AllLocked,
+    }
+
     /// <summary>装备品质，顺序必须与 GameConfig 里的权重/倍率/名称数组一致（要求 12）。</summary>
     public enum EquipmentQuality
     {
@@ -184,9 +207,24 @@ namespace AutoBattle
         /// <summary>副词条：护甲穿透（0.1 表示无视目标 10% 防御）。</summary>
         public float affixArmorPen;
 
-        public string QualityName => GameConfig.QualityNames[(int)quality];
+        /// <summary>
+        /// 已经洗练过几次。只影响费用（每次 +60%）与展示，不参与评分与战斗计算。
+        /// 步骤 3 新增字段：旧存档里没有它，JsonUtility 会给 0，等价于「没洗过」，
+        /// 所以不需要升存档版本。
+        /// </summary>
+        public int reforgeCount;
 
-        public Color QualityColor => GameConfig.QualityColors[(int)quality];
+        /// <summary>
+        /// 玩家手动上锁。锁住的装备不会被更高评分的掉落自动替换，
+        /// 掉落会转进「待选」由玩家在对比面板决定；换档/重开时只有这件装备本身在存档里，
+        /// 所以锁也随装备一起持久化。旧存档没有这个字段，JsonUtility 给 false。
+        /// </summary>
+        public bool locked;
+
+        // 读档会兜底，但运行时仍可能有越界的 quality（测试直接构造），展示层再夹一次。
+        public string QualityName => GameConfig.QualityNames[Mathf.Clamp((int)quality, 0, GameConfig.QualityNames.Length - 1)];
+
+        public Color QualityColor => GameConfig.QualityColors[Mathf.Clamp((int)quality, 0, GameConfig.QualityColors.Length - 1)];
 
         public string SlotName => slot == EquipmentSlot.Weapon ? "武器" : "衣服";
 
@@ -199,7 +237,7 @@ namespace AutoBattle
         /// 强化倍率 = 1 + 每级加成 × 强化等级。0 级时为 1（完全不改变原属性）。
         /// 乘算而非加算：同品质两件装备的强弱差距在强化后不会被绝对值稀释掉。
         /// </summary>
-        public float EnhanceMultiplier => 1f + GameConfig.EnhanceBonusPerLevel * enhanceLevel;
+        public float EnhanceMultiplier => 1f + GameConfig.EnhanceBonusPerLevel * Mathf.Max(0, enhanceLevel);
 
         /// <summary>强化后的攻击（武器主属性）。未强化时等于 <see cref="attack"/>。</summary>
         public int EnhancedAttack => Mathf.RoundToInt(attack * EnhanceMultiplier);
@@ -297,6 +335,142 @@ namespace AutoBattle
                     sb.Append(parts[i]);
                 }
                 return sb.ToString();
+            }
+        }
+
+        // ---- 洗练（步骤 3）：重抽副词条，条数不变 ----
+
+        /// <summary>当前拥有的副词条条数。洗练保持这个数不变，所以它也是「洗出来的容量」。</summary>
+        public int AffixCount
+        {
+            get
+            {
+                int n = 0;
+                if (affixCritChance > 0f) n++;
+                if (affixCritDamage > 0f) n++;
+                if (affixAttackSpeed > 0f) n++;
+                if (affixAllStats > 0f) n++;
+                if (affixArmorPen > 0f) n++;
+                return n;
+            }
+        }
+
+        /// <summary>某条词条类型对应的位标记（锁词条用位掩码表达「哪几条被锁」，位序同 EquipmentAffix）。</summary>
+        public static int AffixBit(EquipmentAffix kind) => 1 << (int)kind;
+
+        /// <summary>这件装备当前拥有哪些词条（位掩码，位 = EquipmentAffix）。</summary>
+        public int PresentAffixMask
+        {
+            get
+            {
+                int mask = 0;
+                if (affixCritChance > 0f) mask |= AffixBit(EquipmentAffix.CritChance);
+                if (affixCritDamage > 0f) mask |= AffixBit(EquipmentAffix.CritDamage);
+                if (affixAttackSpeed > 0f) mask |= AffixBit(EquipmentAffix.AttackSpeed);
+                if (affixAllStats > 0f) mask |= AffixBit(EquipmentAffix.AllStats);
+                if (affixArmorPen > 0f) mask |= AffixBit(EquipmentAffix.ArmorPen);
+                return mask;
+            }
+        }
+
+        /// <summary>一条词条的当前数值；这件装备没有该词条时返回 0。</summary>
+        public float AffixValue(EquipmentAffix kind)
+        {
+            switch (kind)
+            {
+                case EquipmentAffix.CritChance: return affixCritChance;
+                case EquipmentAffix.CritDamage: return affixCritDamage;
+                case EquipmentAffix.AttackSpeed: return affixAttackSpeed;
+                case EquipmentAffix.AllStats: return affixAllStats;
+                case EquipmentAffix.ArmorPen: return affixArmorPen;
+                default: return 0f;
+            }
+        }
+
+        /// <summary>形如「暴击率 +11.9%」，洗练面板的锁词条行与日志共用。</summary>
+        public static string AffixText(EquipmentAffix kind, float value) =>
+            $"{GameConfig.EquipAffixNames[(int)kind]} +{value * 100f:0.#}%";
+
+        /// <summary>是否还有副词条可以洗练。</summary>
+        public bool CanReforge => AffixCount > 0;
+
+        /// <summary>
+        /// 掩码里「已锁且这件装备真的有」的词条条数。
+        /// 用 &amp; PresentAffixMask 裁掉脏位：锁定状态活在界面里，换装后可能残留旧位，
+        /// 不清掉会让费用按不存在的词条算钱。
+        /// </summary>
+        public int LockedAffixCount(int mask)
+        {
+            int locked = mask & PresentAffixMask;
+            int n = 0;
+            while (locked != 0)
+            {
+                n += locked & 1;
+                locked >>= 1;
+            }
+            return n;
+        }
+
+        /// <summary>洗练一次所需金币；没有副词条时返回 0。</summary>
+        public int ReforgeCost => CanReforge ? GameConfig.ReforgeCost(level, quality, reforgeCount) : 0;
+
+        /// <summary>锁住 lockedCount 条词条时的洗练费用；没有副词条时返回 0。</summary>
+        public int ReforgeCostWithLocks(int lockedCount) =>
+            CanReforge ? GameConfig.ReforgeCost(level, quality, reforgeCount, lockedCount) : 0;
+
+        /// <summary>锁住 lockedCount 条词条时的单价倍率（×1 / ×3 / ×9 / ×27 …），用于展示。</summary>
+        public static float ReforgeLockMultiplier(int lockedCount) =>
+            Mathf.Pow(GameConfig.ReforgeLockFactor, Mathf.Max(0, lockedCount));
+
+        /// <summary>形如「已洗练 6 次」。</summary>
+        public string ReforgeCountText => reforgeCount > 0 ? $"已洗练 {reforgeCount} 次" : "未洗练";
+
+        /// <summary>
+        /// 词条质量 0~1：每条副词条在各自区间里的百分位的平均。
+        /// 等级缩放对同一条词条是常数，折算时约掉，所以不同等级的装备质量可比。
+        /// 只用于展示「这次比上次好还是差」，**不参与评分与战斗计算**。
+        /// </summary>
+        public float AffixQuality
+        {
+            get
+            {
+                float levelScale = 1f + level * GameConfig.EquipAffixLevelScale;
+                float sum = 0f;
+                int n = 0;
+                AccumulateQuality(ref sum, ref n, affixCritChance, EquipmentAffix.CritChance, levelScale);
+                AccumulateQuality(ref sum, ref n, affixCritDamage, EquipmentAffix.CritDamage, levelScale);
+                AccumulateQuality(ref sum, ref n, affixAttackSpeed, EquipmentAffix.AttackSpeed, levelScale);
+                AccumulateQuality(ref sum, ref n, affixAllStats, EquipmentAffix.AllStats, levelScale);
+                AccumulateQuality(ref sum, ref n, affixArmorPen, EquipmentAffix.ArmorPen, levelScale);
+                return n == 0 ? 0f : Mathf.Clamp01(sum / n);
+            }
+        }
+
+        /// <summary>把一条副词条折算成 0~1 的百分位并累加。</summary>
+        private static void AccumulateQuality(ref float sum, ref int count, float value,
+            EquipmentAffix kind, float levelScale)
+        {
+            if (value <= 0f) return;
+            int k = (int)kind;
+            float min = GameConfig.EquipAffixMin[k];
+            float max = GameConfig.EquipAffixMax[k];
+            float baseValue = value / Mathf.Max(0.0001f, levelScale);
+            sum += Mathf.Clamp01(max > min ? (baseValue - min) / (max - min) : 1f);
+            count++;
+        }
+
+        /// <summary>单行副词条摘要（无「◆」前缀、无换行），给日志与洗练面板用。</summary>
+        public string AffixSummary
+        {
+            get
+            {
+                var parts = new List<string>();
+                CollectAffix(parts, affixCritChance, "暴击率");
+                CollectAffix(parts, affixCritDamage, "暴击伤害");
+                CollectAffix(parts, affixAttackSpeed, "攻击速度");
+                CollectAffix(parts, affixAllStats, "全属性");
+                CollectAffix(parts, affixArmorPen, "穿甲");
+                return string.Join("  ", parts);
             }
         }
 
@@ -421,6 +595,15 @@ namespace AutoBattle
                 attackFactor *= GameConfig.MaxTierAttackFactor;
                 defenseFactor *= GameConfig.MaxTierDefenseFactor;
                 speedFactor *= GameConfig.MaxTierSpeedFactor;
+
+                // 终局 BOSS 再叠一层：让「什么时候能过 11-10」落在巅峰 100 之后，
+                // 而不是靠七次挑战的运气。只作用于关底 Boss。
+                if (tier == MonsterTier.Boss)
+                {
+                    hpFactor *= GameConfig.FinalBossStatFactor;
+                    attackFactor *= GameConfig.FinalBossStatFactor;
+                    defenseFactor *= GameConfig.FinalBossStatFactor;
+                }
             }
 
             // 最后叠章节族类偏向：第 3 章骷髅脆而凶、第 4 章食人魔肉而慢。
@@ -430,6 +613,14 @@ namespace AutoBattle
             attackFactor *= bias[1];
             defenseFactor *= bias[2];
             speedFactor *= bias[3];
+
+            // 章节压迫：第 1~10 章逐章加码，第 11 章不吃（终局档由 MaxTier* 负责）。
+            // 只压生命/攻击/防御，不压速度——速度对攻击间隔是非线性的，压一点就翻倍。
+            float pressure = GameConfig.ChapterPressure(
+                GameConfig.ChapterOfMonsterLevel(lv), tier == MonsterTier.Boss);
+            hpFactor *= pressure;
+            attackFactor *= pressure;
+            defenseFactor *= pressure;
 
             var m = new MonsterData
             {

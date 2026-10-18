@@ -198,7 +198,7 @@ namespace AutoBattle
         /// 推进 dt 秒的战斗。dt 应当已经乘过游戏速度倍率。
         /// 顺序：技能计时 → 主动技能释放 → 主角出手 → 怪物出手。
         /// </summary>
-        public BattleTickResult Tick(PlayerData player, MonsterData monster, float dt, IList<LogEntry> log)
+        public BattleTickResult Tick(PlayerData player, MonsterData monster, float dt, BattleLog log)
         {
             if (player == null || monster == null) return BattleTickResult.Ongoing;
 
@@ -227,15 +227,15 @@ namespace AutoBattle
                 string shieldNote = absorbed > 0 ? $"  (护盾吸收 {absorbed})" : "";
                 string shieldLeft = monster.shield > 0 ? $"  护盾 {monster.shield}" : "";
 
-                log.Add(new LogEntry(
+                log.AddCombat(
                     $"主角 → 怪物  {(crit ? "暴击 " : "")}{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp}{shieldLeft})",
-                    crit ? GameConfig.LogGold : GameConfig.LogInfo));
+                    crit ? GameConfig.LogGold : GameConfig.LogInfo);
 
                 // 吸血鬼：按实际造成的伤害（含护盾吸收部分）回血。
                 int healed = ApplyLifesteal(player, dmg);
                 if (healed > 0)
-                    log.Add(new LogEntry($"✦ 吸血 +{healed}   (主角 {player.currentHp}/{player.MaxHp})",
-                        SkillCatalog.Get(SkillId.Vampire).color));
+                    log.AddCombat($"✦ 吸血 +{healed}   (主角 {player.currentHp}/{player.MaxHp})",
+                        SkillCatalog.Get(SkillId.Vampire).color);
 
                 // 暴击连锁：暴击时按概率追加一次伤害。
                 if (crit && !monster.IsDead && player.HasSkill(SkillId.CritChain))
@@ -300,9 +300,9 @@ namespace AutoBattle
                     if (mHealed > 0) notes += $"  吸血 +{mHealed}";
                 }
 
-                log.Add(new LogEntry(
+                log.AddCombat(
                     $"怪物 → 主角  {(crit ? "暴击 " : "")}{dmg} 伤害{notes}   (主角 {player.currentHp}/{player.MaxHp})",
-                    crit ? GameConfig.LogDanger : GameConfig.LogWarn));
+                    crit ? GameConfig.LogDanger : GameConfig.LogWarn);
 
                 // 反击：受击时按概率反弹伤害。
                 if (player.HasSkill(SkillId.Counter) && !monster.IsDead && player.currentHp > 0)
@@ -327,7 +327,7 @@ namespace AutoBattle
                     player.currentHp = 1;
 
                     int pct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(nd.value, player.SkillLevel) * 100f);
-                    log.Add(new LogEntry($"✦ 濒死爆发！攻击 +{pct}%，{nd.duration:0} 秒内不会死亡", nd.color));
+                    log.AddCombat($"✦ 濒死爆发！攻击 +{pct}%，{nd.duration:0} 秒内不会死亡", nd.color);
                 }
                 else if (_nearDeathTimer > 0f)
                 {
@@ -341,7 +341,7 @@ namespace AutoBattle
         }
 
         /// <summary>推进技能冷却与周期性效果（护盾生成、濒死爆发）。</summary>
-        private void TickSkillTimers(PlayerData player, float dt, IList<LogEntry> log)
+        private void TickSkillTimers(PlayerData player, float dt, BattleLog log)
         {
             if (_globalCooldown > 0f) _globalCooldown -= dt;
             for (int i = 0; i < _activeCooldown.Length; i++)
@@ -367,7 +367,7 @@ namespace AutoBattle
                     if (amount > player.shield)
                     {
                         player.shield = amount;
-                        log.Add(new LogEntry($"✦ 护盾生成  +{amount}  (护盾 {player.shield})", def.color));
+                        log.AddCombat($"✦ 护盾生成  +{amount}  (护盾 {player.shield})", def.color);
                     }
                 }
             }
@@ -376,7 +376,7 @@ namespace AutoBattle
         }
 
         /// <summary>主动技能自动释放：公共冷却结束、该技能冷却结束、满足条件就放一个。</summary>
-        private void TryCastActiveSkills(PlayerData player, MonsterData monster, IList<LogEntry> log)
+        private void TryCastActiveSkills(PlayerData player, MonsterData monster, BattleLog log)
         {
             if (_globalCooldown > 0f || monster.IsDead) return;
 
@@ -399,7 +399,7 @@ namespace AutoBattle
         }
 
         /// <summary>释放一个主动技能。</summary>
-        private void CastActive(PlayerData player, MonsterData monster, SkillDef def, int slot, IList<LogEntry> log)
+        private void CastActive(PlayerData player, MonsterData monster, SkillDef def, int slot, BattleLog log)
         {
             _activeCooldown[slot] = def.cooldown;
             _globalCooldown = GameConfig.SkillGlobalCooldown;
@@ -410,7 +410,7 @@ namespace AutoBattle
 
                 int atkPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.value, player.SkillLevel) * 100f);
                 int critPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.critBonus, player.SkillLevel) * 100f);
-                log.Add(new LogEntry($"✦ 狂暴！{def.duration:0} 秒内攻击 +{atkPct}%、暴击率 +{critPct}%", def.color));
+                log.AddCombat($"✦ 狂暴！{def.duration:0} 秒内攻击 +{atkPct}%、暴击率 +{critPct}%", def.color);
                 return;
             }
 
@@ -426,7 +426,7 @@ namespace AutoBattle
         /// 技能伤害不吃暴击（保证倍率可预期）。触发技能的日志文案单独给。
         /// </summary>
         private void DealSkillDamage(PlayerData player, MonsterData monster, float giant,
-            SkillDef def, int attack, IList<LogEntry> log)
+            SkillDef def, int attack, BattleLog log)
         {
             float mult = GameConfig.ScaleSkillValue(def.value, player.SkillLevel);
             int dmg = ApplyDefense(Mathf.RoundToInt(attack * mult * giant), monster.defense, monster.level,
@@ -439,14 +439,14 @@ namespace AutoBattle
 
             string shieldNote = absorbed > 0 ? $"  (护盾吸收 {absorbed})" : "";
             string label = def.name;
-            log.Add(new LogEntry(
+            log.AddCombat(
                 $"✦ {label}！{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp})",
-                def.color));
+                def.color);
 
             int healed = ApplyLifesteal(player, dmg);
             if (healed > 0)
-                log.Add(new LogEntry($"✦ 吸血 +{healed}   (主角 {player.currentHp}/{player.MaxHp})",
-                    SkillCatalog.Get(SkillId.Vampire).color));
+                log.AddCombat($"✦ 吸血 +{healed}   (主角 {player.currentHp}/{player.MaxHp})",
+                    SkillCatalog.Get(SkillId.Vampire).color);
         }
     }
 }

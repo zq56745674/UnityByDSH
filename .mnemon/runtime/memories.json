@@ -98,6 +98,34 @@
       "updated_at": "2026-10-17T14:05:42.289Z",
       "target": "memory",
       "importance": "normal"
+    },
+    {
+      "content": "2026-10-17 按用户明确指令（\"直接提交git并推送\"）把 E:\\pytest\\unitydsh1 提交并推到 origin/main：b649ec7「平衡与 UI 修复（新档曲线/部分经验/过渡门禁/飘字DPS）+ 补入库拆分后的源码」，c873e6d「工程卫生（死代码、配置缺键警告、_archive 归档）」。当前 main 与 origin/main 一致，工作区干净；文档 3a5688f1 的「未提交」段落因此过时。commit/push 仍需事先许可。",
+      "created_at": "2026-10-17T14:54:28.043Z",
+      "updated_at": "2026-10-17T14:54:28.043Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "验收 UI 的两条操作经验（2026-10-18）：Play 模式用反射改设置/面板后，必须等 400–500ms 让 Refresh 跑过一帧再读文本，否则会读到上一帧（技能池推荐分、对比面板 _compareDirty 都踩过）；cc-safety-net 会拦截 `git checkout -- <file>`（视为丢弃未提交改动），要恢复单个文件改用 Start-Process git -ArgumentList @('-C',$repo,'show','HEAD:path') -RedirectStandardOutput $dest。",
+      "created_at": "2026-10-18T14:12:22.740Z",
+      "updated_at": "2026-10-18T14:12:22.740Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "HelloWorldProject 终局 11-10 结算语义（2026-10-18 修）：首通时正常发奖/横幅并立即把 Player.stageKillCount 归零；之后继续刷同一关，ResolveStageClear 里的 SuppressFinalStageFarmKill 会吞掉满轮击杀（不再每次多等 StageClearDelay=3s、也不再刷通关日志）。HandleMonsterKilled 早已拆成约 29 行调度（ResolveStageProgress / GrantKillReward / ResolveLevelUp / ResolveDrops / EnterRespawnWait），README 的「182 行未拆」旧条目已删；此次把 55 行的 ResolveStageProgress 再拆成 ResolveStageClear / SuppressFinalStageFarmKill / ShowClearBanner / AnnounceStageBossIfNext。",
+      "created_at": "2026-10-18T14:30:28.767Z",
+      "updated_at": "2026-10-18T14:30:28.767Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "HelloWorldProject 的 AutoSaveTick（GameController.cs:1541-1547）每 AutoSaveInterval（默认 5 秒）无条件 Save 当前存档槽，Play 模式里改 Player 后逗留超过 5 秒就会覆盖磁盘存档；测试前应先备份或测试后立即恢复，2026-10-18 曾因此把 6 个技能槽清空，后按截图恢复。",
+      "created_at": "2026-10-18T15:00:17.307Z",
+      "updated_at": "2026-10-18T15:00:17.307Z",
+      "target": "memory",
+      "importance": "normal"
     }
   ]
 }

@@ -21,3 +21,11 @@ Unity 工程 HelloWorldProject（E:\pytest\unitydsh1）：装备评分口径已�
 HelloWorldProject 的日志有两条写入路径：GameController.AddLog 维护 TotalLogEntries/LogVersion，BattleSystem.Tick 直接往传入的 Log 里 Add（不计数），差值由 GameController.TickFighting 补记。以后新增往 Log 写的地方必须同步这两个计数器，否则飘字/实时 DPS 静默停摆。Mnemon 文档 42b8694e 中「2026-10-17 全项目审查（未修项）」那段已部分过时：暂停/继续、技能面板冻结、浮层穿透、选关面板重建、飘字/DPS 均已修，详见新文档 a6ea98c9（飘字/实时 DPS 修复与 UI 冒烟）。
 §
 HelloWorldProject 的 game_config.json 必须与 GameConfigData 的 97 个字段一一对应（当前 97 键）；GameConfig.Loader 加载后会用 ReportMissingKeys 对缺键打警告，缺字段不再静默回退默认值。历史备份、拆分前旧代码与一次性开发截图统一放工作区根的 _archive/（已 gitignore，内含 README 说明），不要留在仓库根或 Assets 里。
+§
+2026-10-17 按用户明确指令（"直接提交git并推送"）把 E:\pytest\unitydsh1 提交并推到 origin/main：b649ec7「平衡与 UI 修复（新档曲线/部分经验/过渡门禁/飘字DPS）+ 补入库拆分后的源码」，c873e6d「工程卫生（死代码、配置缺键警告、_archive 归档）」。当前 main 与 origin/main 一致，工作区干净；文档 3a5688f1 的「未提交」段落因此过时。commit/push 仍需事先许可。
+§
+验收 UI 的两条操作经验（2026-10-18）：Play 模式用反射改设置/面板后，必须等 400–500ms 让 Refresh 跑过一帧再读文本，否则会读到上一帧（技能池推荐分、对比面板 _compareDirty 都踩过）；cc-safety-net 会拦截 `git checkout -- <file>`（视为丢弃未提交改动），要恢复单个文件改用 Start-Process git -ArgumentList @('-C',$repo,'show','HEAD:path') -RedirectStandardOutput $dest。
+§
+HelloWorldProject 终局 11-10 结算语义（2026-10-18 修）：首通时正常发奖/横幅并立即把 Player.stageKillCount 归零；之后继续刷同一关，ResolveStageClear 里的 SuppressFinalStageFarmKill 会吞掉满轮击杀（不再每次多等 StageClearDelay=3s、也不再刷通关日志）。HandleMonsterKilled 早已拆成约 29 行调度（ResolveStageProgress / GrantKillReward / ResolveLevelUp / ResolveDrops / EnterRespawnWait），README 的「182 行未拆」旧条目已删；此次把 55 行的 ResolveStageProgress 再拆成 ResolveStageClear / SuppressFinalStageFarmKill / ShowClearBanner / AnnounceStageBossIfNext。
+§
+HelloWorldProject 的 AutoSaveTick（GameController.cs:1541-1547）每 AutoSaveInterval（默认 5 秒）无条件 Save 当前存档槽，Play 模式里改 Player 后逗留超过 5 秒就会覆盖磁盘存档；测试前应先备份或测试后立即恢复，2026-10-18 曾因此把 6 个技能槽清空，后按截图恢复。

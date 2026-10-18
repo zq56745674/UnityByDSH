@@ -56,7 +56,7 @@ namespace AutoBattle
         public int SpeedIndex { get; private set; }
 
         /// <summary>战斗日志（要求 15），最新的在末尾。</summary>
-        public List<LogEntry> Log { get; } = new List<LogEntry>();
+        public BattleLog Log { get; } = new BattleLog();
 
         // ---- 统计，用于面板展示 ----
 
@@ -80,14 +80,14 @@ namespace AutoBattle
         public int BossKills { get; private set; }
 
         /// <summary>战斗日志有变化时自增，UI 以此判断是否需要重绘（避免每帧重建文本）。</summary>
-        public int LogVersion { get; private set; }
+        public int LogVersion => Log.Version;
 
         /// <summary>
-        /// 累计写入过多少条日志（只增不减）。Log 会被 <see cref="TrimLog"/> 裁到上限，
+        /// 累计写入过多少条日志（只增不减）。Log 会按上限裁剪，
         /// 所以「这一帧新增了几条」不能拿 Log.Count 的前后差去算——满 60 条之后差值恒为 0，
         /// 飘字与实时 DPS 曾因此永久失效。UI 请用本值做游标。
         /// </summary>
-        public int TotalLogEntries { get; private set; }
+        public int TotalLogEntries => Log.TotalEntries;
 
         // ==================== 内部 ====================
 
@@ -97,11 +97,26 @@ namespace AutoBattle
         private float _autoSaveTimer;
         private bool _loadedFromSave;
 
+        /// <summary>
+        /// 待选掉落（按槽位下标存，每槽最多一件，仅本会话有效）。
+        /// 只有两种情况会进来：当前装备上了锁，或设置里关掉了「自动换装」。
+        /// 不随存档持久化——它是「等你这一会儿决定」的临时托盘，不是仓库。
+        /// </summary>
+        private readonly Equipment[] _pendingDrops = new Equipment[2];
+
         /// <summary>本局是否已经开始过（区分"第一次点开始"与"暂停后继续"）。</summary>
         private bool _runStarted;
 
         /// <summary>下一只要生成的档次（由关卡进度触发，生成后立刻复位为 Normal）。</summary>
         private MonsterTier _pendingTier = MonsterTier.Normal;
+
+        /// <summary>终局 BOSS 的挑战次数：用来轮换怪物类型（见 SpawnMonsterNow）。</summary>
+        private int _finalBossAttempt;
+
+        /// <summary>当前关卡是不是终局（第 11 章最后一关）。</summary>
+        private bool IsFinalStage =>
+            Player != null && Player.CurrentStage.chapter >= GameConfig.ChapterCount
+            && Player.CurrentStage.IsChapterFinal;
 
         /// <summary>生命药剂的剩余冷却（按游戏内时间计，受速度档位影响）。</summary>
         private float _potionCooldownTimer;
@@ -152,11 +167,13 @@ namespace AutoBattle
 
             if (!IsRunning) return;
 
-            // 选关 / 存档 / 强化 / 技能面板打开时冻结整局（含商店倒计时），
+            // 选关 / 存档 / 强化 / 洗练 / 技能 / 设置 / 引导 / 对比面板打开时冻结整局（含商店倒计时），
             // 否则玩家挑关、挑档、挑强化目标、挑技能时怪会照打。
             // 技能面板原先不在名单里，理由是「它只在战斗停下的空档弹出」——但槽位按钮
             // 任何时刻都能点，战斗中点开就是一整块浮层盖住血条让怪白打，所以一并冻住。
-            if (StagePanelOpen || SavePanelOpen || EnhancePanelOpen || SkillPanelOpen) return;
+            // 设置 / 引导 / 对比同理：它们都能从常驻按钮点开，必须和别的浮层一样有冻结权。
+            if (StagePanelOpen || SavePanelOpen || EnhancePanelOpen || ReforgePanelOpen || SkillPanelOpen
+                || SettingsOpen || GuideOpen || CompareOpen) return;
 
             // 游戏速度只影响战斗推进，不影响存档节奏（要求 16）。
             float dt = Time.deltaTime * SpeedMultiplier;
@@ -311,7 +328,10 @@ namespace AutoBattle
             SaveSystem.Save(Player);
         }
 
-        // ---- 四个浮层（选关 / 技能 / 存档 / 强化）互斥，规则只在这一处 ----
+        // ---- 五个浮层（选关 / 技能 / 存档 / 强化 / 洗练）互斥，规则只在这一处 ----
+
+        /// <summary>三选一还没选完时不许开任何浮层：候选卡会压在浮层上面，两层叠着没法看。</summary>
+        private bool ChoicePending => CurrentState == State.SkillChoice || PendingSkillPicks > 0;
 
         /// <summary>关掉全部浮层。任何 Open 之前先走这里，保证同时只开一个。</summary>
         private void CloseAllPanels()
@@ -320,11 +340,16 @@ namespace AutoBattle
             SkillPanelOpen = false;
             SavePanelOpen = false;
             EnhancePanelOpen = false;
+            ReforgePanelOpen = false;
+            SettingsOpen = false;
+            GuideOpen = false;
+            CompareOpen = false;
         }
 
         /// <summary>打开 / 关闭选关面板。</summary>
         public void ToggleStagePanel()
         {
+            if (ChoicePending) return;
             bool open = !StagePanelOpen;
             CloseAllPanels();
             StagePanelOpen = open;
@@ -336,6 +361,7 @@ namespace AutoBattle
         /// <summary>打开技能面板（同时关掉其它浮层）。</summary>
         public void OpenSkillPanel()
         {
+            if (ChoicePending) return;
             CloseAllPanels();
             SkillPanelOpen = true;
         }
@@ -346,6 +372,7 @@ namespace AutoBattle
         /// <summary>打开 / 关闭存档槽面板。</summary>
         public void ToggleSavePanel()
         {
+            if (ChoicePending) return;
             bool open = !SavePanelOpen;
             CloseAllPanels();
             SavePanelOpen = open;
@@ -359,6 +386,7 @@ namespace AutoBattle
         /// <summary>打开 / 关闭装备强化面板。</summary>
         public void ToggleEnhancePanel()
         {
+            if (ChoicePending) return;
             bool open = !EnhancePanelOpen;
             CloseAllPanels();
             EnhancePanelOpen = open;
@@ -393,6 +421,180 @@ namespace AutoBattle
             return EnhanceResult.Success;
         }
 
+        // ---- 装备洗练（步骤 3）----
+
+        /// <summary>打开 / 关闭装备洗练面板。</summary>
+        public void ToggleReforgePanel()
+        {
+            if (ChoicePending) return;
+            bool open = !ReforgePanelOpen;
+            CloseAllPanels();
+            ReforgePanelOpen = open;
+        }
+
+        /// <summary>关闭装备洗练面板。</summary>
+        public void CloseReforgePanel() => ReforgePanelOpen = false;
+
+        // ---- 设置 / 新手引导 / 装备对比（2026-10-18 新增）----
+
+        /// <summary>设置浮层是否展开（UI 用）。和强化/洗练一样冻结战斗。</summary>
+        public bool SettingsOpen { get; set; }
+
+        /// <summary>新手引导浮层是否展开（UI 用）。引导期间整局冻结，玩家不会在教程里被打死。</summary>
+        public bool GuideOpen { get; set; }
+
+        /// <summary>装备对比浮层是否展开（UI 用）。</summary>
+        public bool CompareOpen { get; set; }
+
+        /// <summary>打开 / 关闭设置面板。</summary>
+        public void ToggleSettingsPanel()
+        {
+            if (ChoicePending) return;
+            bool open = !SettingsOpen;
+            CloseAllPanels();
+            SettingsOpen = open;
+        }
+
+        /// <summary>关闭设置面板。</summary>
+        public void CloseSettingsPanel() => SettingsOpen = false;
+
+        /// <summary>打开新手引导（首次启动自动调用，设置里也能重看）。</summary>
+        public void OpenGuide()
+        {
+            if (ChoicePending) return;
+            CloseAllPanels();
+            GuideOpen = true;
+        }
+
+        /// <summary>关闭新手引导（走完或跳过时调用，标记由 UI 写进 GameSettings）。</summary>
+        public void CloseGuide() => GuideOpen = false;
+
+        /// <summary>打开 / 关闭装备对比面板。</summary>
+        public void ToggleComparePanel()
+        {
+            if (ChoicePending) return;
+            bool open = !CompareOpen;
+            CloseAllPanels();
+            CompareOpen = open;
+        }
+
+        /// <summary>关闭装备对比面板。</summary>
+        public void CloseComparePanel() => CompareOpen = false;
+
+        /// <summary>某槽位的待选掉落；没有则为 null。</summary>
+        public Equipment PendingDrop(EquipmentSlot slot) => _pendingDrops[(int)slot];
+
+        /// <summary>某槽位是否有待选掉落（左面板「对比」按钮的角标用）。</summary>
+        public bool HasPendingDrop(EquipmentSlot slot)
+        {
+            int index = (int)slot;
+            return index >= 0 && index < _pendingDrops.Length && _pendingDrops[index] != null;
+        }
+
+        /// <summary>是否有任意槽位存在待选掉落。</summary>
+        public bool HasAnyPendingDrop => HasPendingDrop(EquipmentSlot.Weapon) || HasPendingDrop(EquipmentSlot.Armor);
+
+        /// <summary>换档、重开、读档时清空临时托盘，避免把上一份存档的掉落带过来。</summary>
+        private void ClearPendingDrops()
+        {
+            _pendingDrops[0] = null;
+            _pendingDrops[1] = null;
+        }
+
+        /// <summary>
+        /// 把待选掉落穿上（玩家在对比面板里点「换装」）。
+        /// 手动选择天然覆盖「当前装备上锁」的限制：锁只挡自动替换，不挡你自己决定。
+        /// </summary>
+        public bool EquipPending(EquipmentSlot slot)
+        {
+            int index = (int)slot;
+            Equipment pending = _pendingDrops[index];
+            if (pending == null) return false;
+
+            WearEquipment(pending);
+            _pendingDrops[index] = null;
+            TotalEquipped++;
+            AddLog($"↑ 已换装 {pending.Title}（评分 {EquipmentScore.Of(Player, pending, pending.slot):0}）",
+                GameConfig.LogSuccess);
+            return true;
+        }
+
+        /// <summary>把待选掉落卖掉（对比面板里的「卖出」）。</summary>
+        public bool SellPending(EquipmentSlot slot)
+        {
+            int index = (int)slot;
+            Equipment pending = _pendingDrops[index];
+            if (pending == null) return false;
+
+            int gold = GameConfig.SellPrice(pending.level, pending.quality);
+            Player.gold += gold;
+            TotalSold++;
+            TotalGoldEarned += gold;
+            _pendingDrops[index] = null;
+
+            AddLog($"$ 卖出待选 {pending.Title}  +{gold} 金币（共 {Player.gold}）", GameConfig.LogGold);
+            return true;
+        }
+
+        /// <summary>
+        /// 切换某槽位装备的上锁状态，返回切换后的状态。
+        /// 锁定的意义：自动换装不会把它顶掉，更强的掉落会进待选等你比较。
+        /// </summary>
+        public bool ToggleEquipLock(EquipmentSlot slot)
+        {
+            Equipment e = Player.GetEquipment(slot);
+            if (e == null) return false;
+
+            e.locked = !e.locked;
+            AddLog(e.locked
+                    ? $"🔒 已锁定 {e.Title}，更强掉落将进入待选"
+                    : $"🔓 已解锁 {e.Title}，恢复自动比较",
+                e.locked ? GameConfig.LogGold : GameConfig.LogInfo);
+            return e.locked;
+        }
+
+        /// <summary>
+        /// 洗练指定槽位的装备：扣金币、重抽**没被锁住**的副词条、已洗次数 +1。
+        /// 条数与其余字段都不变（见 LootSystem.ReforgeAffixes），唯一要额外处理的是生命上限——
+        /// 「全属性」词条的数值被换掉后上限可能涨也可能跌，涨了补差额、跌了由 Min 夹住，
+        /// 否则洗练完血量占比会跳变，看着像「洗练掉血」。
+        /// <paramref name="lockedMask"/> 是 EquipmentAffix 的位掩码（哪几条锁住不动），
+        /// 每多锁一条费用乘一次 GameConfig.ReforgeLockFactor；全锁直接拒绝，一分钱不扣。
+        /// </summary>
+        public ReforgeResult ReforgeEquipment(EquipmentSlot slot, int lockedMask = 0)
+        {
+            Equipment e = Player.GetEquipment(slot);
+            if (e == null) return ReforgeResult.NoEquipment;
+            if (!e.CanReforge) return ReforgeResult.NoAffix;
+
+            int locked = e.LockedAffixCount(lockedMask);
+            if (locked >= e.AffixCount) return ReforgeResult.AllLocked;
+
+            int cost = e.ReforgeCostWithLocks(locked);
+            if (Player.gold < cost) return ReforgeResult.NotEnoughGold;
+
+            int oldMaxHp = Player.MaxHp;
+            int oldQuality = Mathf.RoundToInt(e.AffixQuality * 100f);
+
+            Player.gold -= cost;
+            LootSystem.ReforgeAffixes(e, lockedMask);
+            e.reforgeCount++;
+
+            int newMaxHp = Player.MaxHp;
+            Player.currentHp = Mathf.Min(newMaxHp, Player.currentHp + Mathf.Max(0, newMaxHp - oldMaxHp));
+
+            int newQuality = Mathf.RoundToInt(e.AffixQuality * 100f);
+            int delta = newQuality - oldQuality;
+            string arrow = delta > 0 ? $"↑{delta}" : delta < 0 ? $"↓{-delta}" : "持平";
+            string lockNote = locked > 0
+                ? $"，锁 {locked} 条 ×{Equipment.ReforgeLockMultiplier(locked):0.#}"
+                : "";
+
+            AddLog($"◆ 洗练 {e.Title}  →  花费 {cost:N0} 金币（第 {e.reforgeCount} 次{lockNote}）", e.QualityColor);
+            AddLog($"  词条质量 {oldQuality}% → {newQuality}%（{arrow}）    {e.AffixSummary}", GameConfig.LogInfo);
+            return ReforgeResult.Success;
+        }
+
         /// <summary>当前存档槽（0 起，UI 显示时 +1）。</summary>
         public int SaveSlot => SaveSystem.CurrentSlot;
 
@@ -411,37 +613,10 @@ namespace AutoBattle
 
             Player = new PlayerData();
             Player.FillHp();
-            _battle.ResetSkillState();
 
             bool loaded = SaveSystem.Load(Player);
             _loadedFromSave = loaded;
-
-            Monster = null;
-            Player.shield = 0;
-            TotalKills = 0;
-            TotalDrops = 0;
-            TotalEquipped = 0;
-            TotalSold = 0;
-            TotalGoldEarned = 0;
-            TotalDeaths = 0;
-            EliteKills = 0;
-            BossKills = 0;
-            _pendingTier = MonsterTier.Normal;
-            IsRunning = false;
-            _runStarted = false;
-            CloseAllPanels();
-            CurrentState = State.WaitingRespawn;
-            _respawnTimer = 0f;
-            _reviveTimer = 0f;
-            _autoSaveTimer = 0f;
-            _potionCooldownTimer = 0f;
-            _shopTimer = 0f;
-
-            Log.Clear();
-            LogVersion++;
-            BannerTitle = string.Empty;
-            BannerSubtitle = string.Empty;
-            BannerTimeLeft = 0f;
+            ResetSessionState();
 
             if (loaded)
             {
@@ -466,21 +641,8 @@ namespace AutoBattle
                 // 删的是当前槽：直接按新档重开，避免界面停在旧数据上。
                 Player = new PlayerData();
                 Player.FillHp();
-                _battle.ResetSkillState();
                 _loadedFromSave = false;
-                Monster = null;
-                Player.shield = 0;
-                _pendingTier = MonsterTier.Normal;
-                IsRunning = false;
-                _runStarted = false;
-                CurrentState = State.WaitingRespawn;
-                _respawnTimer = 0f;
-                _reviveTimer = 0f;
-                _autoSaveTimer = 0f;
-                _potionCooldownTimer = 0f;
-                _shopTimer = 0f;
-                Log.Clear();
-                LogVersion++;
+                ResetSessionState();
                 AddLog($"🗑 存档 {slot + 1} 已删除，该槽已重置为新游戏。", GameConfig.LogWarn);
             }
             else
@@ -496,8 +658,18 @@ namespace AutoBattle
 
             Player = new PlayerData();
             Player.FillHp();
-            _battle.ResetSkillState();
+            _loadedFromSave = false;
+            ResetSessionState();
+            AddLog("↺ 已重置，进度与存档已清空。", GameConfig.LogWarn);
+        }
 
+        /// <summary>
+        /// 把一局内的临时状态、统计、浮层和待选全部归零。
+        /// SwitchSlot / DeleteSlot / ResetGame 共用，避免漏清某一项（删档曾漏统计、待选和横幅）。
+        /// </summary>
+        private void ResetSessionState()
+        {
+            _battle.ResetSkillState();
             Monster = null;
             Player.shield = 0;
             TotalKills = 0;
@@ -509,9 +681,12 @@ namespace AutoBattle
             EliteKills = 0;
             BossKills = 0;
             _pendingTier = MonsterTier.Normal;
+            _finalBossAttempt = 0;
+            _justClearedStage = false;
             IsRunning = false;
             _runStarted = false;
             CloseAllPanels();
+            ClearPendingDrops();
             CurrentState = State.WaitingRespawn;
             _respawnTimer = 0f;
             _reviveTimer = 0f;
@@ -520,11 +695,9 @@ namespace AutoBattle
             _shopTimer = 0f;
 
             Log.Clear();
-            LogVersion++;
             BannerTitle = string.Empty;
             BannerSubtitle = string.Empty;
             BannerTimeLeft = 0f;
-            AddLog("↺ 已重置，进度与存档已清空。", GameConfig.LogWarn);
         }
 
         // ==================== 技能装配 ====================
@@ -537,6 +710,9 @@ namespace AutoBattle
 
         /// <summary>装备强化面板是否展开（UI 用）。同样冻结战斗，避免边打边强化。</summary>
         public bool EnhancePanelOpen { get; set; }
+
+        /// <summary>装备洗练面板是否展开（UI 用）。与强化面板一样冻结战斗。</summary>
+        public bool ReforgePanelOpen { get; set; }
 
         /// <summary>某个主动槽的剩余冷却秒数（UI 进度条用）。</summary>
         public float SkillCooldown(int slot) => _battle.GetActiveCooldown(slot);
@@ -661,10 +837,13 @@ namespace AutoBattle
             _skillChoices.Clear();
 
             // 还有待选次数就接着抽下一组。
+            // 抽不到候选（技能池已全拥有）时 OpenSkillChoice 只清待选、不改状态，
+            // 此时若直接 return 会把状态永久留在 SkillChoice 且候选为空（UI 空面板 + 战斗冻结），
+            // 所以只有真的进了 SkillChoice 才返回，否则落到下面回 WaitingRespawn。
             if (Player.pendingSkillPicks > 0)
             {
                 OpenSkillChoice();
-                return;
+                if (CurrentState == State.SkillChoice) return;
             }
 
             // 选完回到「等待重生」，让循环继续。
@@ -695,6 +874,9 @@ namespace AutoBattle
 
         /// <summary>商店剩余开放秒数；未开放时为 0。</summary>
         public float ShopTimeLeft => IsShopOpen ? Mathf.Max(0f, _shopTimer) : 0f;
+
+        /// <summary>下一只怪物的刷新倒计时（秒）；空场等待时界面要显示这个，否则血条一片空白像卡住。</summary>
+        public float RespawnCountdown => Mathf.Max(0f, _respawnTimer);
 
         /// <summary>自动购买开关。setter 会写进 Player.autoBuyPotion（存档字段）并记一条日志。</summary>
         public bool AutoBuyPotion
@@ -808,22 +990,12 @@ namespace AutoBattle
 
         private void TickFighting(float dt)
         {
-            // 战斗系统（BattleSystem）是直接 Log.Add 的，不经过 AddLog，所以要在这里补记累计条数：
-            // 飘字/实时 DPS 的解析游标（GameUI.Core.cs 的 _lastParsedLogTotal）与日志面板刷新
-            // （GameUI.Core.cs 的 LogVersion 比较）都依赖这两个计数器，漏记会导致它们永远不动。
-            int logCountBefore = Log.Count;
+            // 累计条数与版本号由 BattleLog 的写入实现自己推进，这里不需要再补记
+            // （以前靠「前后 Count 差值」补记，满上限后差值恒为 0 会静默漏记）。
             BattleTickResult result = _battle.Tick(Player, Monster, dt, Log);
-            int appended = Log.Count - logCountBefore;
-            if (appended > 0)
-            {
-                TotalLogEntries += appended;
-                LogVersion++;
-            }
 
             if (result == BattleTickResult.MonsterKilled) HandleMonsterKilled();
             else if (result == BattleTickResult.PlayerDied) HandlePlayerDied();
-
-            TrimLog();
         }
 
         /// <summary>
@@ -869,15 +1041,24 @@ namespace AutoBattle
 
             // 类型权重也按关卡怪级抽，而不是主角等级：难度既然由关卡钉住，
             // 类型也该跟着关卡走，否则主角练高之后回头刷第 1 章会刷出终局档位的怪。
-            MonsterType type = MonsterData.RollType(monsterLevel);
             MonsterTier tier = _pendingTier;
             _pendingTier = MonsterTier.Normal;
+
+            // 终局 BOSS 的类型按挑战次数轮换（近战 → 远程 → 暴击怪），不再掷骰：
+            // 同样面板下盗贼 BOSS 的胜率只有远程的一半，"这把抽到谁"不该决定成败。
+            // 其它怪仍然按关卡怪级的权重随机。
+            MonsterType type = tier == MonsterTier.Boss && IsFinalStage
+                ? (MonsterType)(_finalBossAttempt++ % 3)
+                : MonsterData.RollType(monsterLevel);
 
             // Boss 不带词缀：Boss 面板本身已经很高，再叠词缀会让胜率失控。
             MonsterAffix affix = tier == MonsterTier.Boss ? MonsterAffix.None : MonsterData.RollAffix();
 
-            // 关底战前回满血：主角是连续作战走到这里的，不补给的话这场基本必输。
-            if (tier != MonsterTier.Normal)
+            // 关底 Boss 战前回满血：主角是连续作战走到这里的，不补给的话这场基本必输。
+            // 精英默认不回（HealBeforeFight=false）：让「刷小怪 → 打精英」成为一条连续的消耗链，
+            // 手一抖就真的会死在这里，而不是每一关都从头满血开始。
+            bool healFirst = tier == MonsterTier.Boss || GameConfig.HealBeforeFight;
+            if (healFirst)
             {
                 Player.FillHp();
                 AddLog("♥ 决战前已恢复全部生命", GameConfig.LogHeal);
@@ -1001,64 +1182,109 @@ namespace AutoBattle
         }
 
         /// <summary>
-        /// 关卡推进与结算：通关判定、首通金币、章节解锁横幅、关底预告。
-        /// 拆出来是因为这一段有 50 多行且与「击杀后该干什么」的其它环节无关。
+        /// 关卡推进的入口：先把「打满了」和「还差一只」分开，
+        /// 具体结算与预告各自放在下面的小方法里。
         /// </summary>
         private void ResolveStageProgress()
         {
             if (Player.IsStageCleared)
             {
-                _justClearedStage = true;
-                int clearedChapter = Player.chapterIndex;
-                int clearedStage = Player.stageIndex;
-                bool chapterFinal = StageCatalog.IsChapterFinal(clearedStage);
-
-                // 先记账再推进：AdvanceStage 会改 chapterIndex，之后就认不出刚打完哪一关了。
-                bool firstClear = Player.MarkStageFirstCleared(clearedChapter, clearedStage);
-                int prevMaxChapter = Player.maxChapterUnlocked;
-
-                bool advanced = Player.AdvanceStage();
-
-                AddLog(
-                    advanced
-                        ? $"★ 通关 {clearedChapter}-{clearedStage}！进入 {Player.CurrentStage.Title}（怪物 Lv.{Player.CurrentStage.monsterLevel}）"
-                        : $"★ 通关 {clearedChapter}-{clearedStage}！已经是最后一关",
-                    GameConfig.LogGold);
-
-                // 首通金币 + 章节解锁合成一条横幅。
-                // 拆成两条时后者会把前者顶掉，玩家看不到自己拿了多少金币。
-                int clearGold = firstClear ? GrantFirstClearReward(clearedChapter, clearedStage) : 0;
-                bool unlocked = Player.maxChapterUnlocked > prevMaxChapter;
-                int newMax = Player.maxChapterUnlocked;
-
-                if (unlocked) AddLog($"✦ 新章节解锁：第 {newMax} 章", GameConfig.LogUnlock);
-
-                if (firstClear || unlocked)
-                {
-                    string title = chapterFinal
-                        ? $"★ 第 {clearedChapter} 章 通关！"
-                        : $"★ 首通 {clearedChapter}-{clearedStage}";
-                    if (!firstClear) title = $"✦ 第 {newMax} 章 已解锁";
-
-                    string sub = firstClear ? $"+{clearGold} 金币" : "";
-                    if (unlocked)
-                    {
-                        string unlockText = $"第 {newMax} 章已解锁（怪物 Lv.{GameConfig.ChapterMonsterLevelStep * (newMax - 1) + 1}~{GameConfig.ChapterMonsterLevelStep * newMax}）";
-                        sub = string.IsNullOrEmpty(sub) ? unlockText : sub + " · " + unlockText;
-                    }
-                    ShowBanner(title, sub);
-                }
-
-                if (unlocked) SaveSystem.Save(Player);
+                ResolveStageClear();
+                return;
             }
-            else if (Player.StageKillsLeft == 1)
+
+            AnnounceStageBossIfNext();
+        }
+
+        /// <summary>
+        /// 通关结算：首通金币、章节解锁、横幅与日志。
+        /// 终局（11-10）已经首通过时，只有「刚好又打满一轮」才结算；
+        /// 之后继续杀的那几只只把计数清零继续刷，不再重复等待 StageClearDelay。
+        /// </summary>
+        private void ResolveStageClear()
+        {
+            if (SuppressFinalStageFarmKill()) return;
+
+            _justClearedStage = true;
+            int clearedChapter = Player.chapterIndex;
+            int clearedStage = Player.stageIndex;
+            bool chapterFinal = StageCatalog.IsChapterFinal(clearedStage);
+
+            // 先记账再推进：AdvanceStage 会改 chapterIndex，之后就认不出刚打完哪一关了。
+            bool firstClear = Player.MarkStageFirstCleared(clearedChapter, clearedStage);
+            int prevMaxChapter = Player.maxChapterUnlocked;
+
+            bool advanced = Player.AdvanceStage();
+
+            // 终局没有下一关：把本关计数清零，继续刷同一关，不再触发通关结算。
+            if (!advanced) Player.stageKillCount = 0;
+
+            AddLog(
+                advanced
+                    ? $"★ 通关 {clearedChapter}-{clearedStage}！进入 {Player.CurrentStage.Title}（怪物 Lv.{Player.CurrentStage.monsterLevel}）"
+                    : $"★ 通关 {clearedChapter}-{clearedStage}！已经是最后一关",
+                GameConfig.LogGold);
+
+            // 首通金币 + 章节解锁合成一条横幅。
+            // 拆成两条时后者会把前者顶掉，玩家看不到自己拿了多少金币。
+            int clearGold = firstClear ? GrantFirstClearReward(clearedChapter, clearedStage) : 0;
+            bool unlocked = Player.maxChapterUnlocked > prevMaxChapter;
+            int newMax = Player.maxChapterUnlocked;
+
+            if (unlocked) AddLog($"✦ 新章节解锁：第 {newMax} 章", GameConfig.LogUnlock);
+
+            if (firstClear || unlocked)
             {
-                // 下一只就是关底：先开商店，再生成（SpawnMonster 会拦下这次生成）。
-                _pendingTier = Player.StageClearTier;
-                string tierName = _pendingTier == MonsterTier.Boss ? "BOSS" : "精英怪";
-                AddLog($"▼ 本关还剩 1 只（关底 {tierName}），击杀后通关",
-                    GameConfig.LogSystem);
+                ShowClearBanner(clearedChapter, clearedStage, chapterFinal, firstClear, clearGold, unlocked, newMax);
             }
+
+            if (unlocked) SaveSystem.Save(Player);
+        }
+
+        /// <summary>
+        /// 终局已首通后的重复挑战：打满一轮就把击杀数清零继续刷，
+        /// 不再进入通关结算（否则每杀一只都会多等一次 StageClearDelay 并刷通关日志）。
+        /// 返回 true 表示本次击杀已被吞掉。
+        /// </summary>
+        private bool SuppressFinalStageFarmKill()
+        {
+            if (!IsFinalStage) return false;
+
+            // 老存档可能存在「打满了但还没记首通」的终局进度：先让它正常结算一次，
+            // 否则清零后永远卡在 0，首通奖励再也发不出来。
+            if (!Player.IsStageFirstCleared(Player.chapterIndex, Player.stageIndex)) return false;
+
+            if (Player.stageKillCount < Player.CurrentStage.killTarget) return false;
+            Player.stageKillCount = 0;
+            return true;
+        }
+
+        /// <summary>通关横幅：首通奖励与章节解锁合成一条，避免后一条把前一条顶掉。</summary>
+        private void ShowClearBanner(int clearedChapter, int clearedStage, bool chapterFinal,
+            bool firstClear, int clearGold, bool unlocked, int newMax)
+        {
+            string title = chapterFinal
+                ? $"★ 第 {clearedChapter} 章 通关！"
+                : $"★ 首通 {clearedChapter}-{clearedStage}";
+            if (!firstClear) title = $"✦ 第 {newMax} 章 已解锁";
+
+            string sub = firstClear ? $"+{clearGold} 金币" : "";
+            if (unlocked)
+            {
+                string unlockText = $"第 {newMax} 章已解锁（怪物 Lv.{GameConfig.ChapterMonsterLevelStep * (newMax - 1) + 1}~{GameConfig.ChapterMonsterLevelStep * newMax}）";
+                sub = string.IsNullOrEmpty(sub) ? unlockText : sub + " · " + unlockText;
+            }
+            ShowBanner(title, sub);
+        }
+
+        /// <summary>还差一只时提前揭示关底档次：先开商店，再生成（SpawnMonster 会拦下这次生成）。</summary>
+        private void AnnounceStageBossIfNext()
+        {
+            if (Player.StageKillsLeft != 1) return;
+
+            _pendingTier = Player.StageClearTier;
+            string tierName = _pendingTier == MonsterTier.Boss ? "BOSS" : "精英怪";
+            AddLog($"▼ 本关还剩 1 只（关底 {tierName}），击杀后通关", GameConfig.LogSystem);
         }
 
         /// <summary>
@@ -1154,12 +1380,19 @@ namespace AutoBattle
                 if (!string.IsNullOrEmpty(dropped.AffixLine)) dropLine += "\n    " + dropped.AffixLine;
                 AddLog(dropLine, dropped.QualityColor);
 
-                bool equipped = TryAutoEquip(dropped);
+                bool equipped = TryAutoEquip(dropped, out bool pending);
                 if (equipped)
                 {
                     TotalEquipped++;
                     AddLog($"  ↑ 评分更高，已自动穿戴（评分 {EquipmentScore.Of(Player, dropped, dropped.slot):0}）", GameConfig.LogSuccess);
                     Debug.Log($"[AutoBattle] 自动穿戴 {dropped.Title} {dropped.StatLine}");
+                }
+                else if (pending)
+                {
+                    // 进入待选不等于「不要了」：钱一分没进，装备留在托盘里等玩家比较。
+                    // 之所以不当场卖，是锁/手动模式的意思就是「我要自己看」。
+                    AddLog($"  ◈ 已放入{Player.GetEquipment(dropped.slot)?.SlotName ?? dropped.SlotName}待选（分数更高，等待对比）",
+                        GameConfig.LogInfo);
                 }
                 else
                 {
@@ -1193,24 +1426,64 @@ namespace AutoBattle
             _respawnTimer = respawnDelay;
         }
 
-        /// <summary>要求 14：掉落装备与当前同槽位装备比较评分，更强则自动穿戴。</summary>
-        private bool TryAutoEquip(Equipment dropped)
+        /// <summary>
+        /// 要求 14：掉落装备与当前同槽位装备比较评分，更强则自动穿戴。
+        /// 2026-10-18 扩展：当前装备被锁，或设置里关掉「自动换装」时，更强的掉落不再直接穿，
+        /// 而是放进 / 保留在待选托盘（<paramref name="pending"/> 为 true），等玩家在对比面板决定。
+        /// 待选里已有更好的同槽装备时，新掉落的差件照旧卖掉，避免托盘被反复刷新。
+        /// </summary>
+        private bool TryAutoEquip(Equipment dropped, out bool pending)
         {
+            pending = false;
             if (dropped == null) return false;
 
             Equipment current = Player.GetEquipment(dropped.slot);
-            if (current != null &&
-                EquipmentScore.Of(Player, dropped, dropped.slot) <= EquipmentScore.Of(Player, current, current.slot)) return false;
+            bool hold = current != null && (current.locked || !GameSettings.AutoEquip);
+            float droppedScore = EquipmentScore.Of(Player, dropped, dropped.slot);
 
+            if (hold)
+            {
+                // 锁住当前装备只挡「自动替换」，不意味着什么垃圾都要留在托盘里。
+                // 比身上还差的掉落照旧直接卖店，否则待选角标会一直亮着，
+                // 对比面板里躺的全是不该看的低分件。
+                if (droppedScore <= EquipmentScore.Of(Player, current, current.slot)) return false;
+
+                Equipment queued = _pendingDrops[(int)dropped.slot];
+                if (queued != null && droppedScore <= EquipmentScore.Of(Player, queued, queued.slot)) return false;
+
+                _pendingDrops[(int)dropped.slot] = dropped;
+                pending = true;
+                if (queued != null)
+                {
+                    // 旧的待选件被顶掉时不能凭空蒸发：按普通卖店价折现，日志里交代清楚。
+                    int gold = GameConfig.SellPrice(queued.level, queued.quality);
+                    Player.gold += gold;
+                    TotalSold++;
+                    TotalGoldEarned += gold;
+                    AddLog($"  ↻ 待选更新（旧待选评分 {EquipmentScore.Of(Player, queued, queued.slot):0} → {droppedScore:0}，旧件折价 +{gold}）",
+                        GameConfig.LogInfo);
+                }
+                return false;
+            }
+
+            if (current != null && droppedScore <= EquipmentScore.Of(Player, current, current.slot)) return false;
+
+            WearEquipment(dropped);
+            return true;
+        }
+
+        /// <summary>
+        /// 穿上装备并把生命上限的增量补给血量：
+        /// 衣服换强时上限会涨，不补这一截会出现「换了更好的衣服，血量占比反而掉了」。
+        /// </summary>
+        private void WearEquipment(Equipment e)
+        {
             int oldMaxHp = Player.MaxHp;
-            Player.SetEquipment(dropped);
+            Player.SetEquipment(e);
 
-            // 生命上限可能因衣服变更而提高，同步补足增量，避免穿装备反而「掉血」。
             int delta = Player.MaxHp - oldMaxHp;
             if (delta > 0) Player.currentHp = Mathf.Min(Player.MaxHp, Player.currentHp + delta);
             else Player.currentHp = Mathf.Min(Player.currentHp, Player.MaxHp);
-
-            return true;
         }
 
         /// <summary>
@@ -1221,24 +1494,10 @@ namespace AutoBattle
         {
             TotalDeaths++;
 
-            // 阵亡经验：按打掉的血量占比折算（见下面 partialExp 的说明）。
-            // 必须在 Monster = null 之前取，之后就拿不到这只怪的数据了。
-            int partialExp = 0;
-            int dealtHp = 0;
-            int monsterMaxHp = 0;
-            if (Monster != null && Monster.maxHp > 0)
-            {
-                dealtHp = Mathf.Clamp(Monster.maxHp - Monster.currentHp, 0, Monster.maxHp);
-                monsterMaxHp = Monster.maxHp;
-                if (dealtHp > 0)
-                {
-                    int full = GameConfig.MonsterExpReward(Monster.level, Monster.type, Monster.tier);
-                    partialExp = Mathf.RoundToInt(full * (float)dealtHp / Monster.maxHp);
-                }
-            }
-
+            // 阵亡不给经验（2026-10-18）：以前按打掉的血量返经验，结果「送死」成了
+            // 升级最快的打法，终局那堵墙变成「死够次数自动过」。现在的循环回到设计意图：
+            // 打小怪 → 打精英/Boss → 打不过 → 回本关刷小怪吃经验 → 再来。
             // 关卡制（步骤 4a）：阵亡 = 本关白打，击杀数归零、关底退回去重来。
-            // 这就是关卡制下的「关卡墙」——打不过就卡在这一关反复重试，直到属性/装备跟上。
             _pendingTier = MonsterTier.Normal;
             if (Player.stageKillCount > 0)
             {
@@ -1256,15 +1515,8 @@ namespace AutoBattle
             CurrentState = State.Reviving;
             _reviveTimer = GameConfig.PlayerReviveDelay;
 
-            // 阵亡不再是一无所获：按已打掉的血量占比给经验，最多拿到该怪全额。
-            // 全额给经验会让「送死刷经验」成为最优解；一点不给则会把「打不过」变成永久死锁
-            // （打不过 → 没经验 → 属性不涨 → 还是打不过）。按占比折算两头都堵上，
-            // 也顺带把终局那堵墙变成「多磨几次能过去」。
-            if (partialExp > 0)
-            {
-                AddLog($"✖ 未击杀，但打掉了 {dealtHp}/{monsterMaxHp} 血量，获得 {partialExp} 经验", GameConfig.LogInfo);
-                ResolveLevelUp(partialExp);
-            }
+            // 复活后刷的是本关的普通怪（_pendingTier 已复位），玩家要先把本关小怪刷过去，
+            // 才能再见到关底——经验也正是从这些小怪身上来的。
         }
 
         /// <summary>自动复活：回满生命并立刻投入下一场战斗。</summary>
@@ -1279,24 +1531,11 @@ namespace AutoBattle
 
         // ==================== 辅助 ====================
 
-        /// <summary>追加一条战斗日志，并裁剪到上限（要求 15）。</summary>
-        public void AddLog(string message, Color color)
-        {
-            Log.Add(new LogEntry(message, color));
-            TotalLogEntries++;
-            TrimLog();
-            LogVersion++;
-        }
-
-        private void TrimLog()
-        {
-            int overflow = Log.Count - GameConfig.MaxLogEntries;
-            if (overflow > 0)
-            {
-                Log.RemoveRange(0, overflow);
-                LogVersion++;
-            }
-        }
+        /// <summary>
+        /// 追加一条「系统/进度/商店」日志（裁剪到上限、累计条数都由 BattleLog 负责，要求 15）。
+        /// 战斗过程行不走这里：BattleSystem 直接用 <see cref="BattleLog.AddCombat"/>，免得两类日志混在一起没法过滤。
+        /// </summary>
+        public void AddLog(string message, Color color) => Log.AddSystem(message, color);
 
         /// <summary>定时自动存档（要求 17）。用真实时间，暂停时也会存。</summary>
         private void AutoSaveTick(float realDt)

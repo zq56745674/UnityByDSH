@@ -291,8 +291,10 @@ namespace AutoBattle
             // v4 才有的巅峰与技能字段。技能槽的字段初值是 -1，旧档缺失时自然为空。
             player.paragonLevel = Mathf.Clamp(data.paragonLevel, 0, GameConfig.MaxParagonLevel);
             player.paragonExp = Mathf.Max(0, data.paragonExp);
-            player.ownedSkillMask = data.ownedSkillMask;
-            player.pendingSkillPicks = data.pendingSkillPicks;
+            // 技能位掩码只保留真实存在的技能位；越界 bit 会让「已获得技能数」虚高。
+            int allSkillMask = (1 << SkillCatalog.All.Length) - 1;
+            player.ownedSkillMask = data.ownedSkillMask & allSkillMask;
+            player.pendingSkillPicks = Mathf.Max(0, data.pendingSkillPicks);
 
             // v5 才有的关卡进度。旧档缺这些字段时 JsonUtility 会给 0，
             // 所以不能只看值，必须按版本号决定是「迁移成 1-1」还是「读档」。
@@ -302,6 +304,8 @@ namespace AutoBattle
             player.stageIndex = hasStage
                 ? Mathf.Clamp(data.stageIndex, 1, GameConfig.StagesPerChapter) : 1;
             player.stageKillCount = hasStage ? Mathf.Max(0, data.stageKillCount) : 0;
+            // 手改档可能把击杀数写得比目标大很多：进游戏后第一次结算就会多算首通/卡关。
+            player.stageKillCount = Mathf.Clamp(player.stageKillCount, 0, player.CurrentStage.killTarget);
             player.maxChapterUnlocked = hasStage
                 ? Mathf.Clamp(data.maxChapterUnlocked, 1, GameConfig.ChapterCount) : 1;
             // 一致性兜底：字段缺失（0）或手改档都可能得到「当前章 > 已解锁章」。
@@ -314,7 +318,18 @@ namespace AutoBattle
             player.clearedStages = new List<int>();
             if (data.version >= 6 && data.clearedStages != null)
             {
-                player.clearedStages.AddRange(data.clearedStages);
+                // 只收合法且不重复的关卡：重复项会让首通统计虚高，越界项会污染选关/进度判断。
+                var seenStages = new HashSet<int>();
+                int maxCleared = Mathf.Max(1, GameConfig.ChapterCount * GameConfig.StagesPerChapter);
+                for (int i = 0; i < data.clearedStages.Count && player.clearedStages.Count < maxCleared; i++)
+                {
+                    int key = data.clearedStages[i];
+                    int c = PlayerData.ChapterOfKey(key);
+                    int s = PlayerData.StageOfKey(key);
+                    if (key <= 0 || c < 1 || c > GameConfig.ChapterCount
+                        || s < 1 || s > GameConfig.StagesPerChapter) continue;
+                    if (seenStages.Add(key)) player.clearedStages.Add(key);
+                }
             }
             else
             {
@@ -336,6 +351,7 @@ namespace AutoBattle
             player.skillPassive1 = data.skillPassive1;
             player.skillTrigger0 = data.skillTrigger0;
             player.skillTrigger1 = data.skillTrigger1;
+            SanitizeSkillState(player);
 
             player.weapon = data.weapon;
             player.armor = data.armor;
@@ -344,27 +360,88 @@ namespace AutoBattle
             // 注意 JsonUtility 对 JSON 里缺失的字段会保留 C# 字段初值（qualityMultiplier 初值是 1），
             // 所以「值为 0/1」判断不出缺失，必须用存档版本号来决定是否迁移。
             bool legacy = data.version < EquipmentFieldVersion;
-            FixupEquipment(player.weapon, legacy);
-            FixupEquipment(player.armor, legacy);
+            FixupEquipment(player.weapon, EquipmentSlot.Weapon, legacy);
+            FixupEquipment(player.armor, EquipmentSlot.Armor, legacy);
 
             // 生命必须夹在当前等级的真实上限内（装备变动后上限会变）。
-            player.currentHp = Mathf.Clamp(data.currentHp, 1, player.MaxHp);
+            player.currentHp = Mathf.Clamp(data.currentHp, 1, Mathf.Max(1, player.MaxHp));
 
             return true;
         }
 
         /// <summary>
-        /// 旧存档兼容：补齐「装备生成时还不存在」的字段。
-        /// legacy 为 true 时（version &lt; 2）用装备自身属性反推当时的品质倍率。
-        /// 注：早期版本还在这里给旧武器补过「主属性暴击」，但武器主词条现在只剩攻击，
-        /// 那段迁移已随 WeaponBaseCritChance 等常量一并移除。
+        /// 技能状态兜底：清掉越界 / 类别不符 / 未拥有 / 重复装配的技能槽，
+        /// 并把待选次数夹到「还没获得的技能数」以内。
         /// </summary>
-        private static void FixupEquipment(Equipment e, bool legacy)
+        private static void SanitizeSkillState(PlayerData player)
+        {
+            int allMask = (1 << SkillCatalog.All.Length) - 1;
+            player.ownedSkillMask &= allMask;
+
+            int perKind = Mathf.Max(1, GameConfig.SkillSlotsPerKind);
+            var used = new bool[SkillCatalog.All.Length];
+            for (int i = 0; i < 6; i++)
+            {
+                int id = player.GetSkillSlot(i);
+                if (id < 0 || id >= SkillCatalog.All.Length)
+                {
+                    player.SetSkillSlot(i, -1);
+                    continue;
+                }
+
+                SkillKind expected = (SkillKind)Mathf.Clamp(i / perKind, 0, 2);
+                bool owned = (player.ownedSkillMask & (1 << id)) != 0;
+                if (SkillCatalog.All[id].kind != expected || !owned || used[id])
+                {
+                    player.SetSkillSlot(i, -1);
+                    continue;
+                }
+                used[id] = true;
+            }
+
+            int ownedCount = 0;
+            for (int i = 0; i < SkillCatalog.All.Length; i++)
+                if ((player.ownedSkillMask & (1 << i)) != 0) ownedCount++;
+            player.pendingSkillPicks = Mathf.Clamp(
+                player.pendingSkillPicks, 0, Mathf.Max(0, SkillCatalog.All.Length - ownedCount));
+        }
+
+        /// <summary>
+        /// 旧存档兼容与坏档兜底：补齐旧字段，并把装备的品质 / 等级 / 强化 / 词条夹到合法范围。
+        /// slot 由调用方按武器/衣服给出——手改档把两件装备的 slot 写反时，评分与穿脱都会错位。
+        /// </summary>
+        private static void FixupEquipment(Equipment e, EquipmentSlot expectedSlot, bool legacy)
         {
             if (e == null) return;
 
+            e.slot = expectedSlot;
+            if ((int)e.quality < 0 || (int)e.quality >= GameConfig.QualityNames.Length)
+                e.quality = EquipmentQuality.Common;
+            e.level = Mathf.Clamp(e.level, 1, 9999);
+
             if (legacy) e.qualityMultiplier = EstimateMultiplier(e);
-            if (e.qualityMultiplier <= 0f) e.qualityMultiplier = 1f;
+            if (float.IsNaN(e.qualityMultiplier) || float.IsInfinity(e.qualityMultiplier) || e.qualityMultiplier <= 0f)
+                e.qualityMultiplier = 1f;
+            e.qualityMultiplier = Mathf.Clamp(e.qualityMultiplier, 0.01f, 1000f);
+
+            e.enhanceLevel = Mathf.Clamp(e.enhanceLevel, 0, Mathf.Max(0, GameConfig.EnhanceMaxLevel));
+            e.reforgeCount = Mathf.Max(0, e.reforgeCount);
+            e.attack = Mathf.Max(0, e.attack);
+            e.defense = Mathf.Max(0, e.defense);
+            e.hp = Mathf.Max(0, e.hp);
+            e.critChance = SanitizeStat(e.critChance);
+            e.critDamage = SanitizeStat(e.critDamage);
+            e.affixCritChance = SanitizeStat(e.affixCritChance);
+            e.affixCritDamage = SanitizeStat(e.affixCritDamage);
+            e.affixAttackSpeed = SanitizeStat(e.affixAttackSpeed);
+            e.affixAllStats = SanitizeStat(e.affixAllStats);
+            e.affixArmorPen = SanitizeStat(e.affixArmorPen);
+        }
+
+        private static float SanitizeStat(float value)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value)) return 0f;
+            return Mathf.Max(0f, value);
         }
 
         /// <summary>

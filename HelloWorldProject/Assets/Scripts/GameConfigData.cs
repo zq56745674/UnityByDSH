@@ -44,6 +44,7 @@ namespace AutoBattle
         public float MaxTierHpFactor = 3.0f;
         public float MaxTierAttackFactor = 3.0f;
         public float MaxTierDefenseFactor = 3.0f;
+        public float FinalBossStatFactor = 1.6f;
         public float MaxTierSpeedFactor = 2.0f;
         public float AffixChance = 0.30f;
         public float LifestealAffixPercent = 0.30f;
@@ -56,6 +57,12 @@ namespace AutoBattle
         public int EnhanceMaxLevel = 15;
         public int EnhanceBaseCost = 150;
         public int EnhanceCostPerLevel = 300;
+        public int ReforgeBaseCost = 200;
+        public int ReforgeCostPerLevel = 14;
+        public float ReforgeCostGrowth = 0.6f;
+
+        /// <summary>锁词条的单价倍率（见 GameConfig.ReforgeLockFactor）。</summary>
+        public float ReforgeLockFactor = 3f;
         public int WeaponBaseAttack = 5;
         public float WeaponAttackPerLevel = 2.0f;
         public float WeaponBaseCritChance = 0.01f;
@@ -76,6 +83,7 @@ namespace AutoBattle
         public float ScoreWeightAttackSpeed = 600f;
         public float ScoreWeightAllStats = 300f;
         public float ScoreWeightArmorPen = 800f;
+        public bool HealBeforeFight = false;
         public int PotionMaxCount = 5;
         public float PotionHealPercent = 0.30f;
         public int PotionPriceBase = 20;
@@ -89,6 +97,7 @@ namespace AutoBattle
         public int ParagonHpPerLevel = 50;
         public int ParagonExpBase = 2000;
         public int ParagonExpPerLevel = 200;
+        public float ParagonExpQuadratic = 20f;
         public int ParagonPassiveEvery = 10;
         public int SkillSlotsPerKind = 2;
         public int SkillChoiceCount = 3;
@@ -99,6 +108,9 @@ namespace AutoBattle
 
         // ---- 关卡 / 章节（步骤 4a）----
         public int ChapterCount = 11;
+        public float ChapterPressureBase = 1.0f;
+        public float ChapterPressurePerChapter = 0.04f;
+        public float ChapterBossPressurePerChapter = 0.03f;
         public int StagesPerChapter = 10;
         public int ChapterMonsterLevelStep = 10;
         public int StageKillTargetBase = 3;

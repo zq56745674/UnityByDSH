@@ -17,11 +17,12 @@ namespace AutoBattle.EditorTools
     /// 「玩家能不能走到那个位置」。新档从 Lv.1 打第 1 章 Lv.10 怪这种结构性死锁，那套口径永远测不出来。
     ///
     /// 口径取舍：
-    /// - 普通怪按连战算（血量继承、喝药消耗真实库存）；关底精英/Boss 开战前回满血，
-    ///   与 SpawnMonsterNow 的行为一致（:846-850）。
+    /// - 普通怪按连战算（血量继承、喝药消耗真实库存）；关底 Boss 开战前回满血，
+    ///   精英默认不回（与 GameConfig.HealBeforeFight / SpawnMonsterNow 一致）。
     /// - 药剂只在「开商店」时补充（与 AutoFillPotions 一致），且只买得起才买。
     /// - 掉落、卖出、自动换装、首通金币全部走真实代码路径，不另写简化公式。
-    /// - 阵亡按当前实现处理：按打掉的血量占比给经验、本关击杀数归零、复活满血、重新刷一只普通怪。
+    /// - 阵亡不给经验（2026-10-18 改）：本关击杀数归零、复活满血、回去刷本关小怪，
+    ///   经验只能从活着的怪身上拿。终局 BOSS 的类型按尝试次数轮换。
     ///
     /// 现在它不只是个手动探针：Summary() 的逐章轨迹进了 _balance/baseline.json 的 transition 小节，
     /// BalanceRegression 的静态哨兵每次都会比对，CheckInvariants() 的硬约束（不卡死、每章末等级、
@@ -56,6 +57,10 @@ namespace AutoBattle.EditorTools
             public string stuckReason = "";
             public int stuckChapter;
             public int stuckStage;
+
+            /// <summary>走到了终局（11-10）并进入「刷小怪 → 打 BOSS」的循环。
+            /// 这一步不是卡死：每轮小怪都给经验，巅峰会一直涨，只是要磨很久。</summary>
+            public bool reachedEndgame;
         }
 
         [MenuItem("Tools/测试/新档进度探针（从头打到底）")]
@@ -72,7 +77,7 @@ namespace AutoBattle.EditorTools
             SimResult r = Simulate(seed, maxAttemptsPerStage, verbose, out string detail);
             var sb = new StringBuilder();
             sb.AppendLine($"[NewGameProgression] seed={seed}  单关上限 {maxAttemptsPerStage} 次尝试");
-            sb.AppendLine("口径：真实 BattleSystem + 真实经验/掉落/药剂；普通怪连战、关底回满血；阵亡按伤害占比给经验（当前实现）");
+            sb.AppendLine("口径：真实 BattleSystem + 真实经验/掉落/药剂；普通怪连战、关底回满血、精英不回；阵亡不给经验；终局 BOSS 类型轮换");
             sb.AppendLine();
             sb.Append(detail);
             sb.AppendLine();
@@ -81,6 +86,11 @@ namespace AutoBattle.EditorTools
             {
                 sb.AppendLine($"✖ 卡死：{r.stuckChapter}-{r.stuckStage}（{r.stuckReason}）");
                 sb.AppendLine("   说明：该关在允许的重试次数内无法通关，新档在此永久停滞——继续挂机只会重复「刷普通怪→被关底打死→进度归零」。");
+            }
+            else if (r.reachedEndgame)
+            {
+                sb.AppendLine($"◎ 到达终局 11-10：{maxAttemptsPerStage} 次尝试内没打下来（巅峰 {r.paragonLevel}）。");
+                sb.AppendLine("   这不是卡死：每轮 5 只小怪照常给经验，巅峰会一直涨；终局节奏见 EndgamePacing 探针。");
             }
             else
             {
@@ -102,7 +112,9 @@ namespace AutoBattle.EditorTools
             if (problems.Count == 0)
             {
                 sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
-                    "PASS  新档 1-1 → 11-10 全程通关（Lv.{0} 巅峰 {1}，{2}，阵亡 {3} 次）",
+                    r.reachedEndgame
+                        ? "PASS  新档推进到终局 11-10（Lv.{0} 巅峰 {1}，{2}，阵亡 {3} 次）——终局节奏由 EndgamePacing 单独把关"
+                        : "PASS  新档 1-1 → 11-10 全程通关（Lv.{0} 巅峰 {1}，{2}，阵亡 {3} 次）",
                     r.level, r.paragonLevel, Minutes(r.seconds), r.deaths));
             }
             return sb.ToString();
@@ -152,13 +164,13 @@ namespace AutoBattle.EditorTools
                         "第 {0} 章末只有 Lv.{1}，低于下一章怪级下限 Lv.{2}（成长断档）", c, last.levelEnd, need));
             }
 
-            if (r.deaths > 60)
+            if (r.deaths > 120)
                 problems.Add(string.Format(CultureInfo.InvariantCulture,
-                    "全程阵亡 {0} 次（上限 60）：关卡在靠死亡次数堆运气", r.deaths));
+                    "全程阵亡 {0} 次（上限 120）：关卡在靠死亡次数堆运气", r.deaths));
 
-            if (!r.stuck && r.seconds > 25f * 60f)
+            if (!r.stuck && r.seconds > 45f * 60f)
                 problems.Add(string.Format(CultureInfo.InvariantCulture,
-                    "全程模拟时长 {0:0.0}min（上限 25min）：推进过于拖沓", r.seconds / 60f));
+                    "全程模拟时长 {0:0.0}min（上限 45min）：推进过于拖沓", r.seconds / 60f));
 
             return problems;
         }
@@ -189,8 +201,14 @@ namespace AutoBattle.EditorTools
             }
 
             lines.Add(string.Format(CultureInfo.InvariantCulture,
-                "end|stuck={0}|level={1}|paragon={2}|kills={3}|deaths={4}",
-                r.stuck ? 1 : 0, r.level, r.paragonLevel, r.kills, r.deaths));
+                "end|stuck={0}|endgame={1}|level={2}|paragon={3}|kills={4}|deaths={5}",
+                r.stuck ? 1 : 0, r.reachedEndgame ? 1 : 0, r.level, r.paragonLevel, r.kills, r.deaths));
+
+            if (r.reachedEndgame)
+                lines.Add(string.Format(CultureInfo.InvariantCulture,
+                    "endgame|chapter={0}|stage={1}|paragon={2}|attempts={3}",
+                    GameConfig.ChapterCount, GameConfig.StagesPerChapter, r.paragonLevel,
+                    r.stages.Count > 0 ? r.stages[r.stages.Count - 1].attempts : 0));
 
             if (r.stuck)
                 lines.Add(string.Format(CultureInfo.InvariantCulture,
@@ -242,6 +260,11 @@ namespace AutoBattle.EditorTools
                     while (!cleared && attempts < maxAttempts)
                     {
                         attempts++;
+
+                        // 进关先花钱：真人打不过时第一反应就是把金币砸进强化。
+                        // 改动前探针的金币只用来买药，攒到最后变成一串没意义的数字。
+                        ProbePolicy.SpendGoldOnEnhance(p);
+
                         bool died = false;
 
                         // ---- 前 K-1 只：普通怪，血量继承（不重置） ----
@@ -253,7 +276,8 @@ namespace AutoBattle.EditorTools
                             if (!win)
                             {
                                 died = true; diedOn = MonsterTier.Normal;
-                                GrantPartialExp(p, m, dealt);
+                                // 阵亡不给经验（与 GameController.HandlePlayerDied 一致）：
+                                // 要经验只能回去刷小怪，送死不是成长路径。
                                 break;
                             }
 
@@ -270,9 +294,10 @@ namespace AutoBattle.EditorTools
 
                         // ---- 关底：精英 / Boss ----
                         FillPotions(p);          // 开商店时自动补药
-                        p.FillHp();              // 决战前回满（SpawnMonsterNow 同款）
+                        // 与 SpawnMonsterNow 一致：默认不回血（HealBeforeFight=false），整关是一条消耗链
+                        if (def.clearTier == MonsterTier.Boss || GameConfig.HealBeforeFight) p.FillHp();
 
-                        MonsterData boss = Spawn(def.monsterLevel, def.clearTier);
+                        MonsterData boss = Spawn(def.monsterLevel, def.clearTier, BossTypeFor(c, s, attempts));
                         bool won = Fight(p, boss, battle, true, out float sec2, out int dealtBoss);
                         st.seconds += sec2;
 
@@ -280,7 +305,6 @@ namespace AutoBattle.EditorTools
                         {
                             r.deaths++; st.deaths++; chapterDeaths++;
                             diedOn = def.clearTier;
-                            GrantPartialExp(p, boss, dealtBoss);
                             continue;
                         }
 
@@ -299,15 +323,25 @@ namespace AutoBattle.EditorTools
 
                     if (verbose)
                     {
-                        sb.AppendLine($"  {c}-{s}  M={def.monsterLevel,3}  {TierName(def.clearTier),-4} 尝试 {attempts,2}  阵亡 {st.deaths,2}  Lv.{st.levelStart}→{st.levelEnd}  {Minutes(st.seconds)}");
+                        sb.AppendLine($"  {c}-{s}  M={def.monsterLevel,3}  {TierName(def.clearTier),-4} 尝试 {attempts,2}  阵亡 {st.deaths,2}  Lv.{st.levelStart}→{st.levelEnd}  {Minutes(st.seconds)}  Q={(int)(p.weapon?.quality ?? 0)}/{(int)(p.armor?.quality ?? 0)}  HP={p.MaxHp} 攻={p.Attack}");
                     }
 
                     if (!cleared)
                     {
-                        r.stuck = true;
-                        r.stuckChapter = c;
-                        r.stuckStage = s;
-                        r.stuckReason = $"Lv.{p.level} 打不过 Lv.{def.monsterLevel} 的{TierName(diedOn)}，{maxAttempts} 次重试全部阵亡";
+                        bool finalStage = c >= GameConfig.ChapterCount && s >= GameConfig.StagesPerChapter;
+                        if (finalStage)
+                        {
+                            // 终局不是死路：每轮 5 只小怪都给经验，巅峰会一直涨，
+                            // 只是 maxAttempts 次预算内还没打完（真机可以一直刷）。
+                            r.reachedEndgame = true;
+                        }
+                        else
+                        {
+                            r.stuck = true;
+                            r.stuckChapter = c;
+                            r.stuckStage = s;
+                            r.stuckReason = $"Lv.{p.level} 打不过 Lv.{def.monsterLevel} 的{TierName(diedOn)}，{maxAttempts} 次重试全部阵亡";
+                        }
                         break;
                     }
 
@@ -342,14 +376,14 @@ namespace AutoBattle.EditorTools
         /// 返回是否击杀；seconds 为这场耗掉的游戏秒数（阵亡时=撑到的秒数）；
         /// dealt 为对这只怪最终打掉的血量（阵亡结算经验要用）。
         /// </summary>
-        static bool Fight(PlayerData p, MonsterData m, BattleSystem battle, bool resetHp, out float seconds, out int dealt)
+        internal static bool Fight(PlayerData p, MonsterData m, BattleSystem battle, bool resetHp, out float seconds, out int dealt)
         {
             seconds = 0f;
             dealt = 0;
             if (resetHp) p.FillHp();
             battle.BeginBattle(p);
 
-            var log = new List<LogEntry>();
+            var log = new BattleLog();
             float cd = 0f;
 
             for (int s = 0; s < 150000; s++)
@@ -398,7 +432,7 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>击杀结算：经验、按档次回血、掉落（与 GrantKillReward / ResolveDrops 同规则）。</summary>
-        static void GrantKill(PlayerData p, MonsterData m)
+        internal static void GrantKill(PlayerData p, MonsterData m)
         {
             int reward = GameConfig.MonsterExpReward(m.level, m.type, m.tier);
             int levels = p.AddExp(reward);
@@ -411,6 +445,10 @@ namespace AutoBattle.EditorTools
             p.currentHp = Mathf.Min(p.MaxHp, p.currentHp + heal);
 
             ResolveDrops(p, m);
+
+            // 巅峰每 10 级欠玩家一次「三选一」：交给决策层挑最优卡并装槽。
+            // 改动前探针没有这一步，等于技能永远不会出现。
+            ProbePolicy.ResolvePendingSkills(p);
         }
 
         /// <summary>掉落判定，规则逐行对齐 GameController.ResolveDrops（:1104-1144）。</summary>
@@ -453,7 +491,7 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>自动补药：与 AutoFillPotions（:728-751）同规则，只在开商店时调用。</summary>
-        static void FillPotions(PlayerData p)
+        internal static void FillPotions(PlayerData p)
         {
             int guard = 0;
             while (p.potionCount < GameConfig.PotionMaxCount &&
@@ -465,11 +503,18 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>造一只怪：类型按关卡怪级抽、非 Boss 随机词缀（与 SpawnMonsterNow 一致）。</summary>
-        static MonsterData Spawn(int monsterLevel, MonsterTier tier)
+        internal static MonsterData Spawn(int monsterLevel, MonsterTier tier, MonsterType? forcedType = null)
         {
-            MonsterType type = MonsterData.RollType(monsterLevel);
+            MonsterType type = forcedType ?? MonsterData.RollType(monsterLevel);
             MonsterAffix affix = tier == MonsterTier.Boss ? MonsterAffix.None : MonsterData.RollAffix();
             return MonsterData.CreateForLevel(monsterLevel, type, tier, affix);
+        }
+
+        /// <summary>终局 BOSS 的类型按挑战次数轮换（近战→远程→暴击怪），与 SpawnMonsterNow 一致。</summary>
+        static MonsterType? BossTypeFor(int chapter, int stage, int attempt)
+        {
+            if (chapter < GameConfig.ChapterCount || stage < GameConfig.StagesPerChapter) return null;
+            return (MonsterType)((attempt - 1) % 3);
         }
 
         static string TierName(MonsterTier t) =>

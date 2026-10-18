@@ -79,8 +79,10 @@ namespace AutoBattle
         /// </summary>
         public static int KillTargetOf(int chapter)
         {
-            int extra = Mathf.Clamp((chapter - 1) / 3, 0, GameConfig.StageKillTargetMaxBonus);
-            return GameConfig.StageKillTargetBase + extra;
+            // 负上限会让 Clamp 的 max < min，killTarget 变成负数并让 IsStageCleared 恒真。
+            int maxBonus = Mathf.Max(0, GameConfig.StageKillTargetMaxBonus);
+            int extra = Mathf.Clamp((Mathf.Max(1, chapter) - 1) / 3, 0, maxBonus);
+            return Mathf.Max(1, GameConfig.StageKillTargetBase) + extra;
         }
 
         /// <summary>

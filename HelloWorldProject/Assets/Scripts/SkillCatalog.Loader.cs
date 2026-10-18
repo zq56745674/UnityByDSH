@@ -52,7 +52,15 @@ namespace AutoBattle
 
         /// <summary>进入播放模式时再加载一次（编辑器里改完 JSON 重进 Play 就能生效）。</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void AutoLoad() => Reload();
+        private static void AutoLoad()
+        {
+            try { Reload(); }
+            catch (System.Exception e)
+            {
+                ConfigLoaded = false;
+                Debug.LogWarning("[SkillCatalog] 自动加载失败，使用代码默认值：" + e.Message);
+            }
+        }
 
         /// <summary>重新读取 skills.json。返回是否读到文件。</summary>
         public static bool Reload()
@@ -63,9 +71,18 @@ namespace AutoBattle
                 ConfigLoaded = false;
                 return false;
             }
-            ApplyJson(asset.text);
-            ConfigLoaded = true;
-            return true;
+            try
+            {
+                ApplyJson(asset.text);
+                ConfigLoaded = true;
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                ConfigLoaded = false;
+                Debug.LogWarning("[SkillCatalog] skills.json 解析失败，保留当前值：" + e.Message);
+                return false;
+            }
         }
 
         /// <summary>
@@ -75,7 +92,13 @@ namespace AutoBattle
         /// </summary>
         public static int ApplyJson(string json)
         {
-            var table = JsonUtility.FromJson<SkillTableData>(json);
+            SkillTableData table;
+            try { table = JsonUtility.FromJson<SkillTableData>(json); }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[SkillCatalog] skills.json 解析失败，沿用代码默认值：" + e.Message);
+                return 0;
+            }
             if (table == null || table.skills == null)
             {
                 Debug.LogWarning("[SkillCatalog] skills.json 解析失败或缺少 skills 数组，沿用代码默认值。");
@@ -118,13 +141,14 @@ namespace AutoBattle
                     src.kind = dst.kind;
                 }
 
-                dst.value = src.value;
-                dst.cooldown = src.cooldown;
-                dst.critBonus = src.critBonus;
-                dst.hpThreshold = src.hpThreshold;
-                dst.triggerChance = src.triggerChance;
-                dst.hits = src.hits;
-                dst.duration = src.duration;
+                // 技能数值也会手改 json：负冷却 / 负次数会让计时器和循环出错，统一夹住。
+                dst.value = SafeFloat(src.value, 0f, 1000f, dst, nameof(dst.value));
+                dst.cooldown = SafeFloat(src.cooldown, 0f, 3600f, dst, nameof(dst.cooldown));
+                dst.critBonus = SafeFloat(src.critBonus, 0f, 10f, dst, nameof(dst.critBonus));
+                dst.hpThreshold = SafeFloat(src.hpThreshold, 0f, 1f, dst, nameof(dst.hpThreshold));
+                dst.triggerChance = SafeFloat(src.triggerChance, 0f, 1f, dst, nameof(dst.triggerChance));
+                dst.hits = Mathf.Clamp(src.hits, 0, 20);
+                dst.duration = SafeFloat(src.duration, 0f, 3600f, dst, nameof(dst.duration));
 
                 if (!string.IsNullOrWhiteSpace(src.name)) dst.name = src.name;
                 if (!string.IsNullOrWhiteSpace(src.description)) dst.description = src.description;
@@ -142,6 +166,19 @@ namespace AutoBattle
                 Debug.LogWarning($"[SkillCatalog] 只覆盖了 {n}/{All.Length} 条技能，其余沿用代码默认值。");
 
             return n;
+        }
+
+        private static float SafeFloat(float value, float min, float max, SkillDef skill, string field)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                Debug.LogWarning($"[SkillCatalog] {skill.id}.{field}={value} 非法，已改为 {min}。");
+                return min;
+            }
+            float clamped = Mathf.Clamp(value, min, max);
+            if (clamped != value)
+                Debug.LogWarning($"[SkillCatalog] {skill.id}.{field}={value} 超出安全区间 [{min}, {max}]，已夹到 {clamped}。");
+            return clamped;
         }
 
         /// <summary>把当前生效的技能表序列化成 JSON（生成初始配置文件，或导出改过的数值）。</summary>

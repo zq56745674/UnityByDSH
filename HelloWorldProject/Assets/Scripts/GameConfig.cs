@@ -103,8 +103,13 @@ namespace AutoBattle
         public static float MinAttackInterval = 0.2f;
 
         /// <summary>由速度换算单次攻击间隔（要求 5：速度影响攻击间隔）。</summary>
-        public static float AttackInterval(float speed) =>
-            Mathf.Max(MinAttackInterval, AttackIntervalBase / (1f + speed / AttackSpeedDivisor));
+        public static float AttackInterval(float speed)
+        {
+            // 配置加载时已经夹过，这里再兜一层：运行时热改 / 编辑器探针直接写字段时也不能除零或死循环。
+            float baseInterval = Mathf.Max(0.01f, AttackIntervalBase);
+            float divisor = Mathf.Max(0.01f, AttackSpeedDivisor);
+            return Mathf.Max(Mathf.Max(0.01f, MinAttackInterval), baseInterval / (1f + speed / divisor));
+        }
 
         // ==================== 主角成长 ====================
 
@@ -159,6 +164,28 @@ namespace AutoBattle
 
         /// <summary>章节总数。第 N 章的怪物等级 = ChapterMonsterLevelStep×(N-1)+1 ~ ChapterMonsterLevelStep×N。</summary>
         public static int ChapterCount = 11;
+        /// <summary>
+        /// 第 1~10 章的整体压迫：每章 +2.5% 生命/攻击/防御。
+        /// 之前这十章的稳态胜率是 100%，推章没有任何风险；加这一层让它变成「会死人、但不会卡死」。
+        /// 第 11 章不吃这一层——它有自己的 ×3 终局档，再加会盖过 MaxTier 的调参口径。
+        /// </summary>
+        public static float ChapterPressureBase = 1.0f;
+
+        /// <summary>章节压迫的逐章增量（在此之上每章再加 4%）。</summary>
+        public static float ChapterPressurePerChapter = 0.04f;
+
+        /// <summary>章末 Boss 在章节压迫之上再乘的额外压迫（每章 +3%），把关底做成真正的检查点。</summary>
+        public static float ChapterBossPressurePerChapter = 0.03f;
+
+        /// <summary>章节压迫倍率：1~10 章随章节线性上升，第 11 章恒为 1。</summary>
+        public static float ChapterPressure(int chapter, bool isBoss)
+        {
+            if (chapter >= ChapterCount) return 1f;
+            float steps = Mathf.Max(1, chapter) - 1;
+            float p = ChapterPressureBase + ChapterPressurePerChapter * steps;
+            if (isBoss) p *= 1f + ChapterBossPressurePerChapter * steps;
+            return p;
+        }
 
         /// <summary>每章的关卡数。</summary>
         public static int StagesPerChapter = 10;
@@ -170,19 +197,31 @@ namespace AutoBattle
         /// 怪物等级 → 章节号。第 N 章的怪物等级落在 ChapterMonsterLevelStep×(N-1)+1 ~ ChapterMonsterLevelStep×N，
         /// 所以按「向上取整」从等级反推章节，不用把章节号一路传进怪物工厂。
         /// </summary>
-        public static int ChapterOfMonsterLevel(int monsterLevel) =>
-            Mathf.Clamp(((Mathf.Max(1, monsterLevel) - 1) / ChapterMonsterLevelStep) + 1, 1, ChapterCount);
+        public static int ChapterOfMonsterLevel(int monsterLevel)
+        {
+            // ChapterMonsterLevelStep=0 会在这里除零，ChapterCount 越界会撞 ChapterMonsterNames 的固定长度。
+            int step = Mathf.Max(1, ChapterMonsterLevelStep);
+            int chapters = Mathf.Max(1, ChapterCount);
+            return Mathf.Clamp(((Mathf.Max(1, monsterLevel) - 1) / step) + 1, 1, chapters);
+        }
 
         /// <summary>怪物在它所属章节里的显示名（按类型取该章的族类名）。</summary>
         public static string MonsterNameOf(int monsterLevel, MonsterType type)
         {
-            string[] names = ChapterMonsterNames[ChapterOfMonsterLevel(monsterLevel) - 1];
+            if (ChapterMonsterNames == null || ChapterMonsterNames.Length == 0) return "怪物";
+            int chapterIndex = Mathf.Clamp(ChapterOfMonsterLevel(monsterLevel) - 1, 0, ChapterMonsterNames.Length - 1);
+            string[] names = ChapterMonsterNames[chapterIndex];
+            if (names == null || names.Length == 0) return "怪物";
             return names[Mathf.Clamp((int)type, 0, names.Length - 1)];
         }
 
         /// <summary>怪物在它所属章节里的属性偏向（生命 / 攻击 / 防御 / 速度）。</summary>
-        public static float[] MonsterStatBiasOf(int monsterLevel) =>
-            ChapterStatBias[ChapterOfMonsterLevel(monsterLevel) - 1];
+        public static float[] MonsterStatBiasOf(int monsterLevel)
+        {
+            if (ChapterStatBias == null || ChapterStatBias.Length == 0) return new[] { 1f, 1f, 1f, 1f };
+            int chapterIndex = Mathf.Clamp(ChapterOfMonsterLevel(monsterLevel) - 1, 0, ChapterStatBias.Length - 1);
+            return ChapterStatBias[chapterIndex];
+        }
 
         /// <summary>第 1 章每关的击杀目标基数。</summary>
         public static int StageKillTargetBase = 3;
@@ -223,6 +262,14 @@ namespace AutoBattle
         public static float MaxTierHpFactor = 3.0f;
         public static float MaxTierAttackFactor = 3.0f;
         public static float MaxTierDefenseFactor = 3.0f;
+
+        /// <summary>
+        /// 终局 BOSS（Lv.110 章末关底）额外的全属性倍率：战斗探针实测，只叠 MaxTier ×3 时
+        /// 传说装备 + 巅峰 26 的玩家平均 7 次挑战就能打下来——终局只硬一分钟。
+        /// 这一层专门把「什么时候能过」推到巅峰 100 之后，让巅峰曲线真正成为终局的门。
+        /// 只作用于 Boss，不碰 11-1~11-9 的精英。
+        /// </summary>
+        public static float FinalBossStatFactor = 1.6f;
 
         /// <summary>最高档的额外速度倍率（速度对攻击间隔是非线性的，所以单独给，且比全属性保守）。</summary>
         public static float MaxTierSpeedFactor = 2.0f;
@@ -306,6 +353,57 @@ namespace AutoBattle
                 (EnhanceBaseCost + EnhanceCostPerLevel * Mathf.Max(0, enhanceLevel)) *
                 EnhanceQualityFactors[(int)quality]));
 
+        // ==================== 装备洗练（步骤 3） ====================
+        // 洗练只重抽**副词条**：条数不变，种类与数值按掉落同分布重掷。
+        // 主属性、武器主词条、品质、强化等级都不动——它们各自已经有成长轴（强化）
+        // 或身份（品质 / 主词条），再让洗练去碰等于给一条曲线开两个口子。
+        //
+        // 条数保持不变是硬约束：优秀品质的条数是 1~2 随机，如果连条数一起重抽，
+        // 一件 2 条的优秀装备会被洗成 1 条，花金币反而掉一条词条，没人会接受。
+        //
+        // 费用随「同一件洗过几次」线性上涨（1 + 0.6n），不是指数。
+        // 指数的效果等于给系统设一个隐形次数上限；而这个系统的价值恰恰在
+        // 「接近上限的最后几口最贵、但确实吃得到」，线性上涨让玩家自己决定停在哪。
+        // 首次费用刻意低于「强化 +1 级」，让人愿意试一次；
+        // 31 次累计约 86 万（Lv.110 传说），正好吃掉终局那笔没处花的金币。
+
+        /// <summary>洗练费用的基础值（Lv.1 的基准价，未乘品质系数）。</summary>
+        public static int ReforgeBaseCost = 200;
+
+        /// <summary>洗练费用的等级成长：装备等级每高 1 级，本次基价多这么多。</summary>
+        public static int ReforgeCostPerLevel = 14;
+
+        /// <summary>同一件装备每洗一次，本次费用在基价上多这么多比例（0.6 表示 +60%）。</summary>
+        public static float ReforgeCostGrowth = 0.6f;
+
+        /// <summary>
+        /// 锁词条的单价倍率：每多锁一条，本次费用乘一次它（默认 3 → ×3 / ×9 / ×27）。
+        /// 用指数而不是加价：锁 k 条会把要重抽的词条从 4 条压到 4−k 条，
+        /// 达到同一质量的中位次数掉 10~30 倍（见 docs/equipment-reforge.md §10.6），
+        /// 线性加价根本压不住「锁得越多越划算」，锁词条会变成没有代价的默认操作。
+        /// </summary>
+        public static float ReforgeLockFactor = 3f;
+
+        /// <summary>
+        /// 洗练一次的费用（不锁词条）：
+        /// (ReforgeBaseCost + ReforgeCostPerLevel × (level - 1)) × 品质系数 × (1 + 递增 × 已洗次数)。
+        /// 例：传说 Lv.110 第 1 次 = 1,726 × 1.6 = 2,784；第 11 次 = 2,784 × (1 + 0.6×10) = 17,818。
+        /// 品质系数直接复用 EnhanceQualityFactors，不再造第二套表。
+        /// </summary>
+        public static int ReforgeCost(int level, EquipmentQuality quality, int reforgeCount) =>
+            ReforgeCost(level, quality, reforgeCount, 0);
+
+        /// <summary>
+        /// 洗练一次的费用，带锁词条溢价：锁 n 条再乘 ReforgeLockFactor^n。
+        /// 锁定条数由调用方保证不超过实际词条条数（Models 的 LockedAffixCount 已裁掉无效位）。
+        /// </summary>
+        public static int ReforgeCost(int level, EquipmentQuality quality, int reforgeCount, int lockedAffixes) =>
+            Mathf.Max(1, Mathf.RoundToInt(
+                (ReforgeBaseCost + ReforgeCostPerLevel * Mathf.Max(0, level - 1)) *
+                EnhanceQualityFactors[(int)quality] *
+                (1f + ReforgeCostGrowth * Mathf.Max(0, reforgeCount)) *
+                Mathf.Pow(ReforgeLockFactor, Mathf.Max(0, lockedAffixes))));
+
         // ==================== 装备基础值（要求 9、10、13） ====================
 
         /// <summary>
@@ -378,6 +476,12 @@ namespace AutoBattle
 
         // ==================== 商店：生命药剂 ====================
 
+        /// <summary>精英战前是否回满血。关底 Boss 永远回满；精英默认不回——
+        /// 让「打小怪 → 打精英」变成一条连续的消耗链，中途倒下就是真的阵亡（2026-10-18）。</summary>
+        /// <summary>开战前（精英 / Boss）是否回满血。默认 false：整关是一条连续的消耗链，
+        /// 打小怪掉的血要一直带到关底——这才是「打不过就回去刷小怪」的循环。
+        /// 想恢复旧手感（每场关底满血）把它改成 true。</summary>
+        public static bool HealBeforeFight = false;
         /// <summary>生命药剂的持有上限。</summary>
         public static int PotionMaxCount = 5;
 
@@ -417,13 +521,29 @@ namespace AutoBattle
         public static int ParagonExpBase = 2000;
         public static int ParagonExpPerLevel = 200;
 
-        public static int ParagonExpToNext(int paragonLevel) => ParagonExpBase + ParagonExpPerLevel * paragonLevel;
+        /// <summary>
+        /// 巅峰经验的二次项：每级额外 +q×p²。
+        /// 线性项只会让「越升越快」——怪给的经验是常数，需求只涨 200/级，
+        /// 一只 Lv.110 Boss 就够升一级。加上二次项后 P100 一级约 22k+200k，
+        /// 越往后越慢，整条 P0→P200 才撑得起「约两小时」的终局。
+        ///
+        /// 系数是实测校准出来的，不是拍的：EndgamePacing 用「会挑技能、会把余钱砸满强化」的
+        /// 最优玩家口径跑 11-10 循环，q=12 时 P0→P200 只要 76~77 分钟（2026-10-18 实测；
+        /// 更早的探针不强化、只有 6 张随机技能，才把同一件事量成 110~137 分钟）。
+        /// 按 1.57× 提到 20 后总需求 5,731 万经验，满级回到约两小时（108 / 114 分钟）。别随手往下调。
+        /// </summary>
+        public static float ParagonExpQuadratic = 20f;
+
+        public static int ParagonExpToNext(int paragonLevel) =>
+            ParagonExpBase + ParagonExpPerLevel * paragonLevel
+            + Mathf.RoundToInt(ParagonExpQuadratic * paragonLevel * paragonLevel);
 
         /// <summary>每多少级巅峰解锁一个技能（只影响数量，不影响技能强度）。</summary>
         public static int ParagonPassiveEvery = 10;
 
         /// <summary>技能等级：由巅峰等级推导，每 ParagonPassiveEvery 级 +1。</summary>
-        public static int SkillLevel(int paragonLevel) => 1 + paragonLevel / ParagonPassiveEvery;
+        public static int SkillLevel(int paragonLevel) =>
+            1 + Mathf.Max(0, paragonLevel) / Mathf.Max(1, ParagonPassiveEvery);
 
         // ==================== 技能 ====================
 

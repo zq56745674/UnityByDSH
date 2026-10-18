@@ -224,7 +224,11 @@ namespace AutoBattle
             },
         };
 
-        public static SkillDef Get(SkillId id) => All[(int)id];
+        public static SkillDef Get(SkillId id)
+        {
+            // 存档里可能读到越界的技能 id（旧版本 / 手改 JSON），不要让它直接越界崩掉。
+            return All[Mathf.Clamp((int)id, 0, All.Length - 1)];
+        }
 
         /// <summary>按类别收集全部技能编号。</summary>
         public static SkillId[] OfKind(SkillKind kind)

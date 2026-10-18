@@ -37,7 +37,16 @@ namespace AutoBattle
 
         /// <summary>进入播放模式时再加载一次（编辑器里改完 JSON 重进 Play 就能生效）。</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void AutoLoad() => Reload();
+        private static void AutoLoad()
+        {
+            // 外部 json 可能被手改坏：不能让 AutoLoad 的异常把整个播放模式启动流程打断。
+            try { Reload(); }
+            catch (System.Exception e)
+            {
+                ConfigLoaded = false;
+                Debug.LogWarning("[GameConfig] 自动加载失败，使用代码默认值：" + e.Message);
+            }
+        }
 
         /// <summary>重新读取 game_config.json。返回是否读到文件。</summary>
         public static bool Reload()
@@ -48,10 +57,19 @@ namespace AutoBattle
                 ConfigLoaded = false;
                 return false;
             }
-            ApplyJson(asset.text);
-            ReportMissingKeys(asset.text);
-            ConfigLoaded = true;
-            return true;
+            try
+            {
+                ApplyJson(asset.text);
+                ReportMissingKeys(asset.text);
+                ConfigLoaded = true;
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                ConfigLoaded = false;
+                Debug.LogWarning("[GameConfig] game_config.json 解析失败，保留当前值：" + e.Message);
+                return false;
+            }
         }
 
         /// <summary>
@@ -121,7 +139,67 @@ namespace AutoBattle
                 Debug.LogWarning($"[GameConfig] 只覆盖了 {n}/{fields.Length} 个配置项——"
                     + "GameConfigData 与 GameConfig 的字段名或类型对不上，没对上的项将永远用代码默认值。");
             }
+            SanitizeValues();
             return n;
+        }
+
+        // ==================== 配置校验 ====================
+        // json 是手改的，0 / 负数 / 越界值都能直接写进来。下面这些点会把「配置写错」
+        // 放大成除零、死循环或数组越界，加载后统一夹到安全区间，并留下一条警告。
+
+        private static int ClampInt(int value, int min, int max, string name)
+        {
+            int clamped = Mathf.Clamp(value, min, max);
+            if (clamped != value)
+                Debug.LogWarning($"[GameConfig] {name}={value} 超出安全区间 [{min}, {max}]，已夹到 {clamped}。");
+            return clamped;
+        }
+
+        private static float ClampFloat(float value, float min, float max, string name)
+        {
+            if (float.IsNaN(value))
+            {
+                Debug.LogWarning($"[GameConfig] {name}=NaN，已改为 {min}。");
+                return min;
+            }
+            float clamped = Mathf.Clamp(value, min, max);
+            if (clamped != value)
+                Debug.LogWarning($"[GameConfig] {name}={value} 超出安全区间 [{min}, {max}]，已夹到 {clamped}。");
+            return clamped;
+        }
+
+        private static void SanitizeValues()
+        {
+            MaxLevel = ClampInt(MaxLevel, 1, 9999, nameof(MaxLevel));
+            MaxParagonLevel = ClampInt(MaxParagonLevel, 0, 9999, nameof(MaxParagonLevel));
+            EnhanceMaxLevel = ClampInt(EnhanceMaxLevel, 0, 999, nameof(EnhanceMaxLevel));
+            MaxLogEntries = ClampInt(MaxLogEntries, 1, 100000, nameof(MaxLogEntries));
+
+            // 除零 / 死循环 / 索引越界：0 是这些字段最容易被误填的值。
+            ParagonPassiveEvery = ClampInt(ParagonPassiveEvery, 1, 9999, nameof(ParagonPassiveEvery));
+            ChapterMonsterLevelStep = ClampInt(ChapterMonsterLevelStep, 1, 9999, nameof(ChapterMonsterLevelStep));
+            StageKillTargetBase = ClampInt(StageKillTargetBase, 1, 9999, nameof(StageKillTargetBase));
+            StageKillTargetMaxBonus = ClampInt(StageKillTargetMaxBonus, 0, 9999, nameof(StageKillTargetMaxBonus));
+            StagesPerChapter = ClampInt(StagesPerChapter, 1, 9999, nameof(StagesPerChapter));
+
+            // ChapterMonsterNames / ChapterStatBias 是固定 11 行的表：章节数超出就会索引越界。
+            int maxChapters = Mathf.Max(1, Mathf.Min(ChapterMonsterNames.Length, ChapterStatBias.Length));
+            ChapterCount = ClampInt(ChapterCount, 1, maxChapters, nameof(ChapterCount));
+            FirstBossChapter = ClampInt(FirstBossChapter, 1, ChapterCount, nameof(FirstBossChapter));
+
+            // UI 固定画 6 个槽（三类 × 2），存档也只有 6 个槽字段：
+            // 这个值不是自由的每类数量，必须保持 2，否则槽位索引与技能类别会错位。
+            SkillSlotsPerKind = ClampInt(SkillSlotsPerKind, 2, 2, nameof(SkillSlotsPerKind));
+            SkillChoiceCount = ClampInt(SkillChoiceCount, 1, 15, nameof(SkillChoiceCount));
+
+            AttackIntervalBase = ClampFloat(AttackIntervalBase, 0.01f, 10000f, nameof(AttackIntervalBase));
+            MinAttackInterval = ClampFloat(MinAttackInterval, 0.01f, 10000f, nameof(MinAttackInterval));
+            AttackSpeedDivisor = ClampFloat(AttackSpeedDivisor, 0.01f, 10000f, nameof(AttackSpeedDivisor));
+            StageClearDelay = ClampFloat(StageClearDelay, 0f, 10000f, nameof(StageClearDelay));
+            MonsterRespawnDelay = ClampFloat(MonsterRespawnDelay, 0f, 10000f, nameof(MonsterRespawnDelay));
+            PlayerReviveDelay = ClampFloat(PlayerReviveDelay, 0.01f, 10000f, nameof(PlayerReviveDelay));
+            BannerDuration = ClampFloat(BannerDuration, 0f, 10000f, nameof(BannerDuration));
+            AutoSaveInterval = ClampFloat(AutoSaveInterval, 0.1f, 10000f, nameof(AutoSaveInterval));
         }
 
         /// <summary>把当前生效的数值序列化成 JSON（用于生成初始配置文件，或导出改过的数值）。</summary>

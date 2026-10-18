@@ -18,8 +18,8 @@ namespace AutoBattle
         {
             int count = GameConfig.SkillChoiceCount;
 
-            _skillChoicePanel = CreatePanel(root, "SkillChoicePanel", 250, 232, 780, 244,
-                GameConfig.ScreenDim, true);
+            _skillChoicePanel = CreatePanel(root, "SkillChoicePanel", 250, 238, 780, 244,
+                GameConfig.OverlayBg, true);
 
             _skillChoiceTitle = CreateText(_skillChoicePanel, "SkillChoiceTitle", "", 24, 12, 732, 30, 20,
                 GameConfig.AccentBannerTitle, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -29,6 +29,7 @@ namespace AutoBattle
 
             _skillChoiceButtons = new Button[count];
             _skillChoiceLabels = new Text[count];
+            _choiceAccents = new Image[count];
 
             const float cardW = 236f;
             const float cardH = 150f;
@@ -42,10 +43,14 @@ namespace AutoBattle
                 _skillChoiceButtons[i] = CreateButton(_skillChoicePanel, $"SkillChoice{i}", "", x, 72f, cardW, cardH,
                     GameConfig.RowBg, out _skillChoiceLabels[i]);
 
+                // 三行文案只占卡片上方一半，UpperLeft 会留一大片空底；垂直居中读起来才对得上「卡片」。
                 _skillChoiceLabels[i].fontSize = 15;
-                _skillChoiceLabels[i].alignment = TextAnchor.UpperLeft;
-                _skillChoiceLabels[i].rectTransform.offsetMin = new Vector2(12f, 10f);
-                _skillChoiceLabels[i].rectTransform.offsetMax = new Vector2(-12f, -10f);
+                _skillChoiceLabels[i].alignment = TextAnchor.MiddleLeft;
+                _skillChoiceLabels[i].rectTransform.offsetMin = new Vector2(18f, 10f);
+                _skillChoiceLabels[i].rectTransform.offsetMax = new Vector2(-16f, -10f);
+
+                _choiceAccents[i] = CreateImage(_skillChoiceButtons[i].transform, $"ChoiceAccent{i}",
+                    0f, 10f, 3f, cardH - 20f, GameConfig.Border);
 
                 _skillChoiceButtons[i].onClick.AddListener(() => OnSkillChoiceClicked(captured));
             }
@@ -67,6 +72,10 @@ namespace AutoBattle
             IReadOnlyList<SkillId> choices = _game.SkillChoices;
             int pending = _game.PendingSkillPicks;
 
+            // 推荐分只在候选人之间排序，不影响三选一本身；关掉后完全退回原来的卡片。
+            bool advice = GameSettings.ShowSkillAdvice;
+            int best = advice ? SkillAdvice.BestIndex(_game.Player, choices) : -1;
+
             _skillChoiceTitle.text = pending > 1
                 ? $"✧ 巅峰奖励 — 选择技能（还有 {pending} 次待选）"
                 : "✧ 巅峰奖励 — 选择技能";
@@ -78,21 +87,57 @@ namespace AutoBattle
                 if (!valid) continue;
 
                 SkillDef def = SkillCatalog.Get(choices[i]);
+                int score = advice ? SkillAdvice.Score(_game.Player, choices[i]) : 0;
+                string kindLine = advice
+                    ? $"{KindShort((int)def.kind)} · <color=#{ColorUtility.ToHtmlStringRGB(SkillAdvice.TierColor(score))}>推荐 {score} {SkillAdvice.TierLabel(score)}</color>"
+                    : KindShort((int)def.kind);
+                string star = advice && i == best ? "  <color=#FFD966>★</color>" : "";
+
                 _skillChoiceLabels[i].text =
-                    $"{def.name}\n<size=13><color=#AAB0BD>{KindShort((int)def.kind)}</color></size>\n\n{def.description}";
+                    $"<size=17><b>{def.name}</b></size>{star}\n<size=12><color=#8C99B0>{kindLine}</color></size>\n\n"
+                    + $"<size=13><color=#C6CEE0>{def.description}</color></size>";
                 _skillChoiceLabels[i].color = def.color;
+                // 和技能栏同一套语言：底色只染 6%，左侧 3px 条才是类别色。
+                // 推荐分最高的一张把强调条换成金色，扫一眼就知道「这一张最贴当前面板」。
+                _skillChoiceButtons[i].image.color = Color.Lerp(GameConfig.RowBg, def.color, 0.06f);
+                _choiceAccents[i].color = advice && i == best ? GameConfig.LogGold : def.color;
+            }
+
+            // 技能池快抽干时候选会少于三个，卡片都留在原来 1/3 的位置上会挤在左边；
+            // 按实际可见数量重新居中，一张候选时也停在正中间。
+            int shown = 0;
+            for (int i = 0; i < _skillChoiceButtons.Length; i++)
+                if (_skillChoiceButtons[i].gameObject.activeSelf) shown++;
+
+            if (shown > 0 && shown < _skillChoiceButtons.Length)
+            {
+                const float cardW = 236f;
+                const float stripW = 732f;
+                float gap = shown > 1 ? Mathf.Min(24f, (stripW - cardW * shown) / (shown - 1)) : 0f;
+                float totalW = cardW * shown + gap * (shown - 1);
+                float startX = 24f + (stripW - totalW) * 0.5f;
+                int slot = 0;
+                for (int i = 0; i < _skillChoiceButtons.Length; i++)
+                {
+                    if (!_skillChoiceButtons[i].gameObject.activeSelf) continue;
+                    var rt = (RectTransform)_skillChoiceButtons[i].transform;
+                    rt.anchoredPosition = new Vector2(startX + slot * (cardW + gap), -72f);
+                    slot++;
+                }
             }
         }
         /// <summary>技能面板：点击技能栏槽位后弹出，列出整个技能池供装配。</summary>
         private void BuildSkillPanel(Transform root)
         {
-            _skillPanel = CreatePanel(root, "SkillPanel", 236, 96, 808, 508, GameConfig.InsetBg, true);
+            _skillPanel = CreatePanel(root, "SkillPanel", 236, 96, 808, 544, GameConfig.InsetBg, true);
 
-            _skillPanelTitle = CreateText(_skillPanel, "SkillPanelTitle", "", 20, 12, 768, 30, 19,
+            // 标题行只留 768 宽给文字，「关闭」缩到右上角同一行：15 张卡是 3 列 5 行，
+            // 关闭按钮若留在底部（y=458）会把第 5 行挤到 66 高，推荐分行后描述必被截断。
+            _skillPanelTitle = CreateText(_skillPanel, "SkillPanelTitle", "", 20, 12, 670, 30, 19,
                 GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             CreateText(_skillPanel, "SkillPanelHint",
-                "点击技能装到当前槽位（类别不符会自动放进同类空槽）；点击已装备的技能可卸下",
+                "点击技能装到当前槽位（类别不符会自动放进同类空槽）；点击已装备的技能可卸下；推荐分越高越合适",
                 20, 44, 768, 24, 13, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
             const int columns = 3;
@@ -106,23 +151,23 @@ namespace AutoBattle
                 int col = i % columns;
                 int row = i / columns;
                 float x = 20f + col * 258f;
-                // 卡片间距从 82/高 74 改成 74/高 66：15 张卡是 3 列 5 行，原来的排法第 5 行
-                // 落在 y 402..476，正好压住右上角 (698,458) 的「关闭」按钮。
-                float y = 74f + row * 74f;
+                // 3 列 5 行，关闭按钮移到标题行后底部不再被占，卡高从 66 增到 88、
+                // 面板高 544：名称 + 推荐分 + 三行描述都放得下（此前最长的一条被 Truncate 截断）。
+                float y = 76f + row * 90f;
 
-                _skillPoolButtons[i] = CreateButton(_skillPanel, $"SkillPool{i}", "", x, y, 248, 66,
+                _skillPoolButtons[i] = CreateButton(_skillPanel, $"SkillPool{i}", "", x, y, 248, 88,
                     GameConfig.RowBg, out _skillPoolLabels[i]);
 
                 _skillPoolLabels[i].fontSize = 13;
                 _skillPoolLabels[i].verticalOverflow = VerticalWrapMode.Truncate;
                 _skillPoolLabels[i].alignment = TextAnchor.MiddleLeft;
-                _skillPoolLabels[i].rectTransform.offsetMin = new Vector2(10f, 4f);
-                _skillPoolLabels[i].rectTransform.offsetMax = new Vector2(-8f, -4f);
+                _skillPoolLabels[i].rectTransform.offsetMin = new Vector2(10f, 6f);
+                _skillPoolLabels[i].rectTransform.offsetMax = new Vector2(-8f, -6f);
 
                 _skillPoolButtons[i].onClick.AddListener(() => OnSkillPoolClicked(captured));
             }
 
-            Button close = CreateButton(_skillPanel, "SkillPanelClose", "关闭", 698, 458, 90, 36,
+            Button close = CreateButton(_skillPanel, "SkillPanelClose", "关闭", 698, 12, 90, 30,
                 GameConfig.CardDanger, out _);
             close.onClick.AddListener(OnSkillPanelCloseClicked);
 
@@ -442,16 +487,277 @@ namespace AutoBattle
                 _game.AddLog("该槽位还没有装备。", GameConfig.LogWarn);
         }
 
+        /// <summary>
+        /// 洗练面板：两件装备各一张卡片。卡片里每条副词条都是一行按钮，点一下锁定/解锁；
+        /// 锁住的词条不参与重抽，每多锁一条本次费用乘一次 GameConfig.ReforgeLockFactor。
+        /// 面板打开时整局冻结（见 GameController.Update）。
+        /// </summary>
+        private void BuildReforgePanel(Transform root)
+        {
+            _reforgePanel = CreatePanel(root, "ReforgePanel", 300, 142, 680, 436, GameConfig.OverlayBg, true);
+
+            _reforgePanelTitle = CreateText(_reforgePanel, "ReforgePanelTitle", "", 20, 12, 640, 30, 19,
+                GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+            CreateText(_reforgePanel, "ReforgePanelHint",
+                "点击词条行可锁定；锁住的不重抽，每多锁一条本次费用 ×3。至少要留一条不锁。",
+                20, 44, 640, 36, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+
+            int affixKinds = GameConfig.EquipAffixNames.Length;
+
+            _reforgeSlotButtons = new Button[2];
+            _reforgeSlotLabels = new Text[2];
+            _reforgeActionButtons = new Button[2];
+            _reforgeActionLabels = new Text[2];
+            _reforgeAffixButtons = new Button[2, affixKinds];
+            _reforgeAffixLabels = new Text[2, affixKinds];
+            _reforgeAffixStrips = new Image[2, affixKinds];
+            _reforgeQualityLabels = new Text[2];
+            _reforgeCostLabels = new Text[2];
+
+            const float cardW = 310f;
+            const float cardH = 300f;
+            const float gap = 20f;
+            const float y0 = 88f;
+
+            for (int i = 0; i < 2; i++)
+            {
+                EquipmentSlot slot = i == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
+                int side = i;   // for 的 i 不是每轮新建的，闭包必须抓这个副本
+                float x = 20f + i * (cardW + gap);
+
+                // 卡片按钮只兜住空白处：标题+主属性在上，词条行压在上面，点行就是切锁定。
+                Button card = CreateButton(_reforgePanel, "ReforgeSlot" + i, "", x, y0, cardW, cardH,
+                    GameConfig.CardBg, out Text cardLabel);
+                cardLabel.alignment = TextAnchor.UpperLeft;
+                cardLabel.fontSize = 14;
+                cardLabel.fontStyle = FontStyle.Normal;
+                cardLabel.color = GameConfig.TextNormal;
+                cardLabel.rectTransform.offsetMin = new Vector2(14f, 246f);
+                cardLabel.rectTransform.offsetMax = new Vector2(-12f, -12f);
+                card.onClick.AddListener(() => OnReforgeSlotClicked(slot));
+
+                for (int j = 0; j < affixKinds; j++)
+                {
+                    EquipmentAffix kind = (EquipmentAffix)j;
+                    float rowY = y0 + 58f + j * 28f;
+
+                    Button row = CreateButton(_reforgePanel, $"ReforgeAffix{i}_{j}", "",
+                        x + 12f, rowY, 286f, 24f, GameConfig.RowBg, out Text rowLabel);
+                    rowLabel.fontSize = 13;
+                    rowLabel.fontStyle = FontStyle.Normal;
+                    rowLabel.alignment = TextAnchor.MiddleLeft;
+                    rowLabel.color = GameConfig.TextNormal;
+                    rowLabel.rectTransform.offsetMin = new Vector2(10f, 0f);
+                    rowLabel.rectTransform.offsetMax = new Vector2(-8f, 0f);
+                    row.onClick.AddListener(() => OnReforgeAffixClicked(side, kind));
+
+                    _reforgeAffixStrips[i, j] = CreateImage(row.transform, "Strip", 0, 0, 3, 24, GameConfig.Border);
+                    _reforgeAffixButtons[i, j] = row;
+                    _reforgeAffixLabels[i, j] = rowLabel;
+                }
+
+                _reforgeQualityLabels[i] = CreateText(_reforgePanel, "ReforgeQuality" + i, "",
+                    x + 12f, y0 + 200f, 286f, 20f, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+
+                _reforgeCostLabels[i] = CreateText(_reforgePanel, "ReforgeCost" + i, "",
+                    x + 12f, y0 + 222f, 286f, 20f, 13, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+                Button act = CreateButton(_reforgePanel, "ReforgeAction" + i, "洗练",
+                    x + 12f, y0 + 262f, 286f, 30f, GameConfig.BtnGold, out _reforgeActionLabels[i]);
+                _reforgeActionLabels[i].fontSize = 15;
+                act.onClick.AddListener(() => OnReforgeSlotClicked(slot));
+
+                _reforgeSlotButtons[i] = card;
+                _reforgeSlotLabels[i] = cardLabel;
+                _reforgeActionButtons[i] = act;
+            }
+
+            Button close = CreateButton(_reforgePanel, "ReforgePanelClose", "关闭", 586, 392, 74, 34,
+                GameConfig.CardBtn, out _);
+            close.onClick.AddListener(() => _game.CloseReforgePanel());
+
+            _reforgePanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// 刷新洗练面板。与强化面板同构：关着直接跳过、只在不脏且非刚打开时省掉重算。
+        /// 洗练质量与费用都是纯计算，真正贵的只有字符串，所以判脏就够了，不需要分帧。
+        /// </summary>
+        private void RefreshReforgePanel()
+        {
+            if (_reforgePanel == null || _game == null) return;
+
+            bool open = _game.ReforgePanelOpen;
+            _reforgePanel.gameObject.SetActive(open);
+            if (!open)
+            {
+                _reforgePanelWasOpen = false;
+                return;
+            }
+
+            bool justOpened = !_reforgePanelWasOpen;
+            _reforgePanelWasOpen = true;
+            if (!justOpened && !_reforgePanelDirty) return;
+            _reforgePanelDirty = false;
+
+            PlayerData p = _game.Player;
+            _reforgePanelTitle.text = $"洗练装备 —— 金币 {p.gold:N0}";
+
+            for (int i = 0; i < 2; i++)
+            {
+                EquipmentSlot slot = i == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
+                Equipment e = p.GetEquipment(slot);
+
+                // 换了一件装备（或卸载）就把锁定清掉：掩码指的是上一件的词条种类，
+                // 新装备可能根本没有那一条，留着会让费用按不存在的词条算钱。
+                if (!ReferenceEquals(e, _reforgeLockOwners[i]))
+                {
+                    _reforgeLockOwners[i] = e;
+                    _reforgeLockMasks[i] = 0;
+                }
+
+                int mask = e != null ? _reforgeLockMasks[i] & e.PresentAffixMask : 0;
+                _reforgeLockMasks[i] = mask;
+                int locked = e != null ? e.LockedAffixCount(mask) : 0;
+                int free = e != null ? e.AffixCount - locked : 0;
+                int cost = e != null && free > 0 ? e.ReforgeCostWithLocks(locked) : 0;
+
+                if (e != null)
+                {
+                    _reforgeSlotLabels[i].text = $"{e.Title}\n{e.StatLine}";
+                }
+                else
+                {
+                    string slotName = slot == EquipmentSlot.Weapon ? "武器" : "衣服";
+                    _reforgeSlotLabels[i].text = $"{slotName}\n\n（空）\n掉落装备会自动穿上，之后即可洗练";
+                }
+
+                // 词条种类是不连续的（比如只有暴击伤害/攻速/穿透），固定 5 个坑会留空洞，
+                // 所以按「存在几条」从上往下紧排，坑位随装备变化而重排。
+                RectTransform cardRt = _reforgeSlotButtons[i].GetComponent<RectTransform>();
+                int rowIndex = 0;
+
+                for (int j = 0; j < GameConfig.EquipAffixNames.Length; j++)
+                {
+                    EquipmentAffix kind = (EquipmentAffix)j;
+                    int bit = Equipment.AffixBit(kind);
+                    bool present = e != null && (e.PresentAffixMask & bit) != 0;
+                    _reforgeAffixButtons[i, j].gameObject.SetActive(present);
+                    if (!present) continue;
+
+                    _reforgeAffixButtons[i, j].GetComponent<RectTransform>().anchoredPosition =
+                        cardRt.anchoredPosition + new Vector2(12f, -(58f + rowIndex * 28f));
+                    rowIndex++;
+
+                    bool isLocked = (mask & bit) != 0;
+                    _reforgeAffixLabels[i, j].text =
+                        (isLocked ? "<color=#FFC857>◆ 已锁</color>  " : "<color=#8C99B0>◇ 未锁</color>  ") +
+                        Equipment.AffixText(kind, e.AffixValue(kind));
+
+                    var rowBg = _reforgeAffixButtons[i, j].targetGraphic as Image;
+                    if (rowBg != null)
+                    {
+                        rowBg.color = isLocked
+                            ? Color.Lerp(GameConfig.RowBg, GameConfig.AccentBanner, 0.18f)
+                            : GameConfig.RowBg;
+                    }
+                    _reforgeAffixStrips[i, j].color = isLocked ? GameConfig.AccentBanner : GameConfig.Border;
+                }
+
+                // 空槽位没有质量/费用/按钮可言，藏起来免得显示「费用 0 金币」。
+                _reforgeQualityLabels[i].gameObject.SetActive(e != null);
+                _reforgeCostLabels[i].gameObject.SetActive(e != null);
+                _reforgeActionButtons[i].gameObject.SetActive(e != null);
+                if (e == null) continue;
+
+                int quality = Mathf.RoundToInt(e.AffixQuality * 100f);
+                _reforgeQualityLabels[i].text =
+                    $"词条质量 {quality}%（{e.AffixCount} 条）    {e.ReforgeCountText}";
+
+                // 全锁时没有可洗的，避免出现「费用 0 金币（锁 4 条 ×27）」这种自相矛盾的行。
+                string costText;
+                if (free <= 0)
+                {
+                    costText = "费用 ——（词条已全部锁定）";
+                }
+                else
+                {
+                    costText = $"费用 {cost:N0} 金币";
+                    if (locked > 0) costText += $"（锁 {locked} 条 ×{Equipment.ReforgeLockMultiplier(locked):0.#}）";
+                    if (p.gold < cost) costText += "（不足）";
+                }
+                _reforgeCostLabels[i].text = costText;
+                _reforgeCostLabels[i].color = free > 0 && p.gold < cost ? GameConfig.LogWarn : GameConfig.TextMuted;
+
+                bool canPay = e.CanReforge && free > 0 && p.gold >= cost;
+                _reforgeActionLabels[i].text = !e.CanReforge ? "无可洗词条"
+                    : free <= 0 ? "已全锁"
+                    : $"洗练 {cost:N0}";
+
+                var bg = _reforgeActionButtons[i].targetGraphic as Image;
+                if (bg != null) bg.color = canPay ? GameConfig.BtnGold : GameConfig.BtnDisabled;
+                _reforgeActionLabels[i].color = canPay ? Color.white : GameConfig.BtnDisabledText;
+            }
+        }
+
+        private void OnReforgeEntryClicked()
+        {
+            _reforgePanelDirty = true;
+            _game.ToggleReforgePanel();
+        }
+
+        /// <summary>切换一条词条的锁定。最后一条不许锁——全锁之后没有可重抽的词条。</summary>
+        private void OnReforgeAffixClicked(int side, EquipmentAffix kind)
+        {
+            Equipment e = _game.Player.GetEquipment(side == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor);
+            if (e == null) return;
+
+            int mask = _reforgeLockMasks[side] & e.PresentAffixMask;
+            int bit = Equipment.AffixBit(kind);
+            bool wasLocked = (mask & bit) != 0;
+
+            if (!wasLocked && e.LockedAffixCount(mask) >= e.AffixCount - 1)
+            {
+                _game.AddLog("至少要留一条不锁，否则没有可洗的词条。", GameConfig.LogWarn);
+                return;
+            }
+
+            mask ^= bit;
+            _reforgeLockMasks[side] = mask;
+            _reforgePanelDirty = true;
+
+            int locked = e.LockedAffixCount(mask);
+            float mult = Equipment.ReforgeLockMultiplier(locked);
+            _game.AddLog(
+                $"{(wasLocked ? "解锁" : "锁定")} {Equipment.AffixText(kind, e.AffixValue(kind))} —— 锁 {locked} 条，洗练费用 ×{mult:0.#}",
+                GameConfig.LogInfo);
+        }
+
+        private void OnReforgeSlotClicked(EquipmentSlot slot)
+        {
+            int side = slot == EquipmentSlot.Weapon ? 0 : 1;
+            ReforgeResult result = _game.ReforgeEquipment(slot, _reforgeLockMasks[side]);
+            _reforgePanelDirty = true;
+
+            if (result == ReforgeResult.NotEnoughGold)
+                _game.AddLog("金币不足，无法洗练。", GameConfig.LogWarn);
+            else if (result == ReforgeResult.NoEquipment)
+                _game.AddLog("该槽位还没有装备。", GameConfig.LogWarn);
+            else if (result == ReforgeResult.NoAffix)
+                _game.AddLog("这件装备没有副词条可以洗练。", GameConfig.LogWarn);
+            else if (result == ReforgeResult.AllLocked)
+                _game.AddLog("全部词条都被锁住了，至少解锁一条再洗练。", GameConfig.LogWarn);
+        }
+
         private void BuildBanner(Transform root)
         {
             _bannerPanel = CreatePanel(root, "Banner", 340, 186, 600, 120,
                 GameConfig.ScreenDim);
 
-            // 金边：横幅要盖在日志上，光靠半透明底色压不住下面的字。
-            CreatePanel(_bannerPanel, "BannerEdgeTop", 0, 0, 600, 3, GameConfig.AccentBanner);
-            CreatePanel(_bannerPanel, "BannerEdgeBottom", 0, 117, 600, 3, GameConfig.AccentBanner);
-            CreatePanel(_bannerPanel, "BannerEdgeLeft", 0, 0, 3, 120, GameConfig.AccentBanner);
-            CreatePanel(_bannerPanel, "BannerEdgeRight", 597, 0, 3, 120, GameConfig.AccentBanner);
+            // 金边：横幅要盖在日志上，光靠底色压不住下面的字。改用圆角描边 + 顶部金线。
+            AddBorder(_bannerPanel.GetComponent<Image>(), RadiusPanel, GameConfig.AccentBanner);
+            CreateImage(_bannerPanel, "BannerTopLine", 18, 0, 564, 2, GameConfig.AccentBanner);
 
             _bannerGroup = _bannerPanel.gameObject.AddComponent<CanvasGroup>();
             _bannerGroup.blocksRaycasts = false;
@@ -765,39 +1071,83 @@ namespace AutoBattle
         }
 
         /// <summary>刷新技能栏：名称、冷却秒数、冷却进度条。</summary>
-        private void RefreshSkillBar(PlayerData p)
+        private void RefreshSkillBar(PlayerData p, bool textTick)
         {
+            // 槽位里「装的是什么」只随装备/换技能变：名字、字号、配色、强调条都跟着它走。
+            // 冷却条逐帧跟随但按 0.05px 去抖（ratio 变化 0.05% 以下不动物理尺寸），
+            // 冷却秒数按 10Hz 文本节拍写——以前这整段每帧无条件跑，六格 × 十几个属性赋值为零信息。
+            var sig = new Sig();
+            for (int i = 0; i < _skillSlotButtons.Length; i++) sig.Add(p.GetSkillSlot(i));
+            bool rebuilt = sig.Value != _sigSkillSlots;
+            if (rebuilt)
+            {
+                _sigSkillSlots = sig.Value;
+                StaticRefreshCount++;
+            }
+
+            if (_skillCdDraw == null || _skillCdDraw.Length != _skillSlotButtons.Length)
+                _skillCdDraw = new float[_skillSlotButtons.Length];
+
             for (int i = 0; i < _skillSlotButtons.Length; i++)
             {
                 int id = p.GetSkillSlot(i);
+                bool empty = id < 0 || id >= SkillCatalog.All.Length;
+                SkillDef def = empty ? null : SkillCatalog.All[id];
 
-                if (id < 0 || id >= SkillCatalog.All.Length)
+                if (rebuilt)
                 {
-                    _skillSlotLabels[i].text = "空";
-                    _skillSlotLabels[i].color = GameConfig.TextDisabled;
-                    _skillSlotStates[i].text = "";
-                    _skillSlotButtons[i].image.color = GameConfig.CardBgDim;
-                    _skillSlotFills[i].rectTransform.sizeDelta = new Vector2(0f, 6f);
-                    continue;
+                    if (empty)
+                    {
+                        _skillSlotLabels[i].text = "＋";
+                        _skillSlotLabels[i].fontSize = 16;
+                        _skillSlotLabels[i].color = GameConfig.TextDisabled;
+                        _skillSlotStates[i].text = "";
+                        _skillSlotButtons[i].image.color = GameConfig.CardBgDim;
+                        _skillSlotAccents[i].color = new Color(1f, 1f, 1f, 0.04f);
+                        _skillCdDraw[i] = 0f;
+                        _skillSlotFills[i].rectTransform.sizeDelta = new Vector2(0f, 3f);
+                        continue;
+                    }
+
+                    _skillSlotLabels[i].text = def.name;
+                    _skillSlotLabels[i].fontSize = 13;
+                    _skillSlotLabels[i].color = def.color;
+                    // 底色只给一点点技能色，主体还是深色卡；颜色靠强调条与名字承担。
+                    // 注意工程是 Linear 色彩空间，脚本给的线性值上屏会被转成 sRGB 提亮，
+                    // 12% 渲染出来接近 40% 的饱和度，所以这里压到 5%。
+                    _skillSlotButtons[i].image.color = Color.Lerp(GameConfig.CardBg, def.color, 0.05f);
+                    _skillSlotAccents[i].color = def.color;
+                    _skillSlotFills[i].color = def.color;
+
+                    if (!def.IsActive)
+                    {
+                        // 被动没有冷却：写「就绪」是错的（它一直是生效的），
+                        // 满格的冷却条也只是把底部糊成一条亮线。名字 + 强调条已经够了。
+                        _skillSlotStates[i].text = "";
+                        _skillCdDraw[i] = 0f;
+                        _skillSlotFills[i].rectTransform.sizeDelta = new Vector2(0f, 3f);
+                        continue;
+                    }
                 }
 
-                SkillDef def = SkillCatalog.All[id];
-                _skillSlotLabels[i].text = def.name;
-                _skillSlotLabels[i].color = def.color;
-                _skillSlotButtons[i].image.color =
-                    new Color(def.color.r * 0.30f, def.color.g * 0.30f, def.color.b * 0.34f);
+                if (empty || !def.IsActive) continue;
 
-                float cd = def.IsActive ? _game.SkillCooldown(i) : 0f;
+                float cd = _game.SkillCooldown(i);
                 float total = def.cooldown;
+                float width = 106f * (total > 0f ? Mathf.Clamp01(1f - cd / total) : 1f);
 
-                _skillSlotStates[i].text = cd > 0f ? $"{cd:0.0}s" : "就绪";
-                _skillSlotStates[i].color = cd > 0f ? GameConfig.FillSkillCooldown : GameConfig.FillSkillReady;
+                if (Mathf.Abs(_skillCdDraw[i] - width) > 0.05f)
+                {
+                    _skillCdDraw[i] = width;
+                    _skillSlotFills[i].rectTransform.sizeDelta = new Vector2(width, 3f);
+                }
 
-                float ratio = total > 0f ? Mathf.Clamp01(1f - cd / total) : 1f;
-                _skillSlotFills[i].rectTransform.sizeDelta = new Vector2(60f * ratio, 6f);
-                _skillSlotFills[i].color = cd > 0f
-                    ? GameConfig.AccentSlotHighlight
-                    : GameConfig.AccentSlotReady;
+                if (!textTick) continue;
+
+                string cdText = cd > 0f ? $"{cd:0.0}s" : "就绪";
+                if (_skillSlotStates[i].text == cdText) continue;
+                _skillSlotStates[i].text = cdText;
+                _skillSlotStates[i].color = cd > 0f ? GameConfig.FillSkillCooldown : GameConfig.TextDisabled;
             }
         }
 
@@ -824,7 +1174,13 @@ namespace AutoBattle
 
                 string mark = inSlot ? "▶ " : (equipped ? "● " : "");
                 string lockNote = unlocked ? "" : "（未获得）";
-                _skillPoolLabels[i].text = $"{mark}{def.name}{lockNote}\n{def.description}";
+                string adviseLine = "";
+                if (GameSettings.ShowSkillAdvice)
+                {
+                    int score = SkillAdvice.Score(p, def.id);
+                    adviseLine = $"<color=#{ColorUtility.ToHtmlStringRGB(SkillAdvice.TierColor(score))}>推荐 {score} {SkillAdvice.TierLabel(score)}</color><color=#8C99B0> │ </color>";
+                }
+                _skillPoolLabels[i].text = $"{mark}{def.name}{lockNote}\n{adviseLine}<size=12><color=#C6CEE0>{def.description}</color></size>";
 
                 if (!unlocked) _skillPoolLabels[i].color = GameConfig.TextDisabled;
                 else if (inSlot) _skillPoolLabels[i].color = GameConfig.LogGold;
@@ -842,37 +1198,65 @@ namespace AutoBattle
         private void OnAutoBuyClicked() => _game.ToggleAutoBuyPotion();
 
         /// <summary>刷新商店区：金币、价格、持有数、按钮可用态与提示文本。</summary>
-        private void RefreshShop(PlayerData p)
+        private void RefreshShop(PlayerData p, bool textTick)
         {
             int price = _game.PotionPrice;
             bool open = _game.IsShopOpen;
-
-            _shopGoldText.text = $"金币 {p.gold}";
-            _shopPotionText.text = $"生命药剂    价格 {price}    持有 {p.potionCount}/{GameConfig.PotionMaxCount}";
-
             bool canBuy = open && p.gold >= price && p.potionCount < GameConfig.PotionMaxCount;
-            _buyButton.image.color = canBuy
-                ? GameConfig.BtnPrimary
-                : GameConfig.CardBtn;
 
-            _autoBuyLabel.text = _game.AutoBuyPotion ? "[✓] 自动购买" : "[  ] 自动购买";
-            _autoBuyLabel.color = _game.AutoBuyPotion
-                ? GameConfig.LogHeal
-                : GameConfig.TextMuted;
+            // 金币每杀一只就变，所以这一区不能整段跳过；但真正要重画的只有
+            // 金币数 / 持有数 / 按钮态，且只在它们变化时才重画。
+            var sig = new Sig();
+            sig.Add(price);
+            sig.Add(p.gold);
+            sig.Add(p.potionCount);
+            sig.Add(open);
+            sig.Add(canBuy);
+            sig.Add(_game.AutoBuyPotion);
+            if (sig.Value != _sigShopState)
+            {
+                _sigShopState = sig.Value;
+                StaticRefreshCount++;
 
-            // 开放时显示倒计时；关闭时显示提示（没有提示就说明当前不开放）。
+                _shopGoldText.text = $"金币 {p.gold}";
+                _shopPotionText.text = $"生命药剂    价格 {price}    持有 {p.potionCount}/{GameConfig.PotionMaxCount}";
+
+                _buyButton.image.color = canBuy
+                    ? GameConfig.BtnPrimary
+                    : GameConfig.CardBtn;
+                // 灰按钮上写「购买」会让人以为是没做好：把按不动的原因直接写在按钮上。
+                _buyButtonLabel.text = canBuy
+                    ? "购买"
+                    : (!open ? "未开放"
+                        : (p.potionCount >= GameConfig.PotionMaxCount ? "已满" : "金币不足"));
+
+                _autoBuyLabel.text = _game.AutoBuyPotion ? "[✓] 自动购买" : "[  ] 自动购买";
+                _autoBuyLabel.color = _game.AutoBuyPotion
+                    ? GameConfig.LogHeal
+                    : GameConfig.TextMuted;
+            }
+
+            if (!textTick) return;
+
+            // 开放时显示倒计时（每 0.1 秒变一次）；关闭时显示提示（没有提示就说明当前不开放）。
+            Color tipColor;
+            string tip;
             if (open)
             {
-                _shopTipText.color = GameConfig.LogGold;
-                _shopTipText.text = $"商店开放中（剩 {_game.ShopTimeLeft:0.0} 秒）—— 精英/Boss 即将出现";
+                tipColor = GameConfig.LogGold;
+                tip = $"商店开放中（剩 {_game.ShopTimeLeft:0.0} 秒）—— 精英/Boss 即将出现";
             }
             else
             {
-                _shopTipText.color = GameConfig.LogWarn;
-                _shopTipText.text = string.IsNullOrEmpty(_game.ShopMessage)
+                tipColor = GameConfig.LogWarn;
+                tip = string.IsNullOrEmpty(_game.ShopMessage)
                     ? "商店只在精英/Boss 出现前开放"
                     : _game.ShopMessage;
             }
+
+            if (_shopTipText.text == tip) return;
+            _shopTipText.text = tip;
+            _shopTipText.color = tipColor;
         }
 
     }

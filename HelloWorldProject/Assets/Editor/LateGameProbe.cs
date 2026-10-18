@@ -30,7 +30,7 @@ namespace AutoBattle.EditorTools
 
             var battle = new BattleSystem();
             battle.BeginBattle(p);
-            var log = new List<LogEntry>();
+            var log = new BattleLog();
             string res = "未结束";
             int used = 0;
             for (int step = 0; step < 40000 && res == "未结束"; step++)
@@ -243,19 +243,30 @@ namespace AutoBattle.EditorTools
             int want = Mathf.Min(paragon / GameConfig.ParagonPassiveEvery, SkillCatalog.All.Length);
             while (p.OwnedSkillCount < want)
             {
-                if (smartPick)
+                var candidates = p.RollSkillCandidates(GameConfig.SkillChoiceCount);
+                if (candidates.Count == 0) break;
+
+                // 与游戏内 TryAutoEquip 一致：只填空槽，槽满了就只进「已获得」。
+                // 以前这里允许替换，结果巅峰 100+ 的模拟会拿 5 场评估出来的「更优技能」
+                // 把好技能换掉，胜率随巅峰非单调（P100 27%、P150 10%）。
+                bool hasEmpty = false;
+                foreach (SkillId id in candidates)
                 {
-                    // 真人会在三选一里挑最优；这里用真实战斗表现当选择依据。
-                    var candidates = p.RollSkillCandidates(GameConfig.SkillChoiceCount);
-                    if (candidates.Count == 0) break;
-                    PickAndEquipBest(p, candidates);
+                    int baseSlot = (int)SkillCatalog.Get(id).kind * GameConfig.SkillSlotsPerKind;
+                    for (int i = 0; i < GameConfig.SkillSlotsPerKind; i++)
+                        if (p.GetSkillSlot(baseSlot + i) < 0) { hasEmpty = true; break; }
+                    if (hasEmpty) break;
+                }
+
+                if (hasEmpty && smartPick)
+                {
+                    PickAndEquipBest(p, candidates);   // 真人会在三选一里挑最优（只填空槽）
                 }
                 else
                 {
-                    // 旧口径：随机直接送一个（用来做对照）。
-                    SkillId got = p.GrantRandomSkill();
-                    if ((int)got < 0) break;
-                    var def = SkillCatalog.Get(got);
+                    SkillId got = candidates[0];
+                    if (!p.GrantSkill(got)) break;
+                    SkillDef def = SkillCatalog.Get(got);
                     int baseSlot = (int)def.kind * GameConfig.SkillSlotsPerKind;
                     for (int i = 0; i < GameConfig.SkillSlotsPerKind; i++)
                     {
@@ -500,7 +511,7 @@ namespace AutoBattle.EditorTools
                     var m = MonsterData.CreateForLevel(GameConfig.MaxTierLevel, MonsterType.Ranged, MonsterTier.Boss, MonsterAffix.None);
                     p.FillHp();
                     b.BeginBattle(p);
-                    var log = new List<LogEntry>();
+                    var log = new BattleLog();
                     float t = 0f;
                     for (int s = 0; s < 150000; s++)
                     {
@@ -598,7 +609,7 @@ namespace AutoBattle.EditorTools
         static float DummyDamage(PlayerData p, float seconds)
         {
             var b = new BattleSystem();
-            var log = new List<LogEntry>();
+            var log = new BattleLog();
             var m = MonsterData.CreateForLevel(GameConfig.MaxTierLevel, MonsterType.Melee, MonsterTier.Boss, MonsterAffix.None);
             p.FillHp();
             b.BeginBattle(p);
@@ -720,7 +731,7 @@ namespace AutoBattle.EditorTools
             seconds = 0f;
             if (resetHp) p.FillHp();
             battle.BeginBattle(p);
-            var log = new List<LogEntry>();
+            var log = new BattleLog();
             float cd = 0f;
             int left = GameConfig.PotionMaxCount;
             for (int s = 0; s < 150000; s++)
@@ -834,7 +845,7 @@ namespace AutoBattle.EditorTools
         static float SurvivalSeconds(PlayerData p, int monsterLevel, float monsterHpScale = 1f)
         {
             var b = new BattleSystem();
-            var log = new List<LogEntry>();
+            var log = new BattleLog();
             var m = MonsterData.CreateForLevel(monsterLevel, MonsterType.Melee, MonsterTier.Boss, MonsterAffix.None);
             if (monsterHpScale != 1f)
             {

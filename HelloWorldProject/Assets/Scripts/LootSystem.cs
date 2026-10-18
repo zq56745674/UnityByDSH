@@ -126,23 +126,41 @@ namespace AutoBattle
 
         /// <summary>
         /// 按品质给装备挂副词条：条数在 EquipAffixCountMin ~ Max 之间随机
-        /// （普通 1 / 优秀 1~2 / 稀有 2 / 史诗 3 / 传说 4）。
-        /// 从词条池里洗牌抽取，所以同一件装备内不会重复；
-        /// 数值 = 基础随机值 × (1 + 装备等级 × EquipAffixLevelScale)，**不乘品质倍率**。
+        /// （普通 1 / 优秀 1~2 / 稀有 2 / 史诗 3 / 传说 4），再按该条数抽内容。
         /// </summary>
         private static void RollAffixes(Equipment e, int level)
         {
             int q = (int)e.quality;
             // Random.Range 的 int 重载上界不含，所以 +1 才能取到上限。
             int count = Random.Range(GameConfig.EquipAffixCountMin[q], GameConfig.EquipAffixCountMax[q] + 1);
+            RollAffixes(e, level, count);
+        }
+
+        /// <summary>
+        /// 按指定条数抽副词条：从词条池里洗牌抽取，所以同一件装备内不会重复；
+        /// 数值 = 基础随机值 × (1 + 装备等级 × EquipAffixLevelScale)，**不乘品质倍率**。
+        /// 掉落与洗练共用这一段，保证两者分布完全一致——洗练不能掷出比掉落更强的词条，
+        /// 否则「洗练」就成了绕过掉落天花板的第二条成长轴。
+        /// </summary>
+        private static void RollAffixes(Equipment e, int level, int count, int excludedMask = 0)
+        {
             if (count <= 0) return;
 
             int poolSize = GameConfig.EquipAffixNames.Length;
+
+            // 池子里先剔掉 excludedMask 上的种类（锁住的词条），再洗牌。
+            // 这样「未锁的条数」永远能从剩下的种类里无重复抽满，也不会和锁住的撞种类。
             int[] pool = new int[poolSize];
-            for (int i = 0; i < poolSize; i++) pool[i] = i;
+            int available = 0;
+            for (int i = 0; i < poolSize; i++)
+            {
+                if ((excludedMask & (1 << i)) != 0) continue;
+                pool[available++] = i;
+            }
+            if (available <= 0) return;
 
             // Fisher-Yates 洗牌后取前 count 个，天然不重复。
-            for (int i = poolSize - 1; i > 0; i--)
+            for (int i = available - 1; i > 0; i--)
             {
                 int j = Random.Range(0, i + 1);
                 int tmp = pool[i];
@@ -152,21 +170,54 @@ namespace AutoBattle
 
             float levelScale = 1f + level * GameConfig.EquipAffixLevelScale;
 
-            for (int i = 0; i < count && i < poolSize; i++)
+            for (int i = 0; i < count && i < available; i++)
             {
                 int kind = pool[i];
                 float baseValue = Random.Range(GameConfig.EquipAffixMin[kind], GameConfig.EquipAffixMax[kind]);
-                float value = baseValue * levelScale;
-
-                switch ((EquipmentAffix)kind)
-                {
-                    case EquipmentAffix.CritChance: e.affixCritChance = value; break;
-                    case EquipmentAffix.CritDamage: e.affixCritDamage = value; break;
-                    case EquipmentAffix.AttackSpeed: e.affixAttackSpeed = value; break;
-                    case EquipmentAffix.AllStats: e.affixAllStats = value; break;
-                    case EquipmentAffix.ArmorPen: e.affixArmorPen = value; break;
-                }
+                SetAffix(e, (EquipmentAffix)kind, baseValue * levelScale);
             }
+        }
+
+        /// <summary>按词条种类写值（掉落、洗练、洗练前的清零共用一处 switch）。</summary>
+        private static void SetAffix(Equipment e, EquipmentAffix kind, float value)
+        {
+            switch (kind)
+            {
+                case EquipmentAffix.CritChance: e.affixCritChance = value; break;
+                case EquipmentAffix.CritDamage: e.affixCritDamage = value; break;
+                case EquipmentAffix.AttackSpeed: e.affixAttackSpeed = value; break;
+                case EquipmentAffix.AllStats: e.affixAllStats = value; break;
+                case EquipmentAffix.ArmorPen: e.affixArmorPen = value; break;
+            }
+        }
+
+        /// <summary>洗练：重抽全部副词条（不锁词条的旧口径，等价于 lockedMask = 0）。</summary>
+        public static void ReforgeAffixes(Equipment e) => ReforgeAffixes(e, 0);
+
+        /// <summary>
+        /// 洗练：重抽**没被锁住**的副词条，锁住的那几条原样保留。
+        /// 条数取当前实际条数（不是品质区间），所以优秀品质的 1~2 条不会被洗少；
+        /// 主属性、武器主词条、品质、强化等级都不动——那些是强化轴与品质身份，不属于洗练。
+        /// <paramref name="lockedMask"/> 是 EquipmentAffix 的位掩码（见 Equipment.AffixBit）；
+        /// 只会清空「存在且未锁」的字段，所以全锁时这里什么都不做（调用方本该先拦住）。
+        /// </summary>
+        public static void ReforgeAffixes(Equipment e, int lockedMask)
+        {
+            if (e == null || !e.CanReforge) return;
+
+            int present = e.PresentAffixMask;
+            int locked = lockedMask & present;
+            int freeCount = e.AffixCount - e.LockedAffixCount(locked);
+            if (freeCount <= 0) return;
+
+            for (int i = 0; i < GameConfig.EquipAffixNames.Length; i++)
+            {
+                int bit = 1 << i;
+                if ((present & bit) == 0 || (locked & bit) != 0) continue;
+                SetAffix(e, (EquipmentAffix)i, 0f);
+            }
+
+            RollAffixes(e, e.level, freeCount, locked);
         }
     }
 }
