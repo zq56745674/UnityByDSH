@@ -92,23 +92,50 @@ namespace AutoBattle
         /// <summary>攻击间隔基准值，速度参与换算（要求 5）。</summary>
         public static float AttackIntervalBase = 2.0f;
 
-        /// <summary>速度换算除数：攻击间隔 = Base / (1 + Speed / Divisor)。</summary>
+        /// <summary>速度换算除数：基础攻速 = (1 + Speed / Divisor) / Base。</summary>
         public static float AttackSpeedDivisor = 20f;
 
         /// <summary>
-        /// 攻击间隔下限 = 0.2 秒，即**任何单位每秒最多出手 5 次**。
-        /// 速度对间隔是非线性的，不封顶的话高速度怪物（如 Lv.110 的弓箭手）
-        /// 能压到 0.13 秒/次，DPS 直接翻倍。主角与怪物共用这一条。
+        /// 攻速软上限（次/秒）：低于它的攻速完全线性；超过后改走渐近曲线，
+        /// 只继续收窄到 <see cref="AttackSpeedHardCap"/>。这样高速度 / 多攻速词条
+        /// 不会像旧公式那样在 5 次/秒处硬撞墙，也不会让「多一条攻速」变成零收益。
+        /// </summary>
+        public static float AttackSpeedSoftCap = 3.5f;
+
+        /// <summary>攻速渐近上限（次/秒）：软上限之后永远到不了这个值，但可以无限接近。</summary>
+        public static float AttackSpeedHardCap = 5.0f;
+
+        /// <summary>
+        /// 攻击间隔绝对下限。正常情况下由攻速硬上限（1/5=0.2s）决定；
+        /// 保留这个字段是给极端配置兜底，避免浮点误差把间隔压到 0。
         /// </summary>
         public static float MinAttackInterval = 0.2f;
 
-        /// <summary>由速度换算单次攻击间隔（要求 5：速度影响攻击间隔）。</summary>
-        public static float AttackInterval(float speed)
+        /// <summary>
+        /// 由速度与攻速加成换算每秒出手次数：
+        /// 先算线性部分 raw = (1 + Speed/Divisor) / Base × (1 + 攻速加成)，
+        /// 低于软上限直接使用；超过后按 1-exp 渐近到硬上限。
+        /// 攻速加成必须在软上限之前乘进去，不能先压基础攻速再乘。
+        /// </summary>
+        public static float AttacksPerSecond(float speed, float haste = 0f)
         {
-            // 配置加载时已经夹过，这里再兜一层：运行时热改 / 编辑器探针直接写字段时也不能除零或死循环。
             float baseInterval = Mathf.Max(0.01f, AttackIntervalBase);
             float divisor = Mathf.Max(0.01f, AttackSpeedDivisor);
-            return Mathf.Max(Mathf.Max(0.01f, MinAttackInterval), baseInterval / (1f + speed / divisor));
+            float raw = (1f + Mathf.Max(0f, speed) / divisor) / baseInterval
+                * (1f + Mathf.Max(0f, haste));
+
+            float soft = Mathf.Max(0.1f, AttackSpeedSoftCap);
+            float hard = Mathf.Max(soft + 0.01f, AttackSpeedHardCap);
+            if (raw <= soft) return raw;
+            return soft + (hard - soft) * (1f - Mathf.Exp(-(raw - soft) / (hard - soft)));
+        }
+
+        /// <summary>由速度与攻速加成换算单次攻击间隔（要求 5：速度影响攻击间隔）。</summary>
+        public static float AttackInterval(float speed, float haste = 0f)
+        {
+            float rate = AttacksPerSecond(speed, haste);
+            float interval = 1f / Mathf.Max(0.01f, rate);
+            return Mathf.Max(Mathf.Max(0.01f, MinAttackInterval), interval);
         }
 
         // ==================== 主角成长 ====================
@@ -293,6 +320,12 @@ namespace AutoBattle
         /// <summary>击杀后掉落装备的概率：30%。</summary>
         public static float DropChance = 0.30f;
 
+        /// <summary>每多一个已解锁装备槽，普通怪掉落率增加多少（2 槽 0.30、4 槽 0.40、5 槽 0.45）。</summary>
+        public static float DropChancePerExtraSlot = 0.05f;
+
+        /// <summary>掉落时强制指向「空槽或评分最弱槽」的概率（智能掉落），其余均匀随机。</summary>
+        public static float SmartDropChance = 0.30f;
+
         /// <summary>
         /// 把品质收进固定表范围。正常掉落/读档已经清洗过品质，但公开 API
         /// 仍可能收到直接构造的越界值；越界时回落到普通品质（而不是夹到最高档，
@@ -444,6 +477,42 @@ namespace AutoBattle
         public static float ArmorDefensePerLevel = 1.2f;
         public static int ArmorBaseHp = 20;
         public static float ArmorHpPerLevel = 8f;
+
+        // ==================== 头盔 / 鞋 / 饰品（2026-10 五槽） ====================
+        // 小件主属性按「同等级衣服」的比例给，并统一乘品质倍率；
+        // 鞋的速度刻意不乘品质倍率，否则传说鞋一件就能给 +35 速度，把攻速曲线整条冲掉。
+
+        /// <summary>头盔生命 = 该系数 × 衣服生命基础值。</summary>
+        public static float HelmetHpFactor = 0.25f;
+
+        /// <summary>头盔防御 = 该系数 × 衣服防御基础值。</summary>
+        public static float HelmetDefenseFactor = 0.12f;
+
+        /// <summary>鞋的基础速度（+0 普通）。</summary>
+        public static int BootsBaseSpeed = 3;
+        public static float BootsSpeedPerLevel = 0.02f;
+        public static float BootsSpeedPerQuality = 0.75f;
+
+        /// <summary>鞋的攻速加成 = 基础 + 每级成长，再乘品质档位系数；与速度一样不乘品质倍率。</summary>
+        public static float BootsBaseHaste = 0.012f;
+        public static float BootsHastePerLevel = 0.00005f;
+        public static float BootsHastePerQuality = 0.15f;
+
+        /// <summary>饰品暴击伤害 = 基础 + 每级成长，再乘品质倍率。</summary>
+        public static float AccessoryBaseCritDamage = 0.012f;
+        public static float AccessoryCritDamagePerLevel = 0.0002f;
+
+        /// <summary>饰品护甲穿透 = 基础 + 每级成长，再乘品质倍率。</summary>
+        public static float AccessoryBaseArmorPen = 0.005f;
+        public static float AccessoryArmorPenPerLevel = 0.00005f;
+
+        /// <summary>小件副词条的数值缩放（大件 1.0，小件 0.5）。</summary>
+        public static float MinorAffixScale = 0.5f;
+
+        /// <summary>头盔 / 鞋 / 饰品解锁所需通关的章节（3-10 / 6-10 / 11-10）。</summary>
+        public static int HelmetUnlockChapter = 3;
+        public static int BootsUnlockChapter = 6;
+        public static int AccessoryUnlockChapter = 11;
 
         // ==================== 装备副词条 ====================
 

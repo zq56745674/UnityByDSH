@@ -47,7 +47,7 @@ namespace AutoBattle
         public static float Of(PlayerData player, Equipment candidate, EquipmentSlot slot)
         {
             if (player == null || candidate == null) return 0f;
-            if (slot != EquipmentSlot.Weapon && slot != EquipmentSlot.Armor) return 0f;
+            if (slot != candidate.slot) return 0f;
 
             Equipment old = player.GetEquipment(slot);
             try
@@ -59,7 +59,7 @@ namespace AutoBattle
             }
             finally
             {
-                // PutOn 直接改 player.weapon/armor（不是拷贝），异常逃出去就等于永久丢装备，
+                // PutOn 直接改 player 的五个装备槽（不是拷贝），异常逃出去就等于永久丢装备，
                 // 所以还原必须放在 finally 里。
                 PutOn(player, slot, old);
             }
@@ -67,9 +67,9 @@ namespace AutoBattle
 
         /// <summary>
         /// 生存折算系数：有效生命 ÷ 这个数之后才和期望 DPS 相加。
-        /// 取 8 是照着当前数值平衡定的标——除以它之后，两个槽位的增量评分大致同量级，
-        /// 玩家跨槽位看评分不会误以为衣服「差一截」。它不影响同槽位比较的结果：
-        /// 武器不改变有效生命、衣服不改变 DPS，所以比较时这一项在同槽位内是常数。
+        /// 取 8 是照着当前数值平衡定的标——除以它之后，各槽位的增量评分大致同量级，
+        /// 玩家跨槽位看评分不会误以为头盔/鞋「差一截」。它不影响同槽位比较的结果：
+        /// 单个槽位的换装对 DPS 与有效生命的影响各自固定，所以这一项在同槽位内是常数。
         /// （具体量级别再往注释里抄数字：改平衡时它们必然漂移，看代码里的常量即可。）
         /// </summary>
         public const float SurvivabilityDivisor = 8f;
@@ -101,8 +101,14 @@ namespace AutoBattle
         /// <summary>PlayerData.SetEquipment 会忽略 null，但评分要能还原「原本空槽」的状态。</summary>
         static void PutOn(PlayerData player, EquipmentSlot slot, Equipment e)
         {
-            if (slot == EquipmentSlot.Weapon) player.weapon = e;
-            else if (slot == EquipmentSlot.Armor) player.armor = e;
+            switch (slot)
+            {
+                case EquipmentSlot.Weapon: player.weapon = e; break;
+                case EquipmentSlot.Armor: player.armor = e; break;
+                case EquipmentSlot.Helmet: player.helmet = e; break;
+                case EquipmentSlot.Boots: player.boots = e; break;
+                case EquipmentSlot.Accessory: player.accessory = e; break;
+            }
         }
     }
 }

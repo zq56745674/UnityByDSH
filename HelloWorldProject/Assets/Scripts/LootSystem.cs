@@ -8,8 +8,16 @@ namespace AutoBattle
     /// </summary>
     public static class LootSystem
     {
-        /// <summary>是否掉落装备（30% 概率，见 GameConfig.DropChance）。</summary>
-        public static bool RollDrop() => Random.value < GameConfig.DropChance;
+        /// <summary>
+        /// 是否掉落装备：基础 30%，每多解锁一个槽位 +5%（4 槽 40%、5 槽 45%）。
+        /// 旧的两槽调用方不传参时仍按 30% 走，行为不变。
+        /// </summary>
+        public static bool RollDrop(int unlockedSlots = 2)
+        {
+            int extra = Mathf.Max(0, unlockedSlots - 2);
+            float chance = GameConfig.DropChance + GameConfig.DropChancePerExtraSlot * extra;
+            return Random.value < Mathf.Clamp01(chance);
+        }
 
         /// <summary>高品质 = 稀有及以上；精英/Boss 的爆率加成只作用于这三档。</summary>
         public static bool IsHighQuality(EquipmentQuality quality) => quality >= EquipmentQuality.Rare;
@@ -57,11 +65,53 @@ namespace AutoBattle
             return IsHighQuality((EquipmentQuality)index) ? w * boosted : w;
         }
 
-        /// <summary>随机槽位（武器或衣服）并生成一件装备。</summary>
-        public static Equipment CreateRandomEquipment(int playerLevel, float highQualityBonus = 0f)
+        /// <summary>
+        /// 随机槽位并生成一件装备。player 不为空时只在已解锁槽位里抽，
+        /// 并且有 SmartDropChance 的概率把这一件硬塞给「空槽 / 当前评分最低的槽」，
+        /// 避免五槽时代玩家永远刷不到缺的那一件。
+        /// </summary>
+        public static Equipment CreateRandomEquipment(int playerLevel, float highQualityBonus = 0f,
+            PlayerData player = null)
         {
-            EquipmentSlot slot = Random.value < 0.5f ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
+            EquipmentSlot slot = RollSlot(player);
             return CreateEquipment(slot, playerLevel, RollQuality(highQualityBonus));
+        }
+
+        /// <summary>抽一个掉落槽位：智能掉落优先空槽，其次当前评分最低的槽。</summary>
+        private static EquipmentSlot RollSlot(PlayerData player)
+        {
+            if (player == null) return EquipmentSlots.All[Random.Range(0, EquipmentSlots.Count)];
+
+            var unlocked = new System.Collections.Generic.List<EquipmentSlot>(EquipmentSlots.Count);
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                EquipmentSlot s = EquipmentSlots.All[i];
+                if (player.IsEquipmentSlotUnlocked(s)) unlocked.Add(s);
+            }
+            if (unlocked.Count == 0) return EquipmentSlot.Weapon;
+            if (unlocked.Count <= 2 || Random.value >= GameConfig.SmartDropChance)
+                return unlocked[Random.Range(0, unlocked.Count)];
+
+            // 空槽优先：设计目标是「缺哪件补哪件」，不是按最低分去堆已经很强的那件。
+            var empty = new System.Collections.Generic.List<EquipmentSlot>();
+            for (int i = 0; i < unlocked.Count; i++)
+                if (player.GetEquipment(unlocked[i]) == null) empty.Add(unlocked[i]);
+            if (empty.Count > 0) return empty[Random.Range(0, empty.Count)];
+
+            EquipmentSlot weakest = unlocked[0];
+            float weakestScore = float.MaxValue;
+            for (int i = 0; i < unlocked.Count; i++)
+            {
+                EquipmentSlot s = unlocked[i];
+                Equipment cur = player.GetEquipment(s);
+                float score = cur == null ? 0f : EquipmentScore.Of(player, cur, s);
+                if (score < weakestScore)
+                {
+                    weakestScore = score;
+                    weakest = s;
+                }
+            }
+            return weakest;
         }
 
         /// <summary>
@@ -91,15 +141,17 @@ namespace AutoBattle
         }
 
         /// <summary>按指定等级与品质权重生成一件装备（精英 / Boss 的保底掉落，等级取怪物自身等级）。</summary>
-        public static Equipment CreateEquipmentAtLevel(int level, float[] qualityWeights)
+        public static Equipment CreateEquipmentAtLevel(int level, float[] qualityWeights, PlayerData player = null)
         {
-            EquipmentSlot slot = Random.value < 0.5f ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
+            EquipmentSlot slot = RollSlot(player);
             return CreateEquipment(slot, level, RollQualityWithWeights(qualityWeights));
         }
 
         /// <summary>
         /// 生成指定槽位/品质的装备（要求 13）。
-        /// 武器加攻击、暴击率、暴击伤害；衣服加防御和生命，**不加暴击**（要求 10）。
+        /// 武器加攻击与暴击率/暴击伤害；衣服加防御和生命，**不加暴击**（要求 10）；
+        /// 头盔加生命与防御（小衣服），鞋加速度与攻速（速度不吃随机倍率），
+        /// 饰品加暴击伤害与护甲穿透。小件副词条数值减半且永久排除暴击率。
         /// 属性倍率每次生成时在品质区间内随机抽取，所以同品质的装备也有好坏之分。
         /// </summary>
         public static Equipment CreateEquipment(EquipmentSlot slot, int level, EquipmentQuality quality)
@@ -117,27 +169,63 @@ namespace AutoBattle
                 quality = quality,
                 level = level,
                 qualityMultiplier = multiplier,
+                affixScale = EquipmentSlots.IsMinor(slot) ? GameConfig.MinorAffixScale : 1f,
             };
 
-            if (slot == EquipmentSlot.Weapon)
+            switch (slot)
             {
-                float atk = GameConfig.WeaponBaseAttack + GameConfig.WeaponAttackPerLevel * steps;
-                e.attack = Mathf.Max(1, Mathf.RoundToInt(atk * multiplier));
+                case EquipmentSlot.Weapon:
+                {
+                    float atk = GameConfig.WeaponBaseAttack + GameConfig.WeaponAttackPerLevel * steps;
+                    e.attack = Mathf.Max(1, Mathf.RoundToInt(atk * multiplier));
 
-                // 主词条除攻击外，再随机给「暴击率」或「暴击伤害」其中一个（各 50%，不会同时出现）。
-                // 数值沿用原公式：基础 + 每级成长，再乘品质倍率。
-                float critChance = (GameConfig.WeaponBaseCritChance + GameConfig.WeaponCritChancePerLevel * steps) * multiplier;
-                float critDamage = (GameConfig.WeaponBaseCritDamage + GameConfig.WeaponCritDamagePerLevel * steps) * multiplier;
+                    // 主词条除攻击外，再随机给「暴击率」或「暴击伤害」其中一个（各 50%，不会同时出现）。
+                    // 数值沿用原公式：基础 + 每级成长，再乘品质倍率。
+                    float critChance = (GameConfig.WeaponBaseCritChance + GameConfig.WeaponCritChancePerLevel * steps) * multiplier;
+                    float critDamage = (GameConfig.WeaponBaseCritDamage + GameConfig.WeaponCritDamagePerLevel * steps) * multiplier;
 
-                if (Random.value < 0.5f) e.critChance = critChance;
-                else e.critDamage = critDamage;
-            }
-            else
-            {
-                float def = GameConfig.ArmorBaseDefense + GameConfig.ArmorDefensePerLevel * steps;
-                float hp = GameConfig.ArmorBaseHp + GameConfig.ArmorHpPerLevel * steps;
-                e.defense = Mathf.Max(1, Mathf.RoundToInt(def * multiplier));
-                e.hp = Mathf.Max(1, Mathf.RoundToInt(hp * multiplier));
+                    if (Random.value < 0.5f) e.critChance = critChance;
+                    else e.critDamage = critDamage;
+                    break;
+                }
+                case EquipmentSlot.Armor:
+                {
+                    float def = GameConfig.ArmorBaseDefense + GameConfig.ArmorDefensePerLevel * steps;
+                    float hp = GameConfig.ArmorBaseHp + GameConfig.ArmorHpPerLevel * steps;
+                    e.defense = Mathf.Max(1, Mathf.RoundToInt(def * multiplier));
+                    e.hp = Mathf.Max(1, Mathf.RoundToInt(hp * multiplier));
+                    break;
+                }
+                case EquipmentSlot.Helmet:
+                {
+                    // 头盔是「小衣服」：生命 25%、防御 12% 的衣服数值，定位有效生命。
+                    float def = (GameConfig.ArmorBaseDefense + GameConfig.ArmorDefensePerLevel * steps)
+                              * GameConfig.HelmetDefenseFactor;
+                    float hp = (GameConfig.ArmorBaseHp + GameConfig.ArmorHpPerLevel * steps)
+                             * GameConfig.HelmetHpFactor;
+                    e.defense = Mathf.Max(1, Mathf.RoundToInt(def * multiplier));
+                    e.hp = Mathf.Max(1, Mathf.RoundToInt(hp * multiplier));
+                    break;
+                }
+                case EquipmentSlot.Boots:
+                {
+                    // 速度按品质档位加，不乘随机倍率（否则传说鞋能凭空 +35 速度）。
+                    int q = (int)quality;
+                    e.speed = Mathf.Max(0, Mathf.RoundToInt(
+                        GameConfig.BootsBaseSpeed + GameConfig.BootsSpeedPerLevel * steps
+                        + GameConfig.BootsSpeedPerQuality * q));
+                    e.haste = (GameConfig.BootsBaseHaste + GameConfig.BootsHastePerLevel * steps)
+                            * (1f + GameConfig.BootsHastePerQuality * q);
+                    break;
+                }
+                case EquipmentSlot.Accessory:
+                {
+                    e.critDamage = (GameConfig.AccessoryBaseCritDamage
+                                  + GameConfig.AccessoryCritDamagePerLevel * steps) * multiplier;
+                    e.armorPen = (GameConfig.AccessoryBaseArmorPen
+                                + GameConfig.AccessoryArmorPenPerLevel * steps) * multiplier;
+                    break;
+                }
             }
 
             RollAffixes(e, level);
@@ -146,13 +234,24 @@ namespace AutoBattle
 
         /// <summary>
         /// 按品质给装备挂副词条：条数在 EquipAffixCountMin ~ Max 之间随机
-        /// （普通 1 / 优秀 1~2 / 稀有 2 / 史诗 3 / 传说 4），再按该条数抽内容。
+        /// 大件按 EquipAffixCountMin~Max（普通 1 / 优秀 1~2 / 稀有 2 / 史诗 3 / 传说 4），
+        /// 小件固定更少（普通 1 / 优秀 1~2 / 稀有以上 2），再按该条数抽内容。
         /// </summary>
         private static void RollAffixes(Equipment e, int level)
         {
             int q = (int)GameConfig.ClampQuality(e.quality);
-            // Random.Range 的 int 重载上界不含，所以 +1 才能取到上限。
-            int count = Random.Range(GameConfig.EquipAffixCountMin[q], GameConfig.EquipAffixCountMax[q] + 1);
+            int count;
+            if (EquipmentSlots.IsMinor(e.slot))
+            {
+                // 小件：普通 1 条、优秀 1~2 条、稀有以上 2 条。词条少而数值减半，
+                // 五件套加起来才不会把暴击/攻速/穿甲全部顶满。
+                count = q <= 0 ? 1 : q == 1 ? Random.Range(1, 3) : 2;
+            }
+            else
+            {
+                // Random.Range 的 int 重载上界不含，所以 +1 才能取到上限。
+                count = Random.Range(GameConfig.EquipAffixCountMin[q], GameConfig.EquipAffixCountMax[q] + 1);
+            }
             RollAffixes(e, level, count);
         }
 
@@ -167,14 +266,17 @@ namespace AutoBattle
             if (count <= 0) return;
 
             int poolSize = GameConfig.EquipAffixNames.Length;
+            bool minor = EquipmentSlots.IsMinor(e.slot);
 
             // 池子里先剔掉 excludedMask 上的种类（锁住的词条），再洗牌。
-            // 这样「未锁的条数」永远能从剩下的种类里无重复抽满，也不会和锁住的撞种类。
+            // 小件永久排除暴击率：五槽都给暴击率会让暴击率溢出到 100% 以上，
+            // 副词条池的其他项反而没人要。
             int[] pool = new int[poolSize];
             int available = 0;
             for (int i = 0; i < poolSize; i++)
             {
                 if ((excludedMask & (1 << i)) != 0) continue;
+                if (minor && i == (int)EquipmentAffix.CritChance) continue;
                 pool[available++] = i;
             }
             if (available <= 0) return;
@@ -194,7 +296,9 @@ namespace AutoBattle
             {
                 int kind = pool[i];
                 float baseValue = Random.Range(GameConfig.EquipAffixMin[kind], GameConfig.EquipAffixMax[kind]);
-                SetAffix(e, (EquipmentAffix)kind, baseValue * levelScale);
+                // 小件数值按 affixScale 缩放；AffixQuality 会再除回来，质量百分位仍然可读。
+                SetAffix(e, (EquipmentAffix)kind,
+                    baseValue * levelScale * Mathf.Max(0.01f, e.affixScale));
             }
         }
 

@@ -191,6 +191,15 @@ namespace AutoBattle
 
         public Equipment weapon;
         public Equipment armor;
+        public Equipment helmet;
+        public Equipment boots;
+        public Equipment accessory;
+
+        /// <summary>
+        /// 哪些槽位的「解锁赠礼」已经发过（位 = EquipmentSlot）。
+        /// 防止读档/重开反复送同一件新手装备；旧存档没有这个字段时为 0。
+        /// </summary>
+        public int slotStarterMask;
 
         // ---- 基础属性（仅由等级决定）----
 
@@ -201,28 +210,37 @@ namespace AutoBattle
 
         // ---- 最终属性（基础 + 装备）----
 
-        /// <summary>副词条汇总：攻击速度加成（武器 + 衣服）。</summary>
-        public float EquipAttackSpeedBonus => (weapon != null ? weapon.affixAttackSpeed : 0f)
-                                             + (armor != null ? armor.affixAttackSpeed : 0f);
+        /// <summary>对五个槽位做一次汇总；空槽按 0 处理。</summary>
+        private float SumEquipment(Func<Equipment, float> pick)
+        {
+            float sum = 0f;
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                Equipment e = GetEquipment(EquipmentSlots.All[i]);
+                if (e != null) sum += pick(e);
+            }
+            return sum;
+        }
+
+        /// <summary>攻击速度加成 = 五槽副词条 + 鞋主属性（强化后）+ 迅捷被动。</summary>
+        public float EquipAttackSpeedBonus => SumEquipment(e => e.affixAttackSpeed)
+                                            + (boots != null ? boots.EnhancedHaste : 0f);
 
         /// <summary>副词条汇总：全属性加成，按比例同时放大攻击、防御、生命。</summary>
-        public float AllStatsBonus => (weapon != null ? weapon.affixAllStats : 0f)
-                                    + (armor != null ? armor.affixAllStats : 0f);
+        public float AllStatsBonus => SumEquipment(e => e.affixAllStats);
 
         /// <summary>副词条汇总：暴击率。</summary>
-        public float AffixCritChance => (weapon != null ? weapon.affixCritChance : 0f)
-                                      + (armor != null ? armor.affixCritChance : 0f);
+        public float AffixCritChance => SumEquipment(e => e.affixCritChance);
 
         /// <summary>副词条汇总：暴击伤害。</summary>
-        public float AffixCritDamage => (weapon != null ? weapon.affixCritDamage : 0f)
-                                      + (armor != null ? armor.affixCritDamage : 0f);
+        public float AffixCritDamage => SumEquipment(e => e.affixCritDamage);
 
         /// <summary>
-        /// 副词条汇总：护甲穿透（0.1 表示无视目标 10% 防御）。
+        /// 护甲穿透（0.1 表示无视目标 10% 防御）= 副词条 + 饰品主属性（强化后）。
         /// 上限 80% —— 与暴击率 95% 上限同理，避免「完全无视防御」把防御属性变成废纸。
         /// </summary>
         public float ArmorPenetration => Mathf.Min(0.8f,
-            (weapon != null ? weapon.affixArmorPen : 0f) + (armor != null ? armor.affixArmorPen : 0f));
+            SumEquipment(e => e.affixArmorPen) + (accessory != null ? accessory.EnhancedArmorPen : 0f));
 
         // ==================== 巅峰与技能汇总 ====================
 
@@ -287,19 +305,23 @@ namespace AutoBattle
         // 全属性作用在「基础 + 装备」之和上；防御再吃一次钢铁之躯；巅峰加成是纯加算。
         // 装备进公式用的是 Enhanced*（强化后主属性），强化等级因此会自动流进
         // 角色属性 → 战斗 → EquipmentScore 评分，自动换装不需要任何额外改动。
-        public int MaxHp => Mathf.RoundToInt((BaseMaxHp + (armor != null ? armor.EnhancedHp : 0)) * (1f + AllStatsBonus))
+        public int MaxHp => Mathf.RoundToInt((BaseMaxHp
+                              + (armor != null ? armor.EnhancedHp : 0)
+                              + (helmet != null ? helmet.EnhancedHp : 0)) * (1f + AllStatsBonus))
                           + ParagonHpBonus;
 
         public int Attack => Mathf.RoundToInt((BaseAttack + (weapon != null ? weapon.EnhancedAttack : 0)) * (1f + AllStatsBonus))
                            + ParagonAttackBonus;
 
         public int Defense => Mathf.RoundToInt(
-                                Mathf.RoundToInt((BaseDefense + (armor != null ? armor.EnhancedDefense : 0)) * (1f + AllStatsBonus))
+                                Mathf.RoundToInt((BaseDefense
+                                    + (armor != null ? armor.EnhancedDefense : 0)
+                                    + (helmet != null ? helmet.EnhancedDefense : 0)) * (1f + AllStatsBonus))
                                 * (1f + SkillDefenseBonus))
                             + ParagonDefenseBonus;
 
-        /// <summary>速度本身不受全属性影响；攻速词条走独立的「攻击间隔乘区」。</summary>
-        public int Speed => BaseSpeed;
+        /// <summary>速度本身不受全属性影响；鞋的主属性直接加算，攻速词条走独立的「攻击间隔乘区」。</summary>
+        public int Speed => BaseSpeed + (boots != null ? boots.EnhancedSpeed : 0);
 
         /// <summary>暴击率 = 初始 5% + 武器主属性 + 副词条 + 狂暴之心，并夹在 MaxCritChance 以内。</summary>
         public float CritChance => Mathf.Min(
@@ -307,9 +329,11 @@ namespace AutoBattle
             GameConfig.PlayerBaseCritChance + (weapon != null ? weapon.critChance : 0f)
             + AffixCritChance + SkillCritChanceBonus);
 
-        /// <summary>暴击伤害倍率 =（初始 150% + 武器主属性 + 副词条）× 致命打击乘区。</summary>
+        /// <summary>暴击伤害倍率 =（初始 150% + 武器主属性 + 饰品主属性 + 副词条）× 致命打击乘区。</summary>
         public float CritDamage => (GameConfig.PlayerBaseCritDamage
-                                 + (weapon != null ? weapon.critDamage : 0f) + AffixCritDamage)
+                                 + (weapon != null ? weapon.critDamage : 0f)
+                                 + (accessory != null ? accessory.EnhancedCritDamage : 0f)
+                                 + AffixCritDamage)
                                  * (1f + SkillCritDamageBonus);
 
         /// <summary>当前等级升到下一级所需经验；满级返回 0（要求 3）。</summary>
@@ -339,13 +363,67 @@ namespace AutoBattle
         /// <summary>把当前生命补齐到上限（新开档或升级后调用）。</summary>
         public void FillHp() => currentHp = MaxHp;
 
-        public Equipment GetEquipment(EquipmentSlot s) => s == EquipmentSlot.Weapon ? weapon : armor;
+        public Equipment GetEquipment(EquipmentSlot s)
+        {
+            switch (s)
+            {
+                case EquipmentSlot.Weapon: return weapon;
+                case EquipmentSlot.Armor: return armor;
+                case EquipmentSlot.Helmet: return helmet;
+                case EquipmentSlot.Boots: return boots;
+                case EquipmentSlot.Accessory: return accessory;
+                default: return null;
+            }
+        }
 
         public void SetEquipment(Equipment e)
         {
             if (e == null) return;
-            if (e.slot == EquipmentSlot.Weapon) weapon = e;
-            else armor = e;
+            switch (e.slot)
+            {
+                case EquipmentSlot.Weapon: weapon = e; break;
+                case EquipmentSlot.Armor: armor = e; break;
+                case EquipmentSlot.Helmet: helmet = e; break;
+                case EquipmentSlot.Boots: boots = e; break;
+                case EquipmentSlot.Accessory: accessory = e; break;
+            }
+        }
+
+        /// <summary>
+        /// 槽位是否已解锁：武器/衣服天生可用；头盔 3-10、鞋 6-10、饰品 11-10。
+        /// 用「首通记录 OR 章节进度」兜底旧档——早期存档可能没有完整 clearedStages。
+        /// </summary>
+        public bool IsEquipmentSlotUnlocked(EquipmentSlot slot)
+        {
+            switch (slot)
+            {
+                case EquipmentSlot.Weapon:
+                case EquipmentSlot.Armor:
+                    return true;
+                case EquipmentSlot.Helmet:
+                    return maxChapterUnlocked > GameConfig.HelmetUnlockChapter
+                        || IsStageFirstCleared(GameConfig.HelmetUnlockChapter, GameConfig.StagesPerChapter);
+                case EquipmentSlot.Boots:
+                    return maxChapterUnlocked > GameConfig.BootsUnlockChapter
+                        || IsStageFirstCleared(GameConfig.BootsUnlockChapter, GameConfig.StagesPerChapter);
+                case EquipmentSlot.Accessory:
+                    // 11-10 是终局，通关后不会推进到第 12 章，只能靠首通记录判断。
+                    return IsStageFirstCleared(GameConfig.AccessoryUnlockChapter, GameConfig.StagesPerChapter);
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>当前已解锁的装备槽数量（掉落率与智能掉落按它算）。</summary>
+        public int UnlockedEquipmentSlotCount
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < EquipmentSlots.Count; i++)
+                    if (IsEquipmentSlotUnlocked(EquipmentSlots.All[i])) n++;
+                return n;
+            }
         }
 
         /// <summary>当前巅峰等级升到下一级所需经验；满巅峰返回 0。</summary>

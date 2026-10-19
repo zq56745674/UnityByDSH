@@ -5,11 +5,49 @@ using UnityEngine;
 
 namespace AutoBattle
 {
-    /// <summary>装备槽位：只做武器和衣服，各 1 件（要求 9）。</summary>
+    /// <summary>
+    /// 装备槽位。前两个是旧存档就有的「大件」，后三个是 2026-10 新增的小件。
+    /// 枚举值必须保持 Weapon=0 / Armor=1 不动，否则旧存档的 slot 会整体错位。
+    /// </summary>
     public enum EquipmentSlot
     {
-        Weapon,
-        Armor,
+        Weapon = 0,
+        Armor = 1,
+        Helmet = 2,
+        Boots = 3,
+        Accessory = 4,
+    }
+
+    /// <summary>槽位的顺序 / 数量 / 分类，UI、存档与掉落共用同一份定义。</summary>
+    public static class EquipmentSlots
+    {
+        public const int Count = 5;
+
+        public static readonly EquipmentSlot[] All =
+        {
+            EquipmentSlot.Weapon,
+            EquipmentSlot.Armor,
+            EquipmentSlot.Helmet,
+            EquipmentSlot.Boots,
+            EquipmentSlot.Accessory,
+        };
+
+        /// <summary>小件（头盔 / 鞋 / 饰品）：副词条只有 2 条、数值按 MinorAffixScale 缩放。</summary>
+        public static bool IsMinor(EquipmentSlot slot) =>
+            slot == EquipmentSlot.Helmet || slot == EquipmentSlot.Boots || slot == EquipmentSlot.Accessory;
+
+        public static string Name(EquipmentSlot slot)
+        {
+            switch (slot)
+            {
+                case EquipmentSlot.Weapon: return "武器";
+                case EquipmentSlot.Armor: return "衣服";
+                case EquipmentSlot.Helmet: return "头盔";
+                case EquipmentSlot.Boots: return "鞋";
+                case EquipmentSlot.Accessory: return "饰品";
+                default: return "装备";
+            }
+        }
     }
 
     /// <summary>
@@ -171,6 +209,22 @@ namespace AutoBattle
         public int defense;
         public int hp;
 
+        /// <summary>鞋的主属性：速度（只加在角色基础速度上，不乘全属性）。</summary>
+        public int speed;
+
+        /// <summary>鞋的主属性：攻击速度加成（0.035 表示 +3.5%）。</summary>
+        public float haste;
+
+        /// <summary>饰品的主属性：护甲穿透（0.064 表示无视目标 6.4% 防御）。</summary>
+        public float armorPen;
+
+        /// <summary>
+        /// 副词条数值缩放。大件 1.0；头盔/鞋/饰品这些「小件」是 0.5——
+        /// 五件套如果都给满额词条，暴击率、攻速、穿甲会全部溢出。
+        /// 旧存档没有这个字段，JsonUtility 会给 0，FixupEquipment 会兜底成 1。
+        /// </summary>
+        public float affixScale = 1f;
+
         /// <summary>
         /// 强化等级，0 ~ <see cref="GameConfig.EnhanceMaxLevel"/>。
         /// 强化**只提升主属性**（武器攻击 / 衣服防御与生命，见 <see cref="EnhancedAttack"/>
@@ -226,7 +280,7 @@ namespace AutoBattle
 
         public Color QualityColor => GameConfig.QualityColors[Mathf.Clamp((int)quality, 0, GameConfig.QualityColors.Length - 1)];
 
-        public string SlotName => slot == EquipmentSlot.Weapon ? "武器" : "衣服";
+        public string SlotName => EquipmentSlots.Name(slot);
 
         /// <summary>形如「倍率 x2.34」，用来展示同品质内的强弱浮动。</summary>
         public string MultiplierText => $"倍率 x{qualityMultiplier:0.00}";
@@ -245,8 +299,23 @@ namespace AutoBattle
         /// <summary>强化后的防御（衣服主属性）。未强化时等于 <see cref="defense"/>。</summary>
         public int EnhancedDefense => Mathf.RoundToInt(defense * EnhanceMultiplier);
 
-        /// <summary>强化后的生命（衣服主属性）。未强化时等于 <see cref="hp"/>。</summary>
+        /// <summary>强化后的生命（衣服 / 头盔主属性）。未强化时等于 <see cref="hp"/>。</summary>
         public int EnhancedHp => Mathf.RoundToInt(hp * EnhanceMultiplier);
+
+        /// <summary>强化后的速度（鞋主属性）。</summary>
+        public int EnhancedSpeed => Mathf.RoundToInt(speed * EnhanceMultiplier);
+
+        /// <summary>强化后的攻击速度加成（鞋主属性）。</summary>
+        public float EnhancedHaste => haste * EnhanceMultiplier;
+
+        /// <summary>强化后的护甲穿透（饰品主属性）。</summary>
+        public float EnhancedArmorPen => armorPen * EnhanceMultiplier;
+
+        /// <summary>
+        /// 强化后的暴击伤害。只有饰品的暴伤吃强化；武器主词条按设计保持不强化，
+        /// 所以调用方要按槽位区分，别把它当成通用的暴伤读取口。
+        /// </summary>
+        public float EnhancedCritDamage => critDamage * EnhanceMultiplier;
 
         /// <summary>是否还能继续强化。</summary>
         public bool CanEnhance => enhanceLevel < GameConfig.EnhanceMaxLevel;
@@ -262,11 +331,23 @@ namespace AutoBattle
         {
             get
             {
-                if (slot == EquipmentSlot.Weapon)
-                    return enhanceLevel > 0 ? $"攻击 {attack} → {EnhancedAttack}" : $"攻击 {attack}";
-                return enhanceLevel > 0
-                    ? $"防御 {defense} → {EnhancedDefense}   生命 {hp} → {EnhancedHp}"
-                    : $"防御 {defense}   生命 {hp}";
+                switch (slot)
+                {
+                    case EquipmentSlot.Weapon:
+                        return enhanceLevel > 0 ? $"攻击 {attack} → {EnhancedAttack}" : $"攻击 {attack}";
+                    case EquipmentSlot.Boots:
+                        return enhanceLevel > 0
+                            ? $"速度 {speed} → {EnhancedSpeed}   攻速 {haste * 100f:0.#}% → {EnhancedHaste * 100f:0.#}%"
+                            : $"速度 {speed}   攻速 {haste * 100f:0.#}%";
+                    case EquipmentSlot.Accessory:
+                        return enhanceLevel > 0
+                            ? $"暴击伤害 {critDamage * 100f:0.#}% → {EnhancedCritDamage * 100f:0.#}%   穿甲 {armorPen * 100f:0.#}% → {EnhancedArmorPen * 100f:0.#}%"
+                            : $"暴击伤害 {critDamage * 100f:0.#}%   穿甲 {armorPen * 100f:0.#}%";
+                    default:
+                        return enhanceLevel > 0
+                            ? $"防御 {defense} → {EnhancedDefense}   生命 {hp} → {EnhancedHp}"
+                            : $"防御 {defense}   生命 {hp}";
+                }
             }
         }
 
@@ -285,27 +366,21 @@ namespace AutoBattle
             get
             {
                 var sb = new StringBuilder();
-                if (attack > 0) sb.Append($"攻击 +{EnhancedAttack}");
-                if (defense > 0)
+                void Add(string text)
                 {
+                    if (string.IsNullOrEmpty(text)) return;
                     if (sb.Length > 0) sb.Append("  ");
-                    sb.Append($"防御 +{EnhancedDefense}");
+                    sb.Append(text);
                 }
-                if (hp > 0)
-                {
-                    if (sb.Length > 0) sb.Append("  ");
-                    sb.Append($"生命 +{EnhancedHp}");
-                }
-                if (critChance > 0f)
-                {
-                    if (sb.Length > 0) sb.Append("  ");
-                    sb.Append($"暴击率 +{critChance * 100f:0.#}%");
-                }
-                if (critDamage > 0f)
-                {
-                    if (sb.Length > 0) sb.Append("  ");
-                    sb.Append($"暴击伤害 +{critDamage * 100f:0.#}%");
-                }
+
+                Add(attack > 0 ? $"攻击 +{EnhancedAttack}" : string.Empty);
+                Add(defense > 0 ? $"防御 +{EnhancedDefense}" : string.Empty);
+                Add(hp > 0 ? $"生命 +{EnhancedHp}" : string.Empty);
+                Add(speed > 0 ? $"速度 +{EnhancedSpeed}" : string.Empty);
+                Add(haste > 0f ? $"攻速 +{EnhancedHaste * 100f:0.#}%" : string.Empty);
+                Add(armorPen > 0f ? $"穿甲 +{EnhancedArmorPen * 100f:0.#}%" : string.Empty);
+                Add(critChance > 0f ? $"暴击率 +{critChance * 100f:0.#}%" : string.Empty);
+                Add(critDamage > 0f ? $"暴击伤害 +{(slot == EquipmentSlot.Accessory ? EnhancedCritDamage : critDamage) * 100f:0.#}%" : string.Empty);
                 return sb.ToString();
             }
         }
@@ -434,7 +509,8 @@ namespace AutoBattle
         {
             get
             {
-                float levelScale = 1f + level * GameConfig.EquipAffixLevelScale;
+                // 小件的词条数值是缩放的，质量要把缩放也除掉，否则会显示成 0% 质量。
+                float levelScale = (1f + level * GameConfig.EquipAffixLevelScale) * Mathf.Max(0.01f, affixScale);
                 float sum = 0f;
                 int n = 0;
                 AccumulateQuality(ref sum, ref n, affixCritChance, EquipmentAffix.CritChance, levelScale);

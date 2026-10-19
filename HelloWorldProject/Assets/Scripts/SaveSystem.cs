@@ -17,10 +17,11 @@ namespace AutoBattle
         /// v4：加入巅峰等级与六个技能槽；
         /// v5：加入关卡 / 章节进度；
         /// v6：加入首通记录（clearedStages）。
-        /// v7：加入无尽模式最高层（endlessBestFloor）。
+        /// v7：加入无尽模式最高层（endlessBestFloor）；
+        /// v8：加入头盔 / 鞋 / 饰品三个槽位与解锁赠礼掩码（slotStarterMask）。
         /// 旧档缺 version 字段时读到 0，据此判断需要迁移。
         /// </summary>
-        private const int CurrentSaveVersion = 7;
+        private const int CurrentSaveVersion = 8;
 
         /// <summary>装备字段迁移的版本线：低于此值的装备需要反推品质倍率。</summary>
         private const int EquipmentFieldVersion = 2;
@@ -197,6 +198,14 @@ namespace AutoBattle
             public Equipment weapon;
             public Equipment armor;
 
+            /// <summary>v8 起：头盔 / 鞋 / 饰品。旧档没有这三项，读出来是 null。</summary>
+            public Equipment helmet;
+            public Equipment boots;
+            public Equipment accessory;
+
+            /// <summary>v8 起：哪些槽位的解锁赠礼已经发过（位 = EquipmentSlot）。</summary>
+            public int slotStarterMask;
+
             /// <summary>v7 起：无尽模式已清过的最高层（0 = 未打过）。</summary>
             public int endlessBestFloor;
         }
@@ -236,6 +245,10 @@ namespace AutoBattle
                 currentHp = player.currentHp,
                 weapon = player.weapon,
                 armor = player.armor,
+                helmet = player.helmet,
+                boots = player.boots,
+                accessory = player.accessory,
+                slotStarterMask = player.slotStarterMask,
                 endlessBestFloor = Mathf.Clamp(player.endlessBestFloor, 0, 9999),
             };
 
@@ -368,15 +381,23 @@ namespace AutoBattle
             player.skillTrigger1 = data.skillTrigger1;
             SanitizeSkillState(player);
 
-            player.weapon = data.weapon;
-            player.armor = data.armor;
-
             // 旧档（version < 2）的装备是在暴击与浮动倍率之前生成的。
             // 注意 JsonUtility 对 JSON 里缺失的字段会保留 C# 字段初值（qualityMultiplier 初值是 1），
             // 所以「值为 0/1」判断不出缺失，必须用存档版本号来决定是否迁移。
             bool legacy = data.version < EquipmentFieldVersion;
-            FixupEquipment(player.weapon, EquipmentSlot.Weapon, legacy);
-            FixupEquipment(player.armor, EquipmentSlot.Armor, legacy);
+            player.weapon = NormalizeEquipment(data.weapon, EquipmentSlot.Weapon, legacy);
+            player.armor = NormalizeEquipment(data.armor, EquipmentSlot.Armor, legacy);
+            player.helmet = NormalizeEquipment(data.helmet, EquipmentSlot.Helmet, legacy);
+            player.boots = NormalizeEquipment(data.boots, EquipmentSlot.Boots, legacy);
+            player.accessory = NormalizeEquipment(data.accessory, EquipmentSlot.Accessory, legacy);
+            player.slotStarterMask = data.version >= 8 ? data.slotStarterMask : 0;
+
+            // JsonUtility 会把 null 的装备字段写成空对象，读回来就变成一件「Common Lv.0、
+            // 全属性为 0」的假装备。这种占位物会被当成已有装备，导致解锁赠礼只记账不发装。
+            // 归一成 null 并清掉对应赠礼位，让 EnsureEquipmentSlotStarters 能补发。
+            if (player.helmet == null) player.slotStarterMask &= ~(1 << (int)EquipmentSlot.Helmet);
+            if (player.boots == null) player.slotStarterMask &= ~(1 << (int)EquipmentSlot.Boots);
+            if (player.accessory == null) player.slotStarterMask &= ~(1 << (int)EquipmentSlot.Accessory);
 
             // 生命必须夹在当前等级的真实上限内（装备变动后上限会变）。
             player.currentHp = Mathf.Clamp(data.currentHp, 1, Mathf.Max(1, player.MaxHp));
@@ -431,6 +452,24 @@ namespace AutoBattle
         /// 旧存档兼容与坏档兜底：补齐旧字段，并把装备的品质 / 等级 / 强化 / 词条夹到合法范围。
         /// slot 由调用方按武器/衣服给出——手改档把两件装备的 slot 写反时，评分与穿脱都会错位。
         /// </summary>
+        /// <summary>
+        /// 把存档里的装备归一：真正的空对象（JsonUtility 为 null 字段生成的占位物）返回 null，
+        /// 其余交给 FixupEquipment 做范围收敛。
+        /// </summary>
+        private static Equipment NormalizeEquipment(Equipment e, EquipmentSlot expectedSlot, bool legacy)
+        {
+            if (e == null) return null;
+            if (e.enhanceLevel == 0 && e.reforgeCount == 0
+                && e.attack == 0 && e.defense == 0 && e.hp == 0
+                && e.speed == 0 && e.haste == 0f && e.armorPen == 0f
+                && e.critChance == 0f && e.critDamage == 0f
+                && e.affixCritChance == 0f && e.affixCritDamage == 0f
+                && e.affixAttackSpeed == 0f && e.affixAllStats == 0f && e.affixArmorPen == 0f)
+                return null;
+            FixupEquipment(e, expectedSlot, legacy);
+            return e;
+        }
+
         private static void FixupEquipment(Equipment e, EquipmentSlot expectedSlot, bool legacy)
         {
             if (e == null) return;
@@ -450,6 +489,11 @@ namespace AutoBattle
             e.attack = Mathf.Max(0, e.attack);
             e.defense = Mathf.Max(0, e.defense);
             e.hp = Mathf.Max(0, e.hp);
+            e.speed = Mathf.Max(0, e.speed);
+            e.haste = SanitizeStat(e.haste);
+            e.armorPen = SanitizeStat(e.armorPen);
+            if (float.IsNaN(e.affixScale) || float.IsInfinity(e.affixScale) || e.affixScale <= 0f)
+                e.affixScale = EquipmentSlots.IsMinor(expectedSlot) ? GameConfig.MinorAffixScale : 1f;
             e.critChance = SanitizeStat(e.critChance);
             e.critDamage = SanitizeStat(e.critDamage);
             e.affixCritChance = SanitizeStat(e.affixCritChance);

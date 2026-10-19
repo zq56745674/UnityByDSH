@@ -108,7 +108,7 @@ namespace AutoBattle
         /// 只有两种情况会进来：当前装备上了锁，或设置里关掉了「自动换装」。
         /// 不随存档持久化——它是「等你这一会儿决定」的临时托盘，不是仓库。
         /// </summary>
-        private readonly Equipment[] _pendingDrops = new Equipment[2];
+        private readonly Equipment[] _pendingDrops = new Equipment[EquipmentSlots.Count];
 
         /// <summary>本局是否已经开始过（区分"第一次点开始"与"暂停后继续"）。</summary>
         private bool _runStarted;
@@ -180,6 +180,9 @@ namespace AutoBattle
                 // 100 级之前没有任何技能，所以新档六个槽位都是空的。
                 AddLog("新游戏开始。点击「开始」进入自动战斗。", GameConfig.LogNeutral);
             }
+
+            // 旧档补发新槽位的解锁赠礼（只发一次，靠 slotStarterMask 记账）。
+            EnsureEquipmentSlotStarters();
 
             // 未开始时先不生成怪物，等玩家点开始。
             CurrentState = State.WaitingRespawn;
@@ -544,7 +547,11 @@ namespace AutoBattle
         public void CloseComparePanel() => CompareOpen = false;
 
         /// <summary>某槽位的待选掉落；没有则为 null。</summary>
-        public Equipment PendingDrop(EquipmentSlot slot) => _pendingDrops[(int)slot];
+        public Equipment PendingDrop(EquipmentSlot slot)
+        {
+            int index = (int)slot;
+            return index >= 0 && index < _pendingDrops.Length ? _pendingDrops[index] : null;
+        }
 
         /// <summary>某槽位是否有待选掉落（左面板「对比」按钮的角标用）。</summary>
         public bool HasPendingDrop(EquipmentSlot slot)
@@ -554,13 +561,20 @@ namespace AutoBattle
         }
 
         /// <summary>是否有任意槽位存在待选掉落。</summary>
-        public bool HasAnyPendingDrop => HasPendingDrop(EquipmentSlot.Weapon) || HasPendingDrop(EquipmentSlot.Armor);
+        public bool HasAnyPendingDrop
+        {
+            get
+            {
+                for (int i = 0; i < _pendingDrops.Length; i++)
+                    if (_pendingDrops[i] != null) return true;
+                return false;
+            }
+        }
 
         /// <summary>换档、重开、读档时清空临时托盘，避免把上一份存档的掉落带过来。</summary>
         private void ClearPendingDrops()
         {
-            _pendingDrops[0] = null;
-            _pendingDrops[1] = null;
+            for (int i = 0; i < _pendingDrops.Length; i++) _pendingDrops[i] = null;
         }
 
         /// <summary>
@@ -570,6 +584,7 @@ namespace AutoBattle
         public bool EquipPending(EquipmentSlot slot)
         {
             int index = (int)slot;
+            if (index < 0 || index >= _pendingDrops.Length) return false;
             Equipment pending = _pendingDrops[index];
             if (pending == null) return false;
 
@@ -585,6 +600,7 @@ namespace AutoBattle
         public bool SellPending(EquipmentSlot slot)
         {
             int index = (int)slot;
+            if (index < 0 || index >= _pendingDrops.Length) return false;
             Equipment pending = _pendingDrops[index];
             if (pending == null) return false;
 
@@ -687,6 +703,7 @@ namespace AutoBattle
             {
                 AddLog($"⇄ 切换到存档 {slot + 1}：Lv.{Player.level}  经验 {Player.exp}/{Player.ExpToNextLevel}  {Player.CurrentStage.Title}",
                     GameConfig.LogSuccess);
+                EnsureEquipmentSlotStarters();
             }
             else
             {
@@ -1323,6 +1340,7 @@ namespace AutoBattle
             int newMax = Player.maxChapterUnlocked;
 
             if (unlocked) AddLog($"✦ 新章节解锁：第 {newMax} 章", GameConfig.LogUnlock);
+            EnsureEquipmentSlotStarters();
 
             // 无尽只认「首通 11-10」，不看章节解锁：其它入口都无法把玩家带到第 11 章末。
             bool endlessUnlocked = firstClear
@@ -1336,6 +1354,43 @@ namespace AutoBattle
             }
 
             if (unlocked) SaveSystem.Save(Player);
+        }
+
+        /// <summary>
+        /// 新解锁的头盔 / 鞋 / 饰品补发一件当前等级的稀有 +0 起手装，并记进 slotStarterMask。
+        /// 只在「已解锁但还没发过」时执行，所以读档、切档、重复通关都不会重复送。
+        /// </summary>
+        private void EnsureEquipmentSlotStarters()
+        {
+            if (Player == null) return;
+
+            bool changed = false;
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                EquipmentSlot slot = EquipmentSlots.All[i];
+                if (!EquipmentSlots.IsMinor(slot)) continue;
+                if (!Player.IsEquipmentSlotUnlocked(slot)) continue;
+
+                int bit = 1 << (int)slot;
+                if ((Player.slotStarterMask & bit) != 0) continue;
+
+                Player.slotStarterMask |= bit;
+                changed = true;
+
+                // 已经有装备（例如手改档/旧测试档）就只补记账，不覆盖玩家自己的东西。
+                if (Player.GetEquipment(slot) == null)
+                {
+                    Equipment starter = LootSystem.CreateEquipment(slot, Player.level, EquipmentQuality.Rare);
+                    WearEquipment(starter);
+                    AddLog($"✦ 新装备槽解锁：{EquipmentSlots.Name(slot)}（赠送 {starter.Title}）", GameConfig.LogUnlock);
+                }
+                else
+                {
+                    AddLog($"✦ 新装备槽解锁：{EquipmentSlots.Name(slot)}", GameConfig.LogUnlock);
+                }
+            }
+
+            if (changed) SaveSystem.Save(Player);
         }
 
         /// <summary>
@@ -1471,7 +1526,8 @@ namespace AutoBattle
             if (Player == null || Monster == null) return;
 
             int dropCount = GameConfig.MonsterTierGuaranteedDrops[(int)Monster.tier];
-            if (dropCount == 0 && LootSystem.RollDrop()) dropCount = 1;
+            int unlockedSlots = Player.UnlockedEquipmentSlotCount;
+            if (dropCount == 0 && LootSystem.RollDrop(unlockedSlots)) dropCount = 1;
 
             float[] fixedWeights = GameConfig.MonsterTierDropQualityWeights[(int)Monster.tier];
             int dropLevel = Monster.tier == MonsterTier.Normal ? Player.level : Monster.level;
@@ -1484,8 +1540,8 @@ namespace AutoBattle
             {
                 TotalDrops++;
                 Equipment dropped = fixedWeights != null
-                    ? LootSystem.CreateEquipmentAtLevel(dropLevel, fixedWeights)
-                    : LootSystem.CreateRandomEquipment(dropLevel);
+                    ? LootSystem.CreateEquipmentAtLevel(dropLevel, fixedWeights, Player)
+                    : LootSystem.CreateRandomEquipment(dropLevel, 0f, Player);
                 // 副词条必须一起打出来：只打主属性时，玩家会以为「传说武器没有副属性」。
                 string dropLine = $"◆ 掉落 {dropped.Title}  {dropped.StatLine}";
                 if (!string.IsNullOrEmpty(dropped.AffixLine)) dropLine += "\n    " + dropped.AffixLine;

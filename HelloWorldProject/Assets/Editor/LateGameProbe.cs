@@ -21,8 +21,11 @@ namespace AutoBattle.EditorTools
             var sb = new StringBuilder();
             var p = Build(paragon);
             sb.Append($"主角 Lv.{p.level} 巅峰{p.paragonLevel} HP={p.MaxHp} 攻={p.Attack} 防={p.Defense} 速={p.Speed:0.0} 暴击={p.CritChance:0.00}%/{p.CritDamage:0.0}% 穿={p.ArmorPenetration:0.00}% 攻速加成={p.AttackSpeedBonus:0.0}%\n");
-            sb.Append($"武器 {p.weapon.StatLine} || {p.weapon.AffixLine}\n");
-            sb.Append($"衣服 {p.armor.StatLine} || {p.armor.AffixLine}\n");
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                Equipment gear = p.GetEquipment(EquipmentSlots.All[i]);
+                sb.Append($"{EquipmentSlots.Name(gear.slot)} {gear.StatLine} || {gear.AffixLine}\n");
+            }
 
             MonsterTier tier = boss != 0 ? MonsterTier.Boss : MonsterTier.Elite;
             var m = MonsterData.CreateForLevel(monsterLevel, MonsterType.Ranged, tier, MonsterAffix.None);
@@ -178,10 +181,17 @@ namespace AutoBattle.EditorTools
             var acc = new float[tierArr.Length];
             accWin = new int[3];
             avgQuality = 0f;
+            int qualityCount = 0;
             for (int tr = 0; tr < trials; tr++)
             {
                 var p = BuildForChapter(chapter);
-                avgQuality += (int)p.weapon.quality;
+                for (int i = 0; i < EquipmentSlots.Count; i++)
+                {
+                    Equipment gear = p.GetEquipment(EquipmentSlots.All[i]);
+                    if (gear == null) continue;
+                    avgQuality += (int)gear.quality;
+                    qualityCount++;
+                }
                 for (int c = 0; c < tierArr.Length; c++)
                 {
                     for (int t = 0; t < 3; t++)
@@ -200,7 +210,7 @@ namespace AutoBattle.EditorTools
                 }
             }
             for (int c = 0; c < acc.Length; c++) acc[c] /= trials;
-            avgQuality /= trials;
+            avgQuality = qualityCount > 0 ? avgQuality / qualityCount : 0f;
             return acc;
         }
 
@@ -218,8 +228,14 @@ namespace AutoBattle.EditorTools
             p.level = level;
             p.paragonLevel = 0;
             p.paragonExp = 0;
-            p.weapon = LootSystem.CreateEquipment(EquipmentSlot.Weapon, level, LootSystem.RollQualityWithWeights(weights));
-            p.armor = LootSystem.CreateEquipment(EquipmentSlot.Armor, level, LootSystem.RollQualityWithWeights(weights));
+            // 按当前章节能解锁的槽位给装备：头盔 3-10、鞋 6-10、饰品 11-10 之后才有。
+            p.maxChapterUnlocked = chapter;
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                EquipmentSlot slot = EquipmentSlots.All[i];
+                if (!p.IsEquipmentSlotUnlocked(slot)) continue;
+                p.SetEquipment(LootSystem.CreateEquipment(slot, level, LootSystem.RollQualityWithWeights(weights)));
+            }
             p.FillHp();
             return p;
         }
@@ -230,15 +246,15 @@ namespace AutoBattle.EditorTools
             Debug.Log("[ChapterWinrate]\n" + RunChapterWinrate(30, true, 12));
         }
 
-        /// <summary>构造一个满级主角：传说武器 + 传说衣服 + 按「巅峰每 10 级随机一个技能」自动装备。</summary>
+        /// <summary>构造一个满级主角：传说五件套 + 按「巅峰每 10 级随机一个技能」自动装备。</summary>
         static PlayerData Build(int paragon, bool smartPick = true)
         {
             var p = new PlayerData();
             p.level = 100;
             p.paragonLevel = paragon;
             p.paragonExp = 0;
-            p.weapon = LootSystem.CreateEquipment(EquipmentSlot.Weapon, 100, EquipmentQuality.Legendary);
-            p.armor = LootSystem.CreateEquipment(EquipmentSlot.Armor, 100, EquipmentQuality.Legendary);
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+                p.SetEquipment(LootSystem.CreateEquipment(EquipmentSlots.All[i], 100, EquipmentQuality.Legendary));
 
             int want = Mathf.Min(paragon / GameConfig.ParagonPassiveEvery, SkillCatalog.All.Length);
             while (p.OwnedSkillCount < want)
@@ -407,9 +423,34 @@ namespace AutoBattle.EditorTools
             sb.Append($"{label,-19} {unit,6}  {ds,9:0.0}   {dd,9:0.000}%   {dd / ds,12:0.000}%\n");
         }
 
-        /// <summary>当前角色两件装备的评分合计（新口径：对标准怪的期望 DPS + 有效生命 ÷ EquipmentScore.SurvivabilityDivisor）。</summary>
-        static float ScoreOf(PlayerData p) =>
-            EquipmentScore.Of(p, p.weapon, EquipmentSlot.Weapon) + EquipmentScore.Of(p, p.armor, EquipmentSlot.Armor);
+        /// <summary>当前角色五件装备的评分合计（新口径：对标准怪的期望 DPS + 有效生命 ÷ EquipmentScore.SurvivabilityDivisor）。</summary>
+        static float ScoreOf(PlayerData p)
+        {
+            float sum = 0f;
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                Equipment gear = p.GetEquipment(EquipmentSlots.All[i]);
+                sum += EquipmentScore.Of(p, gear, EquipmentSlots.All[i]);
+            }
+            return sum;
+        }
+
+        /// <summary>生成一套固定的 Lv.100 传说五件套，供各类技能审计复用（避免每次随机导致技能间差异）。</summary>
+        static Equipment[] LegendarySet()
+        {
+            var set = new Equipment[EquipmentSlots.Count];
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+                set[i] = LootSystem.CreateEquipment(EquipmentSlots.All[i], 100, EquipmentQuality.Legendary);
+            return set;
+        }
+
+        /// <summary>把同一套装备装到角色身上；withWeapon=false 时摘掉武器（生存口径用）。</summary>
+        static void EquipSet(PlayerData p, Equipment[] set, bool withWeapon = true)
+        {
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+                p.SetEquipment(set[i]);
+            if (!withWeapon) p.weapon = null;
+        }
 
         /// <summary>
         /// 理论期望 DPS。实现只有一份——`EquipmentScore.Dps`，
@@ -434,7 +475,7 @@ namespace AutoBattle.EditorTools
                 var p = Build(paragon);
                 var w = LootSystem.CreateEquipment(EquipmentSlot.Weapon, 100, EquipmentQuality.Legendary);
                 p.weapon = w;
-                scores[i] = EquipmentScore.Of(p, w, EquipmentSlot.Weapon) + EquipmentScore.Of(p, p.armor, EquipmentSlot.Armor);
+                scores[i] = ScoreOf(p);
                 dps[i] = ExpectedDps(p, m);
                 texts[i] = w.StatLine + (string.IsNullOrEmpty(w.AffixLine) ? "" : " | " + w.AffixLine);
             }
@@ -449,7 +490,7 @@ namespace AutoBattle.EditorTools
             double rho = 1 - 6 * d2 / ((double)n * (n * n - 1));
 
             var sb = new StringBuilder();
-            sb.Append($"随机 {n} 把 Lv.100 传说武器（同一件传说衣服）；Spearman ρ = {rho:0.000}（1=排序完全一致，0=无关）\n\n");
+            sb.Append($"随机 {n} 把 Lv.100 传说武器（同一套其余传说装备）；Spearman ρ = {rho:0.000}（1=排序完全一致，0=无关）\n\n");
             sb.Append("— 按装备评分排序前 3 —\n");
             for (int r = 0; r < 3; r++)
             {
@@ -483,7 +524,7 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>
-        /// 评分 vs 实战排序：同一套技能、同一件衣服，只换武器，实际打 Lv.110 弓箭手 Boss 的耗时，
+        /// 评分 vs 实战排序：同一套技能、同一套其余装备，只换武器，实际打 Lv.110 弓箭手 Boss 的耗时，
         /// 换算成「越快越强」的指标再和装备评分比排序一致性。比理论 DPS 更接近玩家体感。
         /// </summary>
         public static string ScoreBattleAudit(int count, int paragon, int repeats)
@@ -500,7 +541,7 @@ namespace AutoBattle.EditorTools
                 for (int s = 0; s < slots; s++) p.SetSkillSlot(s, tpl.GetSkillSlot(s));
                 var w = LootSystem.CreateEquipment(EquipmentSlot.Weapon, 100, EquipmentQuality.Legendary);
                 p.weapon = w;
-                scores[i] = EquipmentScore.Of(p, w, EquipmentSlot.Weapon) + EquipmentScore.Of(p, p.armor, EquipmentSlot.Armor);
+                scores[i] = ScoreOf(p);
                 texts[i] = w.StatLine;
 
                 float sum = 0f;
@@ -535,7 +576,7 @@ namespace AutoBattle.EditorTools
             double rho = 1 - 6 * d2 / ((double)n * (n * n - 1));
 
             var sb = new StringBuilder();
-            sb.Append($"随机 {n} 把 Lv.100 传说武器（同一套技能 + 同一件衣服，对手 Lv.110 弓箭手 Boss，每把打 {repeats} 场取平均）\n");
+            sb.Append($"随机 {n} 把 Lv.100 传说武器（同一套技能 + 同一套其余装备，对手 Lv.110 弓箭手 Boss，每把打 {repeats} 场取平均）\n");
             sb.Append($"Spearman ρ(评分, 实战速度) = {rho:0.000}\n\n");
             sb.Append("— 按评分排序前 3 —\n");
             for (int r = 0; r < 3; r++)
@@ -570,7 +611,7 @@ namespace AutoBattle.EditorTools
                 for (int s = 0; s < slots; s++) p.SetSkillSlot(s, tpl.GetSkillSlot(s));
                 var w = LootSystem.CreateEquipment(EquipmentSlot.Weapon, 100, EquipmentQuality.Legendary);
                 p.weapon = w;
-                scores[i] = EquipmentScore.Of(p, w, EquipmentSlot.Weapon) + EquipmentScore.Of(p, p.armor, EquipmentSlot.Armor);
+                scores[i] = ScoreOf(p);
                 texts[i] = w.StatLine + (string.IsNullOrEmpty(w.AffixLine) ? "" : " | " + w.AffixLine);
 
                 float acc = 0f;
@@ -588,7 +629,7 @@ namespace AutoBattle.EditorTools
             double rho = 1 - 6 * d2 / ((double)n * (n * n - 1));
 
             var sb = new StringBuilder();
-            sb.Append($"随机 {n} 把 Lv.100 传说武器（同一套技能 + 同一件衣服，木桩 Lv.110 Boss，{seconds:0} 秒 × {repeats} 次取平均）\n");
+            sb.Append($"随机 {n} 把 Lv.100 传说武器（同一套技能 + 同一套其余装备，木桩 Lv.110 Boss，{seconds:0} 秒 × {repeats} 次取平均）\n");
             sb.Append($"Spearman ρ(评分, 木桩总伤害) = {rho:0.000}\n\n");
             sb.Append("— 按评分排序前 3 —\n");
             for (int r = 0; r < 3; r++)
@@ -670,7 +711,7 @@ namespace AutoBattle.EditorTools
             for (int r = 0; r < n; r++) rank[byDmg[r]] = r + 1;
 
             var sb = new StringBuilder();
-            sb.Append($"样本 {n} 把 Lv.100 传说武器（同一件衣服 / 同一套技能，木桩 {seconds:0}s），以实测伤害排名为基准\n\n");
+            sb.Append($"样本 {n} 把 Lv.100 传说武器（同一套其余装备 / 同一套技能，木桩 {seconds:0}s），以实测伤害排名为基准\n\n");
             var cur = new float[n];
             for (int i = 0; i < n; i++)
             {
@@ -762,8 +803,7 @@ namespace AutoBattle.EditorTools
         /// </summary>
         public static string SkillAudit(int paragon, float seconds, int repeats, int battles)
         {
-            var w = LootSystem.CreateEquipment(EquipmentSlot.Weapon, 100, EquipmentQuality.Legendary);
-            var a = LootSystem.CreateEquipment(EquipmentSlot.Armor, 100, EquipmentQuality.Legendary);
+            var set = LegendarySet();
 
             PlayerData Template()
             {
@@ -771,8 +811,7 @@ namespace AutoBattle.EditorTools
                 p.level = 100;
                 p.paragonLevel = paragon;
                 p.paragonExp = 0;
-                p.weapon = w;
-                p.armor = a;
+                EquipSet(p, set);
                 p.autoBuyPotion = true;
                 p.potionCount = GameConfig.PotionMaxCount;
                 p.FillHp();
@@ -879,8 +918,7 @@ namespace AutoBattle.EditorTools
         /// </summary>
         public static string SurvivalAudit(int paragon, int monsterLevel, int trials, bool withWeapon = false)
         {
-            var a = LootSystem.CreateEquipment(EquipmentSlot.Armor, 100, EquipmentQuality.Legendary);
-            var w = LootSystem.CreateEquipment(EquipmentSlot.Weapon, 100, EquipmentQuality.Legendary);
+            var set = LegendarySet();
             // 带武器时把怪物血量放大，保证怪物打不死，主角只能靠自己活下来。
             float hpScale = withWeapon ? 500f : 1f;
 
@@ -890,8 +928,7 @@ namespace AutoBattle.EditorTools
                 p.level = 100;
                 p.paragonLevel = paragon;
                 p.paragonExp = 0;
-                p.weapon = withWeapon ? w : null;   // 不带武器时输出可忽略
-                p.armor = a;
+                EquipSet(p, set, withWeapon);   // 不带武器时输出可忽略
                 p.autoBuyPotion = true;
                 p.potionCount = GameConfig.PotionMaxCount;
                 p.FillHp();
@@ -914,7 +951,7 @@ namespace AutoBattle.EditorTools
             var sb = new StringBuilder();
             var p0 = Template();
             float baseT = Measure(null);
-            sb.Append($"生存口径：Lv.100 传说衣服、{(withWeapon ? "**带武器**（输出全开，怪物血量 ×500 保证打不死）" : "**无武器**（输出压到接近 0）")}+ 巅峰 {paragon}（技能固定值），对手 Lv.{monsterLevel} Boss，{trials} 次取平均\n");
+            sb.Append($"生存口径：Lv.100 传说五件套、{(withWeapon ? "**带武器**（输出全开，怪物血量 ×500 保证打不死）" : "**无武器**（输出压到接近 0）")}+ 巅峰 {paragon}（技能固定值），对手 Lv.{monsterLevel} Boss，{trials} 次取平均\n");
             sb.Append($"基准属性：生命 {p0.MaxHp}  防御 {p0.Defense}  攻击 {p0.Attack}\n");
             sb.Append($"无技能基准存活：{baseT:0.0} 秒\n\n");
             sb.Append("技能                类别   存活(秒)   相对基准    折算有效生命\n");
@@ -937,8 +974,7 @@ namespace AutoBattle.EditorTools
         /// </summary>
         public static string ComboAudit(int paragon, float seconds, int repeats)
         {
-            var w = LootSystem.CreateEquipment(EquipmentSlot.Weapon, 100, EquipmentQuality.Legendary);
-            var a = LootSystem.CreateEquipment(EquipmentSlot.Armor, 100, EquipmentQuality.Legendary);
+            var set = LegendarySet();
 
             PlayerData Template(params SkillId[] ids)
             {
@@ -946,8 +982,7 @@ namespace AutoBattle.EditorTools
                 p.level = 100;
                 p.paragonLevel = paragon;
                 p.paragonExp = 0;
-                p.weapon = w;
-                p.armor = a;
+                EquipSet(p, set);
                 p.autoBuyPotion = true;
                 p.potionCount = GameConfig.PotionMaxCount;
                 foreach (var id in ids)

@@ -245,18 +245,42 @@ namespace AutoBattle.EditorTools
             var list = new System.Collections.Generic.List<string>();
             list.Add("--- score self-consistency (fixed seed) ---");
 
-            // 评分必须单调：同槽位、同等级下品质越高分越高，否则自动换装会做错决定
-            foreach (var slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor })
-                foreach (var quality in new[] { EquipmentQuality.Common, EquipmentQuality.Rare, EquipmentQuality.Epic, EquipmentQuality.Legendary })
+            // 评分品质顺序：同槽位、同等级下，品质越高，主属性整体越强。
+            // 不能拿单件直接比——同一品质的词条是随机的，Epic 随到攻速可能高于 Legendary 随到暴伤；
+            // 这里固定主词条形态、清空全部副词条，并对每个品质取多个样本的平均值，才是在测品质倍率本身。
+            foreach (var slot in EquipmentSlots.All)
+            {
+                var averages = new float[4];
+                var qualities = new[] { EquipmentQuality.Common, EquipmentQuality.Rare, EquipmentQuality.Epic, EquipmentQuality.Legendary };
+                for (int qi = 0; qi < qualities.Length; qi++)
                 {
-                    UnityEngine.Random.InitState(DefaultSeed ^ ((int)slot * 977 + (int)quality));
-                    var p = new PlayerData { level = 100 };
-                    var e = LootSystem.CreateEquipment(slot, 100, quality);
-                    float score = EquipmentScore.Of(p, e, slot);
+                    float sum = 0f;
+                    const int samples = 6;
+                    for (int s = 0; s < samples; s++)
+                    {
+                        UnityEngine.Random.InitState(DefaultSeed ^ ((int)slot * 977 + qi * 131 + s * 17));
+                        var p = new PlayerData { level = 100 };
+                        var e = LootSystem.CreateEquipment(slot, 100, qualities[qi]);
+                        e.affixCritChance = 0f;
+                        e.affixCritDamage = 0f;
+                        e.affixAttackSpeed = 0f;
+                        e.affixAllStats = 0f;
+                        e.affixArmorPen = 0f;
+                        if (slot == EquipmentSlot.Weapon)
+                        {
+                            // 武器主词条在暴击率/暴伤之间随机；固定成同一种，品质才可比。
+                            e.critChance = 0.05f;
+                            e.critDamage = 0f;
+                        }
+                        sum += EquipmentScore.Of(p, e, slot);
+                    }
+                    averages[qi] = sum / samples;
                     list.Add(string.Format(CultureInfo.InvariantCulture,
-                        "{0}/{1}=score{2:0.#}|atk{3}|def{4}|hp{5}", slot, quality, score,
-                        e.attack, e.defense, e.hp));
+                        "{0}/{1}Avg=score{2:0.#}", slot, qualities[qi], averages[qi]));
                 }
+                bool ordered = averages[0] <= averages[1] && averages[1] <= averages[2] && averages[2] <= averages[3];
+                list.Add($"{slot}/qualityOrdering={(ordered ? "ok" : "BAD")}");
+            }
 
             // Of() 会临时把装备卸下再装回去来算增量，必须保证退出时玩家装备原封不动。
             // 这里同时是那个 try/finally 修复的回归测试。

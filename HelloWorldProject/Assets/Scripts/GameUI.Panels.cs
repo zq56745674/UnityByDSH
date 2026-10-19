@@ -356,12 +356,8 @@ namespace AutoBattle
         // ==================== 装备强化面板（步骤 2） ====================
 
         /// <summary>
-        /// 强化面板：两件装备各一张卡片，卡片显示强化后的主属性变化与本次费用，
-        /// 卡片本身和卡片内的按钮都是「升一级」。
-        /// 做成浮层而不是常驻侧栏有两个原因：装备区（武器 334~420 / 衣服 424~510）
-        /// 已经排满，横向也没有空位；而强化是低频操作——有钱了进来点几下，
-        /// 不需要一直占着屏幕，反而会把装备说明挤掉。
-        /// 面板打开时整局冻结（见 GameController.Update 的浮层判断），避免边打边强化。
+        /// 强化面板：顶部五个槽位标签，下方一张卡显示当前选中槽位的强化预览与费用。
+        /// 强化是低频操作，做成浮层而不是常驻侧栏；面板打开时整局冻结（见 GameController.Update）。
         /// </summary>
         private void BuildEnhancePanel(Transform root)
         {
@@ -371,43 +367,30 @@ namespace AutoBattle
                 GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             CreateText(_enhancePanel, "EnhancePanelHint",
-                "强化只提升主属性（武器攻击 / 衣服防御与生命），不影响暴击、暴击伤害与副词条。",
+                "强化只提升主属性，不影响暴击、暴击伤害与副词条。点顶部标签切换槽位。",
                 20, 42, 640, 22, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
 
-            _enhanceSlotButtons = new Button[2];
-            _enhanceSlotLabels = new Text[2];
-            _enhanceActionButtons = new Button[2];
-            _enhanceActionLabels = new Text[2];
-
-            const float cardW = 310f;
-            const float cardH = 176f;
-            const float gap = 20f;
-            const float y0 = 74f;
-
-            for (int i = 0; i < 2; i++)
+            _enhanceSlotButtons = new Button[EquipmentSlots.Count];
+            _enhanceSlotLabels = new Text[EquipmentSlots.Count];
+            for (int i = 0; i < EquipmentSlots.Count; i++)
             {
-                EquipmentSlot slot = i == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
-                float x = 20f + i * (cardW + gap);
-
-                // 卡片本身就是按钮，label 改成左上对齐的多行文本（同存档卡片手法）。
-                Button card = CreateButton(_enhancePanel, "EnhanceSlot" + i, "", x, y0, cardW, cardH,
-                    GameConfig.CardBg, out Text cardLabel);
-                cardLabel.alignment = TextAnchor.UpperLeft;
-                cardLabel.fontSize = 14;
-                cardLabel.fontStyle = FontStyle.Normal;
-                cardLabel.rectTransform.offsetMin = new Vector2(14f, 44f);
-                cardLabel.rectTransform.offsetMax = new Vector2(-12f, -12f);
-                card.onClick.AddListener(() => OnEnhanceSlotClicked(slot));
-
-                Button act = CreateButton(_enhancePanel, "EnhanceAction" + i, "强化", x + 14f, y0 + cardH - 36f, 116f, 28f,
-                    GameConfig.BtnGold, out _enhanceActionLabels[i]);
-                _enhanceActionLabels[i].fontSize = 14;
-                act.onClick.AddListener(() => OnEnhanceSlotClicked(slot));
-
-                _enhanceSlotButtons[i] = card;
-                _enhanceSlotLabels[i] = cardLabel;
-                _enhanceActionButtons[i] = act;
+                int captured = i;
+                _enhanceSlotButtons[i] = CreateButton(_enhancePanel, "EnhanceTab" + i,
+                    EquipmentSlots.Name(EquipmentSlots.All[i]), 20 + i * 116, 72, 110, 30,
+                    GameConfig.BtnHeader, out _enhanceSlotLabels[i]);
+                _enhanceSlotLabels[i].fontSize = 14;
+                _enhanceSlotButtons[i].onClick.AddListener(() => OnEnhanceTabClicked(captured));
             }
+
+            CreatePanel(_enhancePanel, "EnhanceCardBox", 20, 112, 640, 142, GameConfig.CardBg);
+            _enhanceCardLabel = CreateText(_enhancePanel, "EnhanceCard", "", 34, 118, 500, 128, 13,
+                GameConfig.TextNormal, TextAnchor.UpperLeft);
+            _enhanceCardLabel.lineSpacing = 1.2f;
+
+            _enhanceActionButton = CreateButton(_enhancePanel, "EnhanceAction", "强化", 520, 216, 126, 30,
+                GameConfig.BtnGold, out _enhanceActionLabel);
+            _enhanceActionLabel.fontSize = 15;
+            _enhanceActionButton.onClick.AddListener(() => OnEnhanceSlotClicked(EquipmentSlots.All[_enhanceSlotIndex]));
 
             Button close = CreateButton(_enhancePanel, "EnhancePanelClose", "关闭", 586, 282, 74, 34,
                 GameConfig.CardBtn, out _);
@@ -416,10 +399,7 @@ namespace AutoBattle
             _enhancePanel.gameObject.SetActive(false);
         }
 
-        /// <summary>
-        /// 刷新强化面板。费用与强化后属性都是纯计算，重算代价极低；
-        /// 面板关着时直接跳过，不参与每帧开销。
-        /// </summary>
+        /// <summary>刷新强化面板：标签高亮、卡片正文与按钮费用。</summary>
         private void RefreshEnhancePanel()
         {
             if (_enhancePanel == null || _game == null) return;
@@ -439,34 +419,37 @@ namespace AutoBattle
 
             PlayerData p = _game.Player;
             _enhancePanelTitle.text = $"强化装备 —— 金币 {p.gold:N0}";
+            _enhanceSlotIndex = Mathf.Clamp(_enhanceSlotIndex, 0, EquipmentSlots.Count - 1);
 
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < EquipmentSlots.Count; i++)
             {
-                EquipmentSlot slot = i == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
-                Equipment e = p.GetEquipment(slot);
-                _enhanceSlotLabels[i].text = DescribeEnhanceCard(e, slot, p.gold);
-
-                bool canPay = e != null && e.CanEnhance && p.gold >= e.EnhanceCost;
-                _enhanceActionLabels[i].text = e == null ? "无装备"
-                    : !e.CanEnhance ? "已满级"
-                    : $"强化 {e.EnhanceCost:N0}";
-
-                // 按钮压暗 + 文字变灰表示「这次点不动」，比点了没反应友好。
-                var bg = _enhanceActionButtons[i].targetGraphic as Image;
-                if (bg != null)
-                {
-                    bg.color = canPay
-                        ? GameConfig.BtnGold
-                        : GameConfig.BtnDisabled;
-                }
-                _enhanceActionLabels[i].color = canPay ? Color.white : GameConfig.BtnDisabledText;
+                EquipmentSlot s = EquipmentSlots.All[i];
+                bool selected = i == _enhanceSlotIndex;
+                bool unlocked = p.IsEquipmentSlotUnlocked(s);
+                _enhanceSlotButtons[i].image.color = selected ? GameConfig.BtnPrimary : GameConfig.BtnHeader;
+                _enhanceSlotLabels[i].color = selected ? Color.white
+                    : unlocked ? GameConfig.TextMuted : GameConfig.BtnDisabledText;
+                _enhanceSlotLabels[i].text = EquipmentSlots.Name(s) + (unlocked ? string.Empty : " · 未解锁");
             }
+
+            EquipmentSlot slot = EquipmentSlots.All[_enhanceSlotIndex];
+            Equipment e = p.GetEquipment(slot);
+            _enhanceCardLabel.text = DescribeEnhanceCard(e, slot, p.gold);
+
+            bool canPay = e != null && e.CanEnhance && p.gold >= e.EnhanceCost;
+            _enhanceActionLabel.text = e == null ? "无装备"
+                : !e.CanEnhance ? "已满级"
+                : $"强化 {e.EnhanceCost:N0}";
+
+            var bg = _enhanceActionButton.targetGraphic as Image;
+            if (bg != null) bg.color = canPay ? GameConfig.BtnGold : GameConfig.BtnDisabled;
+            _enhanceActionLabel.color = canPay ? Color.white : GameConfig.BtnDisabledText;
         }
 
         /// <summary>一张强化卡片里的正文。</summary>
         private static string DescribeEnhanceCard(Equipment e, EquipmentSlot slot, int gold)
         {
-            string slotName = slot == EquipmentSlot.Weapon ? "武器" : "衣服";
+            string slotName = EquipmentSlots.Name(slot);
             if (e == null) return $"{slotName}\n\n（空）\n掉落装备会自动穿上，之后即可强化";
             if (!e.CanEnhance) return $"{e.Title}\n\n{e.EnhanceGainText}\n已强化到上限 +{GameConfig.EnhanceMaxLevel}";
 
@@ -481,6 +464,12 @@ namespace AutoBattle
             _game.ToggleEnhancePanel();
         }
 
+        private void OnEnhanceTabClicked(int index)
+        {
+            _enhanceSlotIndex = Mathf.Clamp(index, 0, EquipmentSlots.Count - 1);
+            _enhancePanelDirty = true;
+        }
+
         private void OnEnhanceSlotClicked(EquipmentSlot slot)
         {
             EnhanceResult result = _game.EnhanceEquipment(slot);
@@ -493,8 +482,8 @@ namespace AutoBattle
         }
 
         /// <summary>
-        /// 洗练面板：两件装备各一张卡片。卡片里每条副词条都是一行按钮，点一下锁定/解锁；
-        /// 锁住的词条不参与重抽，每多锁一条本次费用乘一次 GameConfig.ReforgeLockFactor。
+        /// 洗练面板：顶部五个槽位标签，下方一张卡显示当前选中槽位的词条、质量与费用。
+        /// 每条副词条都是一行按钮，点一下锁定/解锁；锁住的词条不参与重抽。
         /// 面板打开时整局冻结（见 GameController.Update）。
         /// </summary>
         private void BuildReforgePanel(Transform root)
@@ -505,78 +494,61 @@ namespace AutoBattle
                 GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             CreateText(_reforgePanel, "ReforgePanelHint",
-                "点击词条行可锁定；锁住的不重抽，每多锁一条本次费用 ×3。至少要留一条不锁。",
+                "点击词条行可锁定；锁住的不重抽，每多锁一条本次费用 ×3。至少要留一条不锁。点顶部标签切换槽位。",
                 20, 44, 640, 36, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
 
             int affixKinds = GameConfig.EquipAffixNames.Length;
 
-            _reforgeSlotButtons = new Button[2];
-            _reforgeSlotLabels = new Text[2];
-            _reforgeActionButtons = new Button[2];
-            _reforgeActionLabels = new Text[2];
-            _reforgeAffixButtons = new Button[2, affixKinds];
-            _reforgeAffixLabels = new Text[2, affixKinds];
-            _reforgeAffixStrips = new Image[2, affixKinds];
-            _reforgeQualityLabels = new Text[2];
-            _reforgeCostLabels = new Text[2];
+            _reforgeSlotButtons = new Button[EquipmentSlots.Count];
+            _reforgeSlotLabels = new Text[EquipmentSlots.Count];
+            _reforgeAffixButtons = new Button[affixKinds];
+            _reforgeAffixLabels = new Text[affixKinds];
+            _reforgeAffixStrips = new Image[affixKinds];
 
-            const float cardW = 310f;
-            const float cardH = 300f;
-            const float gap = 20f;
-            const float y0 = 88f;
-
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < EquipmentSlots.Count; i++)
             {
-                EquipmentSlot slot = i == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
-                int side = i;   // for 的 i 不是每轮新建的，闭包必须抓这个副本
-                float x = 20f + i * (cardW + gap);
-
-                // 卡片按钮只兜住空白处：标题+主属性在上，词条行压在上面，点行就是切锁定。
-                Button card = CreateButton(_reforgePanel, "ReforgeSlot" + i, "", x, y0, cardW, cardH,
-                    GameConfig.CardBg, out Text cardLabel);
-                cardLabel.alignment = TextAnchor.UpperLeft;
-                cardLabel.fontSize = 14;
-                cardLabel.fontStyle = FontStyle.Normal;
-                cardLabel.color = GameConfig.TextNormal;
-                cardLabel.rectTransform.offsetMin = new Vector2(14f, 246f);
-                cardLabel.rectTransform.offsetMax = new Vector2(-12f, -12f);
-                card.onClick.AddListener(() => OnReforgeSlotClicked(slot));
-
-                for (int j = 0; j < affixKinds; j++)
-                {
-                    EquipmentAffix kind = (EquipmentAffix)j;
-                    float rowY = y0 + 58f + j * 28f;
-
-                    Button row = CreateButton(_reforgePanel, $"ReforgeAffix{i}_{j}", "",
-                        x + 12f, rowY, 286f, 24f, GameConfig.RowBg, out Text rowLabel);
-                    rowLabel.fontSize = 13;
-                    rowLabel.fontStyle = FontStyle.Normal;
-                    rowLabel.alignment = TextAnchor.MiddleLeft;
-                    rowLabel.color = GameConfig.TextNormal;
-                    rowLabel.rectTransform.offsetMin = new Vector2(10f, 0f);
-                    rowLabel.rectTransform.offsetMax = new Vector2(-8f, 0f);
-                    row.onClick.AddListener(() => OnReforgeAffixClicked(side, kind));
-
-                    _reforgeAffixStrips[i, j] = CreateImage(row.transform, "Strip", 0, 0, 3, 24, GameConfig.Border);
-                    _reforgeAffixButtons[i, j] = row;
-                    _reforgeAffixLabels[i, j] = rowLabel;
-                }
-
-                _reforgeQualityLabels[i] = CreateText(_reforgePanel, "ReforgeQuality" + i, "",
-                    x + 12f, y0 + 200f, 286f, 20f, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
-
-                _reforgeCostLabels[i] = CreateText(_reforgePanel, "ReforgeCost" + i, "",
-                    x + 12f, y0 + 222f, 286f, 20f, 13, GameConfig.TextMuted, TextAnchor.MiddleLeft);
-
-                Button act = CreateButton(_reforgePanel, "ReforgeAction" + i, "洗练",
-                    x + 12f, y0 + 262f, 286f, 30f, GameConfig.BtnGold, out _reforgeActionLabels[i]);
-                _reforgeActionLabels[i].fontSize = 15;
-                act.onClick.AddListener(() => OnReforgeSlotClicked(slot));
-
-                _reforgeSlotButtons[i] = card;
-                _reforgeSlotLabels[i] = cardLabel;
-                _reforgeActionButtons[i] = act;
+                int captured = i;
+                _reforgeSlotButtons[i] = CreateButton(_reforgePanel, "ReforgeTab" + i,
+                    EquipmentSlots.Name(EquipmentSlots.All[i]), 20 + i * 116, 72, 110, 30,
+                    GameConfig.BtnHeader, out _reforgeSlotLabels[i]);
+                _reforgeSlotLabels[i].fontSize = 14;
+                _reforgeSlotButtons[i].onClick.AddListener(() => OnReforgeTabClicked(captured));
             }
+
+            CreatePanel(_reforgePanel, "ReforgeCardBox", 20, 112, 640, 262, GameConfig.CardBg);
+            _reforgeCardLabel = CreateText(_reforgePanel, "ReforgeCard", "", 34, 118, 600, 44, 14,
+                GameConfig.TextNormal, TextAnchor.UpperLeft, FontStyle.Bold);
+
+            for (int j = 0; j < affixKinds; j++)
+            {
+                EquipmentAffix kind = (EquipmentAffix)j;
+                float rowY = 168f + j * 26f;
+
+                Button row = CreateButton(_reforgePanel, "ReforgeAffix" + j, "", 34, rowY, 600, 24,
+                    GameConfig.RowBg, out Text rowLabel);
+                rowLabel.fontSize = 13;
+                rowLabel.fontStyle = FontStyle.Normal;
+                rowLabel.alignment = TextAnchor.MiddleLeft;
+                rowLabel.color = GameConfig.TextNormal;
+                rowLabel.rectTransform.offsetMin = new Vector2(10f, 0f);
+                rowLabel.rectTransform.offsetMax = new Vector2(-8f, 0f);
+                row.onClick.AddListener(() => OnReforgeAffixClicked(kind));
+
+                _reforgeAffixStrips[j] = CreateImage(row.transform, "Strip", 0, 0, 3, 24, GameConfig.Border);
+                _reforgeAffixButtons[j] = row;
+                _reforgeAffixLabels[j] = rowLabel;
+            }
+
+            _reforgeQualityLabel = CreateText(_reforgePanel, "ReforgeQuality", "",
+                34, 298, 600, 20, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+
+            _reforgeCostLabel = CreateText(_reforgePanel, "ReforgeCost", "",
+                34, 322, 600, 20, 13, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            _reforgeActionButton = CreateButton(_reforgePanel, "ReforgeAction", "洗练", 34, 344, 200, 30,
+                GameConfig.BtnGold, out _reforgeActionLabel);
+            _reforgeActionLabel.fontSize = 15;
+            _reforgeActionButton.onClick.AddListener(() => OnReforgeSlotClicked(EquipmentSlots.All[_reforgeSlotIndex]));
 
             Button close = CreateButton(_reforgePanel, "ReforgePanelClose", "关闭", 586, 392, 74, 34,
                 GameConfig.CardBtn, out _);
@@ -608,103 +580,110 @@ namespace AutoBattle
 
             PlayerData p = _game.Player;
             _reforgePanelTitle.text = $"洗练装备 —— 金币 {p.gold:N0}";
+            _reforgeSlotIndex = Mathf.Clamp(_reforgeSlotIndex, 0, EquipmentSlots.Count - 1);
 
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < EquipmentSlots.Count; i++)
             {
-                EquipmentSlot slot = i == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor;
-                Equipment e = p.GetEquipment(slot);
-
-                // 换了一件装备（或卸载）就把锁定清掉：掩码指的是上一件的词条种类，
-                // 新装备可能根本没有那一条，留着会让费用按不存在的词条算钱。
-                if (!ReferenceEquals(e, _reforgeLockOwners[i]))
-                {
-                    _reforgeLockOwners[i] = e;
-                    _reforgeLockMasks[i] = 0;
-                }
-
-                int mask = e != null ? _reforgeLockMasks[i] & e.PresentAffixMask : 0;
-                _reforgeLockMasks[i] = mask;
-                int locked = e != null ? e.LockedAffixCount(mask) : 0;
-                int free = e != null ? e.AffixCount - locked : 0;
-                int cost = e != null && free > 0 ? e.ReforgeCostWithLocks(locked) : 0;
-
-                if (e != null)
-                {
-                    _reforgeSlotLabels[i].text = $"{e.Title}\n{e.StatLine}";
-                }
-                else
-                {
-                    string slotName = slot == EquipmentSlot.Weapon ? "武器" : "衣服";
-                    _reforgeSlotLabels[i].text = $"{slotName}\n\n（空）\n掉落装备会自动穿上，之后即可洗练";
-                }
-
-                // 词条种类是不连续的（比如只有暴击伤害/攻速/穿透），固定 5 个坑会留空洞，
-                // 所以按「存在几条」从上往下紧排，坑位随装备变化而重排。
-                RectTransform cardRt = _reforgeSlotButtons[i].GetComponent<RectTransform>();
-                int rowIndex = 0;
-
-                for (int j = 0; j < GameConfig.EquipAffixNames.Length; j++)
-                {
-                    EquipmentAffix kind = (EquipmentAffix)j;
-                    int bit = Equipment.AffixBit(kind);
-                    bool present = e != null && (e.PresentAffixMask & bit) != 0;
-                    _reforgeAffixButtons[i, j].gameObject.SetActive(present);
-                    if (!present) continue;
-
-                    _reforgeAffixButtons[i, j].GetComponent<RectTransform>().anchoredPosition =
-                        cardRt.anchoredPosition + new Vector2(12f, -(58f + rowIndex * 28f));
-                    rowIndex++;
-
-                    bool isLocked = (mask & bit) != 0;
-                    _reforgeAffixLabels[i, j].text =
-                        (isLocked ? "<color=#FFC857>◆ 已锁</color>  " : "<color=#8C99B0>◇ 未锁</color>  ") +
-                        Equipment.AffixText(kind, e.AffixValue(kind));
-
-                    var rowBg = _reforgeAffixButtons[i, j].targetGraphic as Image;
-                    if (rowBg != null)
-                    {
-                        rowBg.color = isLocked
-                            ? Color.Lerp(GameConfig.RowBg, GameConfig.AccentBanner, 0.18f)
-                            : GameConfig.RowBg;
-                    }
-                    _reforgeAffixStrips[i, j].color = isLocked ? GameConfig.AccentBanner : GameConfig.Border;
-                }
-
-                // 空槽位没有质量/费用/按钮可言，藏起来免得显示「费用 0 金币」。
-                _reforgeQualityLabels[i].gameObject.SetActive(e != null);
-                _reforgeCostLabels[i].gameObject.SetActive(e != null);
-                _reforgeActionButtons[i].gameObject.SetActive(e != null);
-                if (e == null) continue;
-
-                int quality = Mathf.RoundToInt(e.AffixQuality * 100f);
-                _reforgeQualityLabels[i].text =
-                    $"词条质量 {quality}%（{e.AffixCount} 条）    {e.ReforgeCountText}";
-
-                // 全锁时没有可洗的，避免出现「费用 0 金币（锁 4 条 ×27）」这种自相矛盾的行。
-                string costText;
-                if (free <= 0)
-                {
-                    costText = "费用 ——（词条已全部锁定）";
-                }
-                else
-                {
-                    costText = $"费用 {cost:N0} 金币";
-                    if (locked > 0) costText += $"（锁 {locked} 条 ×{Equipment.ReforgeLockMultiplier(locked):0.#}）";
-                    if (p.gold < cost) costText += "（不足）";
-                }
-                _reforgeCostLabels[i].text = costText;
-                _reforgeCostLabels[i].color = free > 0 && p.gold < cost ? GameConfig.LogWarn : GameConfig.TextMuted;
-
-                bool canPay = e.CanReforge && free > 0 && p.gold >= cost;
-                _reforgeActionLabels[i].text = !e.CanReforge ? "无可洗词条"
-                    : free <= 0 ? "已全锁"
-                    : $"洗练 {cost:N0}";
-
-                var bg = _reforgeActionButtons[i].targetGraphic as Image;
-                if (bg != null) bg.color = canPay ? GameConfig.BtnGold : GameConfig.BtnDisabled;
-                _reforgeActionLabels[i].color = canPay ? Color.white : GameConfig.BtnDisabledText;
+                EquipmentSlot s = EquipmentSlots.All[i];
+                bool selected = i == _reforgeSlotIndex;
+                bool unlocked = p.IsEquipmentSlotUnlocked(s);
+                _reforgeSlotButtons[i].image.color = selected ? GameConfig.BtnPrimary : GameConfig.BtnHeader;
+                _reforgeSlotLabels[i].color = selected ? Color.white
+                    : unlocked ? GameConfig.TextMuted : GameConfig.BtnDisabledText;
+                _reforgeSlotLabels[i].text = EquipmentSlots.Name(s) + (unlocked ? string.Empty : " · 未解锁");
             }
+
+            int side = _reforgeSlotIndex;
+            EquipmentSlot slot = EquipmentSlots.All[side];
+            Equipment e = p.GetEquipment(slot);
+
+            // 换了一件装备（或卸载）就把锁定清掉：掩码指的是上一件的词条种类，
+            // 新装备可能根本没有那一条，留着会让费用按不存在的词条算钱。
+            if (!ReferenceEquals(e, _reforgeLockOwners[side]))
+            {
+                _reforgeLockOwners[side] = e;
+                _reforgeLockMasks[side] = 0;
+            }
+
+            int mask = e != null ? _reforgeLockMasks[side] & e.PresentAffixMask : 0;
+            _reforgeLockMasks[side] = mask;
+            int locked = e != null ? e.LockedAffixCount(mask) : 0;
+            int free = e != null ? e.AffixCount - locked : 0;
+            int cost = e != null && free > 0 ? e.ReforgeCostWithLocks(locked) : 0;
+
+            if (e != null)
+            {
+                _reforgeCardLabel.text = $"{e.Title}\n<size=13><color=#C6CEE0>{e.StatLine}</color></size>";
+            }
+            else
+            {
+                _reforgeCardLabel.text = $"{EquipmentSlots.Name(slot)}\n<size=13><color=#8C99B0>（空）</color></size>";
+            }
+
+            // 小件只有 2 条词条，按枚举序号固定排会留下空行；这里把显示出来的行紧凑重排。
+            int visibleRow = 0;
+            for (int j = 0; j < GameConfig.EquipAffixNames.Length; j++)
+            {
+                EquipmentAffix kind = (EquipmentAffix)j;
+                int bit = Equipment.AffixBit(kind);
+                bool present = e != null && (e.PresentAffixMask & bit) != 0;
+                _reforgeAffixButtons[j].gameObject.SetActive(present);
+                if (!present) continue;
+
+                _reforgeAffixButtons[j].GetComponent<RectTransform>().anchoredPosition =
+                    new Vector2(34f, -(168f + visibleRow * 26f));
+                visibleRow++;
+
+                bool isLocked = (mask & bit) != 0;
+                _reforgeAffixLabels[j].text =
+                    (isLocked ? "<color=#FFC857>◆ 已锁</color>  " : "<color=#8C99B0>◇ 未锁</color>  ") +
+                    Equipment.AffixText(kind, e.AffixValue(kind));
+
+                var rowBg = _reforgeAffixButtons[j].targetGraphic as Image;
+                if (rowBg != null)
+                {
+                    rowBg.color = isLocked
+                        ? Color.Lerp(GameConfig.RowBg, GameConfig.AccentBanner, 0.18f)
+                        : GameConfig.RowBg;
+                }
+                _reforgeAffixStrips[j].color = isLocked ? GameConfig.AccentBanner : GameConfig.Border;
+            }
+
+            // 空槽位没有质量/费用/按钮可言，藏起来免得显示「费用 0 金币」。
+            _reforgeQualityLabel.gameObject.SetActive(e != null);
+            _reforgeCostLabel.gameObject.SetActive(e != null);
+            _reforgeActionButton.gameObject.SetActive(e != null);
+            if (e == null) return;
+
+            int quality = Mathf.RoundToInt(e.AffixQuality * 100f);
+            _reforgeQualityLabel.text =
+                $"词条质量 {quality}%（{e.AffixCount} 条）    {e.ReforgeCountText}";
+
+            // 全锁时没有可洗的，避免出现「费用 0 金币（锁 4 条 ×27）」这种自相矛盾的行。
+            string costText;
+            if (free <= 0)
+            {
+                costText = "费用 ——（词条已全部锁定）";
+            }
+            else
+            {
+                costText = $"费用 {cost:N0} 金币";
+                if (locked > 0) costText += $"（锁 {locked} 条 ×{Equipment.ReforgeLockMultiplier(locked):0.#}）";
+                if (p.gold < cost) costText += "（不足）";
+            }
+            _reforgeCostLabel.text = costText;
+            _reforgeCostLabel.color = free > 0 && p.gold < cost ? GameConfig.LogWarn : GameConfig.TextMuted;
+
+            bool canPay = e.CanReforge && free > 0 && p.gold >= cost;
+            _reforgeActionLabel.text = !e.CanReforge ? "无可洗词条"
+                : free <= 0 ? "已全锁"
+                : $"洗练 {cost:N0}";
+
+            var bg = _reforgeActionButton.targetGraphic as Image;
+            if (bg != null) bg.color = canPay ? GameConfig.BtnGold : GameConfig.BtnDisabled;
+            _reforgeActionLabel.color = canPay ? Color.white : GameConfig.BtnDisabledText;
         }
+
 
         private void OnReforgeEntryClicked()
         {
@@ -712,10 +691,17 @@ namespace AutoBattle
             _game.ToggleReforgePanel();
         }
 
-        /// <summary>切换一条词条的锁定。最后一条不许锁——全锁之后没有可重抽的词条。</summary>
-        private void OnReforgeAffixClicked(int side, EquipmentAffix kind)
+        private void OnReforgeTabClicked(int index)
         {
-            Equipment e = _game.Player.GetEquipment(side == 0 ? EquipmentSlot.Weapon : EquipmentSlot.Armor);
+            _reforgeSlotIndex = Mathf.Clamp(index, 0, EquipmentSlots.Count - 1);
+            _reforgePanelDirty = true;
+        }
+
+        /// <summary>切换一条词条的锁定。最后一条不许锁——全锁之后没有可重抽的词条。</summary>
+        private void OnReforgeAffixClicked(EquipmentAffix kind)
+        {
+            int side = Mathf.Clamp(_reforgeSlotIndex, 0, EquipmentSlots.Count - 1);
+            Equipment e = _game.Player.GetEquipment(EquipmentSlots.All[side]);
             if (e == null) return;
 
             int mask = _reforgeLockMasks[side] & e.PresentAffixMask;
@@ -741,7 +727,7 @@ namespace AutoBattle
 
         private void OnReforgeSlotClicked(EquipmentSlot slot)
         {
-            int side = slot == EquipmentSlot.Weapon ? 0 : 1;
+            int side = Mathf.Clamp((int)slot, 0, EquipmentSlots.Count - 1);
             ReforgeResult result = _game.ReforgeEquipment(slot, _reforgeLockMasks[side]);
             _reforgePanelDirty = true;
 

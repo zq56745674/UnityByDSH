@@ -460,7 +460,9 @@ namespace AutoBattle.EditorTools
         static void ResolveDrops(PlayerData p, MonsterData m)
         {
             int dropCount = GameConfig.MonsterTierGuaranteedDrops[(int)m.tier];
-            if (dropCount == 0 && LootSystem.RollDrop()) dropCount = 1;
+            // 五槽时代掉落率随解锁数上涨，且智能掉落会优先补空槽——探针必须和实机同口径，
+            // 否则「新档多久凑齐四件」会被系统性高估。
+            if (dropCount == 0 && LootSystem.RollDrop(p.UnlockedEquipmentSlotCount)) dropCount = 1;
 
             float[] weights = GameConfig.MonsterTierDropQualityWeights[(int)m.tier];
             int dropLevel = m.tier == MonsterTier.Normal ? p.level : m.level;
@@ -468,8 +470,8 @@ namespace AutoBattle.EditorTools
             for (int i = 0; i < dropCount; i++)
             {
                 Equipment dropped = weights != null
-                    ? LootSystem.CreateEquipmentAtLevel(dropLevel, weights)
-                    : LootSystem.CreateRandomEquipment(dropLevel);
+                    ? LootSystem.CreateEquipmentAtLevel(dropLevel, weights, p)
+                    : LootSystem.CreateRandomEquipment(dropLevel, 0f, p);
 
                 if (TryAutoEquip(p, dropped)) continue;
                 p.gold += GameConfig.SellPrice(dropped.level, dropped.quality);

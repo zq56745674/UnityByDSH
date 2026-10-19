@@ -399,6 +399,7 @@ namespace AutoBattle
             sig.Add(p.BaseDefense);
             sig.Add(p.armor != null ? p.armor.EnhancedDefense : 0);
             sig.Add(p.Speed);
+            sig.Add(p.AttackSpeedBonus, 10000f);
             sig.Add(p.CritChance, 10000f);
             sig.Add(p.CritDamage, 10000f);
             sig.Add(p.ArmorPenetration, 10000f);
@@ -415,8 +416,12 @@ namespace AutoBattle
 
             // 「装备」这一项用强化后的主属性：不然强化完总攻击涨了、括号里的分解却没动，看着像算错了。
             _atkText.text = $"<color=#8C99B0>攻击</color>   <b>{p.Attack}</b>   <color=#5F6779>基础 {p.BaseAttack} + 装备 {(p.weapon != null ? p.weapon.EnhancedAttack : 0)}</color>";
-            _defText.text = $"<color=#8C99B0>防御</color>   <b>{p.Defense}</b>   <color=#5F6779>基础 {p.BaseDefense} + 装备 {(p.armor != null ? p.armor.EnhancedDefense : 0)}</color>";
-            _spdText.text = $"<color=#8C99B0>速度</color>   <b>{p.Speed}</b>   <color=#5F6779>攻击间隔 {BattleSystem.PlayerAttackInterval(p):0.00}s</color>";
+            _defText.text = $"<color=#8C99B0>防御</color>   <b>{p.Defense}</b>   <color=#5F6779>基础 {p.BaseDefense} + 装备 {(p.armor != null ? p.armor.EnhancedDefense : 0) + (p.helmet != null ? p.helmet.EnhancedDefense : 0)}</color>";
+            // 速度进软上限后，单看「速度 109」已经推不出攻击间隔（高速度段收益递减），
+            // 所以这里直接报「次/秒 + 间隔」，玩家看到的才是实际出手频率。
+            float rate = GameConfig.AttacksPerSecond(p.Speed, p.AttackSpeedBonus);
+            float interval = GameConfig.AttackInterval(p.Speed, p.AttackSpeedBonus);
+            _spdText.text = $"<color=#8C99B0>速度</color>   <b>{p.Speed}</b>   <color=#5F6779>攻速 {rate:0.00}/s · {interval:0.00}s</color>";
             _critText.text = $"<color=#8C99B0>暴击</color> <b>{p.CritChance * 100f:0.#}%</b>    <color=#8C99B0>暴伤</color> <b>{p.CritDamage * 100f:0}%</b>    <color=#8C99B0>穿透</color> <b>{p.ArmorPenetration * 100f:0.#}%</b>";
 
             if (p.IsMaxLevel)
@@ -481,7 +486,7 @@ namespace AutoBattle
 
                     string affixText = m.HasAffix ? $"    词缀：{m.AffixName}" : "";
                     _monsterStatText.text =
-                        $"攻击 {m.attack}    防御 {m.defense}    速度 {m.speed:0.#}    攻击间隔 {GameConfig.AttackInterval(m.speed):0.00}s\n" +
+                        $"攻击 {m.attack}    防御 {m.defense}    速度 {m.speed:0.#}    攻速 {GameConfig.AttacksPerSecond(m.speed):0.00}/s · {GameConfig.AttackInterval(m.speed):0.00}s\n" +
                         $"暴击率 {m.critChance * 100f:0.#}%    暴击伤害 {m.critDamage * 100f:0}%{affixText}";
                 }
 
@@ -645,90 +650,79 @@ namespace AutoBattle
         }
 
         /// <summary>
-        /// 装备两行文字。评分依赖角色属性，但只随「装备 / 等级 / 巅峰 / 强化等级」变化，
-        /// 所以这几个值没动就不重算——否则每帧会白跑两次 EquipmentScore.Of（6 次改玩家字段）。
+        /// 五槽装备卡：标题 / 主属性 / 倍率+评分。
+        /// 评分依赖角色属性，但只随「装备 / 等级 / 巅峰 / 强化 / 洗练 / 锁 / 技能」变化，
+        /// 所以把这些值拼成签名，签名没动就不重算——否则每帧会白跑五次 EquipmentScore.Of。
+        /// 洗练会原地改词条数值（引用不变），因此签名必须带上词条字段本身，不能只比引用。
         /// </summary>
         private void RefreshEquipmentLines(PlayerData p)
         {
-            int weaponEnhance = p.weapon != null ? p.weapon.enhanceLevel : -1;
-            int armorEnhance = p.armor != null ? p.armor.enhanceLevel : -1;
-            int weaponReforge = p.weapon != null ? p.weapon.reforgeCount : -1;
-            int armorReforge = p.armor != null ? p.armor.reforgeCount : -1;
-            bool showScore = GameSettings.ShowScore;
+            if (_equipTitles == null || _equipStats == null || _equipMetas == null) return;
 
-            // 被动技能加成会进评分公式，但换技能不改装备引用，必须把技能状态也放进缓存键。
-            bool skillChanged = _scoreCachedSkillMask != p.ownedSkillMask;
-            for (int i = 0; i < _scoreCachedSkillSlots.Length; i++)
+            var sig = new System.Text.StringBuilder(320);
+            sig.Append(p.level).Append('|').Append(p.paragonLevel).Append('|')
+               .Append(p.ownedSkillMask).Append('|').Append(GameSettings.ShowScore ? 1 : 0);
+            for (int i = 0; i < PlayerData.SkillSlotCount; i++) sig.Append(',').Append(p.GetSkillSlot(i));
+
+            for (int i = 0; i < EquipmentSlots.Count; i++)
             {
-                if (_scoreCachedSkillSlots[i] != p.GetSkillSlot(i))
-                {
-                    skillChanged = true;
-                    break;
-                }
+                Equipment e = p.GetEquipment(EquipmentSlots.All[i]);
+                sig.Append('|');
+                if (e == null) { sig.Append('_'); continue; }
+                sig.Append(e.level).Append(',').Append((int)e.quality).Append(',')
+                   .Append(e.qualityMultiplier).Append(',').Append(e.enhanceLevel).Append(',')
+                   .Append(e.reforgeCount).Append(',').Append(e.locked ? 1 : 0).Append(',')
+                   .Append(e.attack).Append(',').Append(e.defense).Append(',').Append(e.hp).Append(',')
+                   .Append(e.speed).Append(',').Append(e.haste).Append(',').Append(e.armorPen).Append(',')
+                   .Append(e.critChance).Append(',').Append(e.critDamage).Append(',')
+                   .Append(e.affixCritChance).Append(',').Append(e.affixCritDamage).Append(',')
+                   .Append(e.affixAttackSpeed).Append(',').Append(e.affixAllStats).Append(',')
+                   .Append(e.affixArmorPen).Append(',').Append(e.affixScale);
             }
 
-            if (!ReferenceEquals(_scoreCachedWeapon, p.weapon)
-                || !ReferenceEquals(_scoreCachedArmor, p.armor)
-                || _scoreCachedLevel != p.level
-                || _scoreCachedParagon != p.paragonLevel
-                || _scoreCachedWeaponEnhance != weaponEnhance
-                || _scoreCachedArmorEnhance != armorEnhance
-                || _scoreCachedWeaponReforge != weaponReforge
-                || _scoreCachedArmorReforge != armorReforge
-                || _scoreCachedShowScore != showScore
-                || skillChanged)
+            string signature = sig.ToString();
+            if (signature == _scoreCacheSignature) return;
+            _scoreCacheSignature = signature;
+
+            for (int i = 0; i < EquipmentSlots.Count; i++)
             {
-                _scoreCachedWeapon = p.weapon;
-                _scoreCachedArmor = p.armor;
-                _scoreCachedLevel = p.level;
-                _scoreCachedParagon = p.paragonLevel;
-                _scoreCachedWeaponEnhance = weaponEnhance;
-                _scoreCachedArmorEnhance = armorEnhance;
-                _scoreCachedWeaponReforge = weaponReforge;
-                _scoreCachedArmorReforge = armorReforge;
-                _scoreCachedShowScore = showScore;
-                _scoreCachedSkillMask = p.ownedSkillMask;
-                for (int i = 0; i < _scoreCachedSkillSlots.Length; i++)
+                EquipmentSlot slot = EquipmentSlots.All[i];
+                Equipment e = p.GetEquipment(slot);
+                if (e == null)
                 {
-                    _scoreCachedSkillSlots[i] = p.GetSkillSlot(i);
+                    _scoreEquipTitles[i] = $"<color=#5F6779>{EquipmentSlots.Name(slot)} · 空</color>";
+                    _scoreEquipStats[i] = string.Empty;
+                    _scoreEquipMetas[i] = string.Empty;
+                    continue;
                 }
-                _scoreWeaponText = FormatEquipment("武器", p.weapon);
-                _scoreArmorText = FormatEquipment("衣服", p.armor);
-                _scoreWeaponMeta = FormatEquipmentMeta(p.weapon);
-                _scoreArmorMeta = FormatEquipmentMeta(p.armor);
+
+                string hex = ColorUtility.ToHtmlStringRGB(e.QualityColor);
+                // 卡面只有 190 宽：标题只放「槽位 + 等级」，品质靠颜色，锁定用图标补一位。
+                _scoreEquipTitles[i] = $"<color=#{hex}><b>{EquipmentSlots.Name(slot)} Lv.{e.level}</b></color>"
+                    + (e.locked ? " <color=#FFD966>🔒</color>" : string.Empty);
+                _scoreEquipStats[i] = e.StatLine;
+                _scoreEquipMetas[i] = FormatEquipmentMeta(e);
             }
-            _weaponText.text = _scoreWeaponText;
-            _armorText.text = _scoreArmorText;
-            _weaponMetaText.text = _scoreWeaponMeta;
-            _armorMetaText.text = _scoreArmorMeta;
+
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                if (_equipTitles[i] != null) _equipTitles[i].text = _scoreEquipTitles[i];
+                if (_equipStats[i] != null) _equipStats[i].text = _scoreEquipStats[i];
+                if (_equipMetas[i] != null) _equipMetas[i].text = _scoreEquipMetas[i];
+            }
         }
 
-        private string FormatEquipment(string slotName, Equipment e)
-        {
-            if (e == null) return $"<color=#5F6779>{slotName}：空</color>";
-
-            string hex = ColorUtility.ToHtmlStringRGB(e.QualityColor);
-            string affixLine = string.IsNullOrEmpty(e.AffixLine)
-                ? string.Empty
-                : "\n    <color=#9AA6BD>" + e.AffixLine + "</color>";
-            // 评分口径见 EquipmentScore：必须带上角色当前属性算，所以这里要 _game。
-            float score = _game != null && _game.Player != null ? EquipmentScore.Of(_game.Player, e, e.slot) : 0f;
-            // 标题行：品质色只给名字，倍率与评分退到灰阶，眼睛先看到「这是什么品质」。
-            // 明细压到 13 号：装备词条一行能到「暴击率 +7.8% 暴击伤害 +112%」，15 号必然折行压到下一件装备。
-            return $"<color=#{hex}><b>{e.Title}</b></color>\n<size=13>    <color=#C6CEE0>{e.StatLine}</color>{affixLine}</size>";
-        }
-
-        /// <summary>装备标题行右列：倍率 + 评分（评分带角色当前属性，见 EquipmentScore）。</summary>
+        /// <summary>装备卡右上角：品质倍率 + 评分（评分可以关，见设置面板）。</summary>
         private string FormatEquipmentMeta(Equipment e)
         {
             if (e == null) return string.Empty;
 
-            // 评分可以关：有人只想知道「品质倍率」，不想被一个抽象分数牵着走。
             if (!GameSettings.ShowScore) return $"×{e.qualityMultiplier:0.00}";
 
             float score = _game != null && _game.Player != null ? EquipmentScore.Of(_game.Player, e, e.slot) : 0f;
-            return $"×{e.qualityMultiplier:0.00}   <color=#8C99B0>评分</color> <b>{score:0}</b>";
+            return $"<color=#8C99B0>×{e.qualityMultiplier:0.00}</color> <b>{score:0}</b>";
         }
+
 
         /// <summary>血条边框颜色：精英金色、Boss 红色、普通怪透明（不显示边框）。</summary>
         private static Color MonsterBorderColor(MonsterTier tier)

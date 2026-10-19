@@ -75,7 +75,7 @@ namespace AutoBattle.EditorTools
 
             var sb = new StringBuilder();
             sb.AppendLine($"[EndlessPacing] {seedCount} 个种子，最多 {maxFloor} 层；模板 Lv.{template.level} 巅峰 {template.paragonLevel} 技能 {template.OwnedSkillCount}/{SkillCatalog.All.Length}，装备 Lv.{gearLevel} 词条质量 {affixQuality:P0}{(maxGear ? "（满倍率+满主词条）" : "")}");
-            sb.AppendLine($"模板：攻 {template.Attack} 防 {template.Defense} 血 {template.MaxHp} 暴击 {template.CritChance:P1} 暴伤 {template.CritDamage:P0} 武器 +{template.weapon.enhanceLevel} 衣服 +{template.armor.enhanceLevel} 词条质量 {template.weapon.AffixQuality:P0}/{template.armor.AffixQuality:P0}");
+            sb.AppendLine($"模板：攻 {template.Attack} 防 {template.Defense} 血 {template.MaxHp} 速度 {template.Speed} 暴击 {template.CritChance:P1} 暴伤 {template.CritDamage:P0} 穿甲 {template.ArmorPenetration:P1} 强化 武器+{template.weapon.enhanceLevel}/衣服+{template.armor.enhanceLevel}/头盔+{template.helmet.enhanceLevel}/鞋+{template.boots.enhanceLevel}/饰品+{template.accessory.enhanceLevel} 词条质量 {template.weapon.AffixQuality:P0}/{template.armor.AffixQuality:P0}/{template.helmet.AffixQuality:P0}/{template.boots.AffixQuality:P0}/{template.accessory.AffixQuality:P0}");
             sb.AppendLine();
 
             // ---- 首死分布 ----
@@ -304,15 +304,15 @@ namespace AutoBattle.EditorTools
             p.currentHp = Mathf.Min(p.MaxHp, p.currentHp + heal);
 
             int dropCount = GameConfig.MonsterTierGuaranteedDrops[(int)m.tier];
-            if (dropCount == 0 && LootSystem.RollDrop()) dropCount = 1;
+            if (dropCount == 0 && LootSystem.RollDrop(p.UnlockedEquipmentSlotCount)) dropCount = 1;
 
             float[] weights = GameConfig.MonsterTierDropQualityWeights[(int)m.tier];
             int dropLevel = m.tier == MonsterTier.Normal ? p.level : Mathf.Min(m.level, cap);
             for (int i = 0; i < dropCount; i++)
             {
                 Equipment dropped = weights != null
-                    ? LootSystem.CreateEquipmentAtLevel(dropLevel, weights)
-                    : LootSystem.CreateRandomEquipment(dropLevel);
+                    ? LootSystem.CreateEquipmentAtLevel(dropLevel, weights, p)
+                    : LootSystem.CreateRandomEquipment(dropLevel, 0f, p);
 
                 if (TryAutoEquip(p, dropped)) continue;
                 p.gold += GameConfig.SellPrice(dropped.level, dropped.quality);
@@ -346,8 +346,14 @@ namespace AutoBattle.EditorTools
                 paragonLevel = paragonLevel,
                 paragonExp = 0,
             };
-            p.weapon = maxGear ? BuildMaxGear(EquipmentSlot.Weapon, gearLevel) : BuildGear(EquipmentSlot.Weapon, gearLevel, affixQuality);
-            p.armor = maxGear ? BuildMaxGear(EquipmentSlot.Armor, gearLevel) : BuildGear(EquipmentSlot.Armor, gearLevel, affixQuality);
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                EquipmentSlot slot = EquipmentSlots.All[i];
+                Equipment gear = maxGear
+                    ? BuildMaxGear(slot, gearLevel)
+                    : BuildGear(slot, gearLevel, affixQuality);
+                p.SetEquipment(gear);
+            }
 
             // 巅峰 200 应得 15 张技能卡；让 ProbePolicy 逐次实打挑选并装槽。
             ProbePolicy.ResolvePendingSkills(p);
@@ -386,36 +392,90 @@ namespace AutoBattle.EditorTools
             e.enhanceLevel = Mathf.Max(0, GameConfig.EnhanceMaxLevel);
 
             int steps = level - 1;
-            if (slot == EquipmentSlot.Weapon)
+            switch (slot)
             {
-                e.attack = Mathf.Max(1, Mathf.RoundToInt(
-                    (GameConfig.WeaponBaseAttack + GameConfig.WeaponAttackPerLevel * steps) * multiplier));
-                // 主词条取暴击率：在满词条模板下暴击率会顶到 95% 上限，收益高于暴伤主词条。
-                e.critChance = (GameConfig.WeaponBaseCritChance + GameConfig.WeaponCritChancePerLevel * steps) * multiplier;
-                e.critDamage = 0f;
-            }
-            else
-            {
-                e.defense = Mathf.Max(1, Mathf.RoundToInt(
-                    (GameConfig.ArmorBaseDefense + GameConfig.ArmorDefensePerLevel * steps) * multiplier));
-                e.hp = Mathf.Max(1, Mathf.RoundToInt(
-                    (GameConfig.ArmorBaseHp + GameConfig.ArmorHpPerLevel * steps) * multiplier));
+                case EquipmentSlot.Weapon:
+                    e.attack = Mathf.Max(1, Mathf.RoundToInt(
+                        (GameConfig.WeaponBaseAttack + GameConfig.WeaponAttackPerLevel * steps) * multiplier));
+                    // 主词条取暴击率：在满词条模板下暴击率会顶到 95% 上限，收益高于暴伤主词条。
+                    e.critChance = (GameConfig.WeaponBaseCritChance + GameConfig.WeaponCritChancePerLevel * steps) * multiplier;
+                    e.critDamage = 0f;
+                    break;
+
+                case EquipmentSlot.Armor:
+                    e.defense = Mathf.Max(1, Mathf.RoundToInt(
+                        (GameConfig.ArmorBaseDefense + GameConfig.ArmorDefensePerLevel * steps) * multiplier));
+                    e.hp = Mathf.Max(1, Mathf.RoundToInt(
+                        (GameConfig.ArmorBaseHp + GameConfig.ArmorHpPerLevel * steps) * multiplier));
+                    break;
+
+                case EquipmentSlot.Helmet:
+                    e.defense = Mathf.Max(1, Mathf.RoundToInt(
+                        (GameConfig.ArmorBaseDefense + GameConfig.ArmorDefensePerLevel * steps)
+                        * GameConfig.HelmetDefenseFactor * multiplier));
+                    e.hp = Mathf.Max(1, Mathf.RoundToInt(
+                        (GameConfig.ArmorBaseHp + GameConfig.ArmorHpPerLevel * steps)
+                        * GameConfig.HelmetHpFactor * multiplier));
+                    break;
+
+                case EquipmentSlot.Boots:
+                    // 速度不乘品质倍率，只按品质档位加固定值（与 LootSystem 同口径）。
+                    e.speed = Mathf.Max(0, Mathf.RoundToInt(
+                        GameConfig.BootsBaseSpeed + GameConfig.BootsSpeedPerLevel * steps
+                        + GameConfig.BootsSpeedPerQuality * q));
+                    e.haste = (GameConfig.BootsBaseHaste + GameConfig.BootsHastePerLevel * steps)
+                            * (1f + GameConfig.BootsHastePerQuality * q);
+                    break;
+
+                case EquipmentSlot.Accessory:
+                    e.critDamage = (GameConfig.AccessoryBaseCritDamage
+                                  + GameConfig.AccessoryCritDamagePerLevel * steps) * multiplier;
+                    e.armorPen = (GameConfig.AccessoryBaseArmorPen
+                                + GameConfig.AccessoryArmorPenPerLevel * steps) * multiplier;
+                    break;
             }
 
-            // 先清空随机副词条，再按槽位给满值组合。
+            // 先清空随机副词条，再按槽位给「满值且合法条数」的组合：
+            // 大件 4 条、小件 2 条；小件数值还要再乘 affixScale（0.5）。
             e.affixCritChance = 0f;
             e.affixCritDamage = 0f;
             e.affixAttackSpeed = 0f;
             e.affixAllStats = 0f;
             e.affixArmorPen = 0f;
+
             float scale = 1f + level * GameConfig.EquipAffixLevelScale;
-            e.affixCritDamage = GameConfig.EquipAffixMax[(int)EquipmentAffix.CritDamage] * scale;
-            e.affixAttackSpeed = GameConfig.EquipAffixMax[(int)EquipmentAffix.AttackSpeed] * scale;
-            e.affixAllStats = GameConfig.EquipAffixMax[(int)EquipmentAffix.AllStats] * scale;
-            if (slot == EquipmentSlot.Weapon)
-                e.affixCritChance = GameConfig.EquipAffixMax[(int)EquipmentAffix.CritChance] * scale;
-            else
-                e.affixArmorPen = GameConfig.EquipAffixMax[(int)EquipmentAffix.ArmorPen] * scale;
+            float minorScale = Mathf.Max(0.01f, e.affixScale);
+            switch (slot)
+            {
+                case EquipmentSlot.Weapon:
+                    e.affixCritChance = GameConfig.EquipAffixMax[(int)EquipmentAffix.CritChance] * scale;
+                    e.affixCritDamage = GameConfig.EquipAffixMax[(int)EquipmentAffix.CritDamage] * scale;
+                    e.affixAttackSpeed = GameConfig.EquipAffixMax[(int)EquipmentAffix.AttackSpeed] * scale;
+                    e.affixAllStats = GameConfig.EquipAffixMax[(int)EquipmentAffix.AllStats] * scale;
+                    break;
+
+                case EquipmentSlot.Armor:
+                    e.affixCritDamage = GameConfig.EquipAffixMax[(int)EquipmentAffix.CritDamage] * scale;
+                    e.affixAttackSpeed = GameConfig.EquipAffixMax[(int)EquipmentAffix.AttackSpeed] * scale;
+                    e.affixAllStats = GameConfig.EquipAffixMax[(int)EquipmentAffix.AllStats] * scale;
+                    e.affixArmorPen = GameConfig.EquipAffixMax[(int)EquipmentAffix.ArmorPen] * scale;
+                    break;
+
+                case EquipmentSlot.Helmet:
+                    e.affixCritDamage = GameConfig.EquipAffixMax[(int)EquipmentAffix.CritDamage] * scale * minorScale;
+                    e.affixAllStats = GameConfig.EquipAffixMax[(int)EquipmentAffix.AllStats] * scale * minorScale;
+                    break;
+
+                case EquipmentSlot.Boots:
+                    e.affixAttackSpeed = GameConfig.EquipAffixMax[(int)EquipmentAffix.AttackSpeed] * scale * minorScale;
+                    e.affixAllStats = GameConfig.EquipAffixMax[(int)EquipmentAffix.AllStats] * scale * minorScale;
+                    break;
+
+                case EquipmentSlot.Accessory:
+                    e.affixCritDamage = GameConfig.EquipAffixMax[(int)EquipmentAffix.CritDamage] * scale * minorScale;
+                    e.affixArmorPen = GameConfig.EquipAffixMax[(int)EquipmentAffix.ArmorPen] * scale * minorScale;
+                    break;
+            }
             return e;
         }
 

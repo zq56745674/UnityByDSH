@@ -196,6 +196,12 @@ namespace AutoBattle
             AttackIntervalBase = ClampFloat(AttackIntervalBase, 0.01f, 10000f, nameof(AttackIntervalBase));
             MinAttackInterval = ClampFloat(MinAttackInterval, 0.01f, 10000f, nameof(MinAttackInterval));
             AttackSpeedDivisor = ClampFloat(AttackSpeedDivisor, 0.01f, 10000f, nameof(AttackSpeedDivisor));
+
+            // 攻速软上限必须低于硬上限，否则渐近公式的分母为 0 / 曲线反向。
+            AttackSpeedSoftCap = ClampFloat(AttackSpeedSoftCap, 0.1f, 100f, nameof(AttackSpeedSoftCap));
+            AttackSpeedHardCap = ClampFloat(AttackSpeedHardCap, 0.11f, 100f, nameof(AttackSpeedHardCap));
+            if (AttackSpeedHardCap <= AttackSpeedSoftCap)
+                AttackSpeedHardCap = ClampFloat(AttackSpeedSoftCap + 0.5f, 0.11f, 100f, nameof(AttackSpeedHardCap));
             StageClearDelay = ClampFloat(StageClearDelay, 0f, 10000f, nameof(StageClearDelay));
             MonsterRespawnDelay = ClampFloat(MonsterRespawnDelay, 0f, 10000f, nameof(MonsterRespawnDelay));
             PlayerReviveDelay = ClampFloat(PlayerReviveDelay, 0.01f, 10000f, nameof(PlayerReviveDelay));
@@ -217,6 +223,27 @@ namespace AutoBattle
             EndlessFloorClearDelay = ClampFloat(EndlessFloorClearDelay, 0f, 10000f, nameof(EndlessFloorClearDelay));
             EndlessCheckpointOffset = ClampInt(EndlessCheckpointOffset, 0, 9999, nameof(EndlessCheckpointOffset));
             EndlessDropLevelCap = ClampInt(EndlessDropLevelCap, 1, 9999, nameof(EndlessDropLevelCap));
+
+            // 掉落与五槽：概率必须落在 [0,1]；小件倍率与属性系数不能为负。
+            DropChance = ClampFloat(DropChance, 0f, 1f, nameof(DropChance));
+            DropChancePerExtraSlot = ClampFloat(DropChancePerExtraSlot, 0f, 1f, nameof(DropChancePerExtraSlot));
+            SmartDropChance = ClampFloat(SmartDropChance, 0f, 1f, nameof(SmartDropChance));
+            MinorAffixScale = ClampFloat(MinorAffixScale, 0f, 2f, nameof(MinorAffixScale));
+            HelmetHpFactor = ClampFloat(HelmetHpFactor, 0f, 10f, nameof(HelmetHpFactor));
+            HelmetDefenseFactor = ClampFloat(HelmetDefenseFactor, 0f, 10f, nameof(HelmetDefenseFactor));
+            BootsBaseSpeed = ClampInt(BootsBaseSpeed, 0, 9999, nameof(BootsBaseSpeed));
+            BootsSpeedPerLevel = ClampFloat(BootsSpeedPerLevel, 0f, 999f, nameof(BootsSpeedPerLevel));
+            BootsSpeedPerQuality = ClampFloat(BootsSpeedPerQuality, 0f, 999f, nameof(BootsSpeedPerQuality));
+            BootsBaseHaste = ClampFloat(BootsBaseHaste, 0f, 10f, nameof(BootsBaseHaste));
+            BootsHastePerLevel = ClampFloat(BootsHastePerLevel, 0f, 1f, nameof(BootsHastePerLevel));
+            BootsHastePerQuality = ClampFloat(BootsHastePerQuality, 0f, 10f, nameof(BootsHastePerQuality));
+            AccessoryBaseCritDamage = ClampFloat(AccessoryBaseCritDamage, 0f, 10f, nameof(AccessoryBaseCritDamage));
+            AccessoryCritDamagePerLevel = ClampFloat(AccessoryCritDamagePerLevel, 0f, 1f, nameof(AccessoryCritDamagePerLevel));
+            AccessoryBaseArmorPen = ClampFloat(AccessoryBaseArmorPen, 0f, 10f, nameof(AccessoryBaseArmorPen));
+            AccessoryArmorPenPerLevel = ClampFloat(AccessoryArmorPenPerLevel, 0f, 1f, nameof(AccessoryArmorPenPerLevel));
+            HelmetUnlockChapter = ClampInt(HelmetUnlockChapter, 1, ChapterCount, nameof(HelmetUnlockChapter));
+            BootsUnlockChapter = ClampInt(BootsUnlockChapter, HelmetUnlockChapter, ChapterCount, nameof(BootsUnlockChapter));
+            AccessoryUnlockChapter = ClampInt(AccessoryUnlockChapter, BootsUnlockChapter, ChapterCount, nameof(AccessoryUnlockChapter));
         }
 
         /// <summary>把当前生效的数值序列化成 JSON（用于生成初始配置文件，或导出改过的数值）。</summary>

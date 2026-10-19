@@ -227,7 +227,7 @@ namespace AutoBattle
                 {
                     title = "角色与装备",
                     body = "左上角是角色：等级、生命、攻击、防御、攻速、暴击都在这里。"
-                         + "\n装备分武器和衣服两个槽位；掉落会按评分自动比较，你也可以锁住当前装备、改用手动对比。",
+                         + "\n装备有五个槽位：武器与衣服一开始就有，头盔 3-10、鞋 6-10、饰品 11-10 解锁；点装备卡可对比，锁定后掉落会等你手动换。",
                     target = _equipCard != null ? _equipCard.rectTransform : _leftPanel,
                 },
                 new GuideStep

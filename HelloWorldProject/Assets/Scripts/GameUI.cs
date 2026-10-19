@@ -33,8 +33,10 @@ namespace AutoBattle
         private Text _spdText;
         private Text _expText;
         private Image _expFill;
-        private Text _weaponText;
-        private Text _armorText;
+        private Button[] _equipCards;
+        private Text[] _equipTitles;
+        private Text[] _equipStats;
+        private Text[] _equipMetas;
         private Text _goldText;
         private Text _critText;
         private Text _statText;
@@ -138,8 +140,10 @@ namespace AutoBattle
         private Text _enhancePanelTitle;
         private Button[] _enhanceSlotButtons;
         private Text[] _enhanceSlotLabels;
-        private Button[] _enhanceActionButtons;
-        private Text[] _enhanceActionLabels;
+        private Text _enhanceCardLabel;
+        private Button _enhanceActionButton;
+        private Text _enhanceActionLabel;
+        private int _enhanceSlotIndex;
         private bool _enhancePanelWasOpen;
         private bool _enhancePanelDirty = true;
 
@@ -148,47 +152,36 @@ namespace AutoBattle
         private Text _reforgePanelTitle;
         private Button[] _reforgeSlotButtons;
         private Text[] _reforgeSlotLabels;
-        private Button[] _reforgeActionButtons;
-        private Text[] _reforgeActionLabels;
-        // 锁词条：每张卡 5 行词条按钮（实际只显示 AffixCount 行），点击即切换锁定。
+        private Text _reforgeCardLabel;
+        private Button[] _reforgeAffixButtons;
+        private Text[] _reforgeAffixLabels;
+        private Image[] _reforgeAffixStrips;
+        private Text _reforgeQualityLabel;
+        private Text _reforgeCostLabel;
+        private Button _reforgeActionButton;
+        private Text _reforgeActionLabel;
+        private int _reforgeSlotIndex;
+        // 锁词条：当前选中那件的 5 行词条按钮（实际只显示 AffixCount 行），点击即切换锁定。
         // 锁定状态只活在界面层、不进存档——它是「这次准备怎么洗」的临时意图，
         // 跨存档/跨装备携带反而危险（换装后锁住的种类可能根本不存在了）。
-        private Button[,] _reforgeAffixButtons;
-        private Text[,] _reforgeAffixLabels;
-        private Image[,] _reforgeAffixStrips;
-        private Text[] _reforgeQualityLabels;
-        private Text[] _reforgeCostLabels;
-        private readonly int[] _reforgeLockMasks = new int[2];
-        private readonly Equipment[] _reforgeLockOwners = new Equipment[2];
+        private readonly int[] _reforgeLockMasks = new int[EquipmentSlots.Count];
+        private readonly Equipment[] _reforgeLockOwners = new Equipment[EquipmentSlots.Count];
         private bool _reforgePanelWasOpen;
         private bool _reforgePanelDirty = true;
 
         // ---- 装备行缓存 ----
-        // EquipmentScore.Of 为了算增量评分，内部会临时换装再还原：每次调用 = 3 次改
-        // PlayerData.weapon/armor + 2 次属性重算。评分只可能随「装备 / 等级 / 巅峰 / 强化」
+        // EquipmentScore.Of 为了算增量评分，内部会临时换装再还原：每次调用都会改玩家字段并重算属性。
+        // 评分只可能随「装备 / 等级 / 巅峰 / 强化」
         // 变化，所以记住上次算过的这几个值，没变就直接复用字符串。
         // 强化等级必须进缓存键：强化是在**同一个 Equipment 对象**上改字段，
         // 引用比较察觉不到，漏掉它会出现「强化完装备行数字没动」的假象。
         // 洗练同理：它也在同一个对象上换掉全部副词条，所以次数（reforgeCount）也要进键。
-        private Equipment _scoreCachedWeapon;
-        private Equipment _scoreCachedArmor;
-        private int _scoreCachedLevel = -1;
-        private int _scoreCachedParagon = -1;
-        private int _scoreCachedWeaponEnhance = -1;
-        private int _scoreCachedArmorEnhance = -1;
-        private int _scoreCachedWeaponReforge = -1;
-        private int _scoreCachedArmorReforge = -1;
-        private bool _scoreCachedShowScore = true; // 设置里关评分后要重画一次装备行
-        // 被动技能会改防御/暴击/攻速，这些直接进 EquipmentScore 的公式。
-        // 换技能不改装备对象，也得让缓存失效，否则技能一换装备评分还是旧数字。
-        private int _scoreCachedSkillMask = -1;
-        private readonly int[] _scoreCachedSkillSlots = new int[PlayerData.SkillSlotCount]; // 首轮由 mask=-1 强制重建
-        private string _scoreWeaponText;
-        private string _scoreWeaponMeta;
-        private string _scoreArmorMeta;
-        private Text _weaponMetaText;
-        private Text _armorMetaText;
-        private string _scoreArmorText;
+        // 五槽的缓存键：装备引用、等级、强化、洗练、锁、评分开关与技能状态全部拼成签名。
+        // 比旧的两槽逐字段比较更不容易漏项（洗练会原地改词条数值，引用不变）。
+        private string _scoreCacheSignature = string.Empty;
+        private readonly string[] _scoreEquipTitles = new string[EquipmentSlots.Count];
+        private readonly string[] _scoreEquipStats = new string[EquipmentSlots.Count];
+        private readonly string[] _scoreEquipMetas = new string[EquipmentSlots.Count];
 
         /// <summary>Buff 栏复用的拼装缓冲：内容每帧都在变（倒计时），但没必要每帧新建一个。</summary>
         private readonly System.Text.StringBuilder _buffSb = new System.Text.StringBuilder(320);
@@ -462,19 +455,34 @@ namespace AutoBattle
                 GameConfig.BtnHeader, out _);
             reforgeEntry.onClick.AddListener(OnReforgeEntryClicked);
 
-            // 标题行拆成左右两列：左边「品质 + 部位 + 等级」，右边「倍率 + 评分」。
-            // 原来挤在一行里，评分正好顶到卡片右边缘，加个三位数就出框。
-            // 正文宽度要留住 344：传说装备的属性行（攻击 +916 暴击伤害 +132.2%）在 252 宽下会被截掉尾数。
-            // 右列评分只占标题那一行，正文行在它下方，横向重叠不会互相压字。
-            _weaponText = CreateText(panel, "Weapon", "", 24, 334, 344, 86, FontBody, Color.white, TextAnchor.UpperLeft);
-            _armorText = CreateText(panel, "Armor", "", 24, 424, 344, 86, FontBody, Color.white, TextAnchor.UpperLeft);
-            _weaponMetaText = CreateText(panel, "WeaponMeta", "", 226, 336, 170, 20, FontTiny + 1,
-                GameConfig.TextMuted, TextAnchor.UpperRight);
-            _armorMetaText = CreateText(panel, "ArmorMeta", "", 226, 426, 170, 20, FontTiny + 1,
-                GameConfig.TextMuted, TextAnchor.UpperRight);
-            // 右列内容短（倍率 + 评分），绝不该折行：一旦折行第二行会压到属性文字上。
-            _weaponMetaText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            _armorMetaText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            // 五槽改成 2 列 × 3 行紧凑卡（190×58）。两张大卡（396 宽）放不下头盔/鞋/饰品，
+            // 而且大卡里三行属性会把 192 高的装备区撑爆。卡面只留「标题 / 主属性 / 倍率+评分」，
+            // 完整词条与逐项差走对比面板（点卡即开）。
+            _equipCards = new Button[EquipmentSlots.Count];
+            _equipTitles = new Text[EquipmentSlots.Count];
+            _equipStats = new Text[EquipmentSlots.Count];
+            _equipMetas = new Text[EquipmentSlots.Count];
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                EquipmentSlot slot = EquipmentSlots.All[i];
+                float cardX = 20f + (i % 2) * 198f;
+                float cardY = 328f + (i / 2) * 64f;
+                Button card = CreateButton(panel, "EquipCard" + slot, "", cardX, cardY, 190, 58,
+                    GameConfig.CardBg, out Text hiddenLabel);
+                hiddenLabel.text = string.Empty;
+                int captured = i;
+                card.onClick.AddListener(delegate { OnEquipCardClicked(captured); });
+                _equipCards[i] = card;
+
+                _equipTitles[i] = CreateText(card.transform, "Title", "", 8, 4, 118, 16, 12,
+                    Color.white, TextAnchor.MiddleLeft, FontStyle.Bold);
+                _equipMetas[i] = CreateText(card.transform, "Meta", "", 118, 4, 64, 16, 10,
+                    GameConfig.TextMuted, TextAnchor.MiddleRight);
+                _equipMetas[i].horizontalOverflow = HorizontalWrapMode.Overflow;
+                _equipStats[i] = CreateText(card.transform, "Stats", "", 8, 21, 174, 33, 10,
+                    GameConfig.TextNormal, TextAnchor.UpperLeft);
+                _equipStats[i].lineSpacing = 1.02f;
+            }
 
             CreateImage(panel, "Divider2", 16, 514, 388, 2, GameConfig.Divider);
             _goldText = CreateText(panel, "Gold", "", 24, 518, 376, 26, 19, GameConfig.TextGold, TextAnchor.MiddleLeft, FontStyle.Bold);

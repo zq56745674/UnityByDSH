@@ -116,20 +116,18 @@ namespace AutoBattle
         }
 
         /// <summary>
-        /// 主角的实际出手间隔：先由速度换算出基础间隔，再按「攻击速度」加成缩短，
-        /// 即 基础间隔 / (1 + 攻速加成)。
-        /// </summary>
-        /// <summary>
-        /// 主角实际出手间隔 = 速度换算的基础间隔 ÷ (1 + 装备攻速加成)。
-        /// 最后仍要夹一层 MinAttackInterval —— 否则攻速副词条能把这层下限再穿过去，
-        /// 「每秒最多 5 下」就不是硬上限了。
+        /// 主角的实际出手间隔：速度与攻速加成一起进入软上限曲线（见 GameConfig.AttacksPerSecond）。
+        /// 攻速乘在线性部分内，超过软上限后只渐近逼近硬上限，不会像旧公式那样直接撞 0.2s。
         /// </summary>
         public static float PlayerAttackInterval(PlayerData player)
         {
             if (player == null) return Mathf.Max(0.01f, GameConfig.MinAttackInterval);
-            return Mathf.Max(GameConfig.MinAttackInterval,
-                GameConfig.AttackInterval(player.Speed) / (1f + player.AttackSpeedBonus));
+            return GameConfig.AttackInterval(player.Speed, player.AttackSpeedBonus);
         }
+
+        /// <summary>某单位当前的有效攻速（次/秒），UI 与评分共用同一口径。</summary>
+        public static float AttacksPerSecond(float speed, float haste = 0f) =>
+            GameConfig.AttacksPerSecond(speed, haste);
 
         /// <summary>
         /// 百分比减伤伤害公式：

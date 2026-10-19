@@ -139,7 +139,7 @@ namespace AutoBattle.EditorTools
             var sb = new StringBuilder();
             sb.AppendLine($"[EndgamePacing] seed={seed}  从 Lv.100 巅峰 0 起，在 11-10 循环（5 小怪 + 轮换 BOSS）");
             sb.AppendLine($"目标：巅峰 {targetParagon}（配置上限 {GameConfig.MaxParagonLevel}）");
-            sb.AppendLine($"起始：HP {BuildFresh100().MaxHp}  攻 {BuildFresh100().Attack}  传说武器/衣服  0 技能");
+            sb.AppendLine($"起始：HP {BuildFresh100().MaxHp}  攻 {BuildFresh100().Attack}  传说五件套  0 技能");
             sb.AppendLine();
             if (clearAttempts > 0)
                 sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
@@ -158,28 +158,33 @@ namespace AutoBattle.EditorTools
                 "收尾：Lv.{0} 巅峰 {1}（目标 {2}；配置上限 {3}）  技能 {4}/{5}",
                 p.level, p.paragonLevel, targetParagon, GameConfig.MaxParagonLevel, p.OwnedSkillCount, SkillCatalog.All.Length));
             sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
-                "强化：累计花费 {0:N0} 金币   武器 +{1}  衣服 +{2}",
-                enhanceSpent, p.weapon.enhanceLevel, p.armor.enhanceLevel));
+                "强化：累计花费 {0:N0} 金币   武器 +{1}  衣服 +{2}  头盔 +{3}  鞋 +{4}  饰品 +{5}",
+                enhanceSpent,
+                p.weapon.enhanceLevel, p.armor.enhanceLevel,
+                p.helmet.enhanceLevel, p.boots.enhanceLevel, p.accessory.enhanceLevel));
             sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
-                "洗练：累计花费 {0:N0} 金币（目标质量 {1:P0}）   武器 {2:P0}/洗 {3} 次   衣服 {4:P0}/洗 {5} 次   兜里还剩 {6:N0}",
+                "洗练：累计花费 {0:N0} 金币（目标质量 {1:P0}）   武器 {2:P0}/洗 {3} 次   衣服 {4:P0}/洗 {5} 次   头盔 {6:P0}/洗 {7} 次   鞋 {8:P0}/洗 {9} 次   饰品 {10:P0}/洗 {11} 次   兜里还剩 {12:N0}",
                 reforgeSpent, reforgeQuality,
                 p.weapon.AffixQuality, p.weapon.reforgeCount,
-                p.armor.AffixQuality, p.armor.reforgeCount, p.gold));
+                p.armor.AffixQuality, p.armor.reforgeCount,
+                p.helmet.AffixQuality, p.helmet.reforgeCount,
+                p.boots.AffixQuality, p.boots.reforgeCount,
+                p.accessory.AffixQuality, p.accessory.reforgeCount, p.gold));
             sb.AppendLine("口径：战斗时间不含等待；含刷怪+商店 = 战斗 + 击杀数 × MonsterRespawnDelay(0.5s) + BOSS 次数 × ShopDuration(3s)，不含选关 UI、加载与手动操作。");
             sb.AppendLine("洗练口径：达到目标质量（默认 80%，docs/equipment-reforge.md 的性价比拐点）即停；锁住已达标的词条再洗差的，不追 90%。");
 
             return sb.ToString();
         }
 
-        /// <summary>Lv.100 + 传说武器/衣服，0 巅峰 0 技能。</summary>
+        /// <summary>Lv.100 + 传说五件套，0 巅峰 0 技能。</summary>
         static PlayerData BuildFresh100()
         {
             var p = new PlayerData();
             p.level = 100;
             p.paragonLevel = 0;
             p.paragonExp = 0;
-            p.weapon = LootSystem.CreateEquipment(EquipmentSlot.Weapon, 100, EquipmentQuality.Legendary);
-            p.armor = LootSystem.CreateEquipment(EquipmentSlot.Armor, 100, EquipmentQuality.Legendary);
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+                p.SetEquipment(LootSystem.CreateEquipment(EquipmentSlots.All[i], 100, EquipmentQuality.Legendary));
             p.FillHp();
             return p;
         }

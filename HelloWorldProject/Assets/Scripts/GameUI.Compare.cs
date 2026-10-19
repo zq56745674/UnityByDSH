@@ -12,8 +12,8 @@ namespace AutoBattle
     public partial class GameUI
     {
         private RectTransform _comparePanel;
-        private readonly Button[] _compareSlotButtons = new Button[2];
-        private readonly Text[] _compareSlotLabels = new Text[2];
+        private readonly Button[] _compareSlotButtons = new Button[EquipmentSlots.Count];
+        private readonly Text[] _compareSlotLabels = new Text[EquipmentSlots.Count];
         private Text _compareCurrentText;
         private Text _comparePendingText;
         private Text _compareDeltaText;
@@ -41,11 +41,12 @@ namespace AutoBattle
                 GameConfig.BtnNeutral, out _);
             close.onClick.AddListener(OnCompareCloseClicked);
 
-            for (int i = 0; i < 2; i++)
+            // 五个槽位横排：680 宽里 5×110 + 4×6 = 574，正好留出右侧空白。
+            for (int i = 0; i < EquipmentSlots.Count; i++)
             {
                 int captured = i;
                 _compareSlotButtons[i] = CreateButton(_comparePanel, "CompareSlot" + i,
-                    i == 0 ? "武器" : "衣服", 20 + i * 120, 72, 110, 30,
+                    EquipmentSlots.Name(EquipmentSlots.All[i]), 20 + i * 116, 72, 110, 30,
                     GameConfig.BtnHeader, out _compareSlotLabels[i]);
                 _compareSlotButtons[i].onClick.AddListener(() => OnCompareSlotClicked(captured));
             }
@@ -111,17 +112,20 @@ namespace AutoBattle
             _compareDirty = false;
 
             PlayerData p = _game.Player;
-            EquipmentSlot slot = (EquipmentSlot)Mathf.Clamp(_compareSlot, 0, 1);
+            EquipmentSlot slot = (EquipmentSlot)Mathf.Clamp(_compareSlot, 0, EquipmentSlots.Count - 1);
             Equipment current = p.GetEquipment(slot);
             Equipment pending = _game.PendingDrop(slot);
 
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < EquipmentSlots.Count; i++)
             {
                 bool selected = i == _compareSlot;
+                EquipmentSlot s = EquipmentSlots.All[i];
+                bool unlocked = p.IsEquipmentSlotUnlocked(s);
                 _compareSlotButtons[i].image.color = selected ? GameConfig.BtnPrimary : GameConfig.BtnHeader;
-                _compareSlotLabels[i].color = selected ? Color.white : GameConfig.TextMuted;
-                bool has = _game.HasPendingDrop((EquipmentSlot)i);
-                _compareSlotLabels[i].text = (i == 0 ? "武器" : "衣服") + (has ? " ●" : "");
+                _compareSlotLabels[i].color = unlocked ? (selected ? Color.white : GameConfig.TextMuted) : GameConfig.BtnDisabledText;
+                bool has = _game.HasPendingDrop(s);
+                _compareSlotLabels[i].text = EquipmentSlots.Name(s)
+                    + (unlocked ? string.Empty : " · 未解锁") + (has ? " ●" : "");
             }
 
             if (current == null)
@@ -208,12 +212,20 @@ namespace AutoBattle
             string main = "<color=#8C99B0>主属性：</color>"
                 + Signed("攻", candidate.EnhancedAttack - current.EnhancedAttack, "0")
                 + Signed("防", candidate.EnhancedDefense - current.EnhancedDefense, "0")
-                + Signed("血", candidate.EnhancedHp - current.EnhancedHp, "0");
+                + Signed("血", candidate.EnhancedHp - current.EnhancedHp, "0")
+                + Signed("速", candidate.EnhancedSpeed - current.EnhancedSpeed, "0.#")
+                + Signed("攻速", (candidate.EnhancedHaste - current.EnhancedHaste) * 100f, "0.#", "%")
+                + Signed("穿甲", (candidate.EnhancedArmorPen - current.EnhancedArmorPen) * 100f, "0.#", "%");
 
             float critChance = (candidate.critChance + candidate.affixCritChance)
                 - (current.critChance + current.affixCritChance);
-            float critDamage = (candidate.critDamage + candidate.affixCritDamage)
-                - (current.critDamage + current.affixCritDamage);
+            // 饰品的暴伤主词条吃强化，武器的暴伤主词条不吃——按槽位取对应的读法，
+            // 否则换上满强化饰品时词条行会少报一截。
+            float candidateCritDamage = (candidate.slot == EquipmentSlot.Accessory
+                ? candidate.EnhancedCritDamage : candidate.critDamage) + candidate.affixCritDamage;
+            float currentCritDamage = (current.slot == EquipmentSlot.Accessory
+                ? current.EnhancedCritDamage : current.critDamage) + current.affixCritDamage;
+            float critDamage = candidateCritDamage - currentCritDamage;
             float speed = candidate.affixAttackSpeed - current.affixAttackSpeed;
             float allStats = candidate.affixAllStats - current.affixAllStats;
             float armorPen = candidate.affixArmorPen - current.affixArmorPen;
@@ -238,9 +250,21 @@ namespace AutoBattle
 
         private void OnCompareEntryClicked()
         {
-            _compareSlot = _game.HasPendingDrop(EquipmentSlot.Weapon) || !_game.HasPendingDrop(EquipmentSlot.Armor) ? 0 : 1;
+            _compareSlot = 0;
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                if (_game.HasPendingDrop(EquipmentSlots.All[i])) { _compareSlot = i; break; }
+            }
             _compareDirty = true;
             _game.ToggleComparePanel();
+        }
+
+        /// <summary>点左栏装备卡：直接打开对比面板并切到该槽位。</summary>
+        private void OnEquipCardClicked(int index)
+        {
+            _compareSlot = Mathf.Clamp(index, 0, EquipmentSlots.Count - 1);
+            _compareDirty = true;
+            if (!_game.CompareOpen) _game.ToggleComparePanel();
         }
 
         private void OnCompareCloseClicked()
@@ -251,7 +275,7 @@ namespace AutoBattle
 
         private void OnCompareSlotClicked(int side)
         {
-            _compareSlot = Mathf.Clamp(side, 0, 1);
+            _compareSlot = Mathf.Clamp(side, 0, EquipmentSlots.Count - 1);
             _compareDirty = true;
         }
 

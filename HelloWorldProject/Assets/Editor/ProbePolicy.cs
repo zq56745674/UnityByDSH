@@ -222,7 +222,7 @@ namespace AutoBattle.EditorTools
                 float bestValue = 0f;
                 int bestCost = 0;
 
-                foreach (EquipmentSlot slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor })
+                foreach (EquipmentSlot slot in EquipmentSlots.All)
                 {
                     Equipment e = p.GetEquipment(slot);
                     if (e == null || !e.CanEnhance) continue;
@@ -257,7 +257,7 @@ namespace AutoBattle.EditorTools
         public const float DefaultReforgeQuality = 0.80f;
 
         /// <summary>
-        /// 把金币花在洗练上，直到两件装备的词条质量都达到 targetQuality，或金币只剩药钱。
+        /// 把金币花在洗练上，直到五件装备的词条质量都达到 targetQuality，或金币只剩药钱。
         /// 每次挑「质量更低的那件」洗；洗之前锁住该件里已经达到目标质量的词条，
         /// 所以只会重抽拖后腿的那几条。返回共花掉多少金币。
         ///
@@ -279,7 +279,7 @@ namespace AutoBattle.EditorTools
                 int bestCost = 0;
                 float bestQuality = float.MaxValue;
 
-                foreach (EquipmentSlot slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor })
+                foreach (EquipmentSlot slot in EquipmentSlots.All)
                 {
                     Equipment e = p.GetEquipment(slot);
                     if (e == null || !e.CanReforge) continue;
@@ -343,7 +343,10 @@ namespace AutoBattle.EditorTools
             float min = GameConfig.EquipAffixMin[k];
             float max = GameConfig.EquipAffixMax[k];
             if (max <= min) return 1f;
-            return Mathf.Clamp01((value / levelScale - min) / (max - min));
+            // 小件的词条数值已经乘过 affixScale；不除回来会把「半数值」误判成低质量，
+            // 洗练策略就永远不锁好词条，白白重抽。
+            float scale = levelScale * Mathf.Max(0.01f, e.affixScale);
+            return Mathf.Clamp01((value / scale - min) / (max - min));
         }
 
         /// <summary>强化这一件一级能涨多少评分（临时加一级再退回，不改状态）。</summary>
