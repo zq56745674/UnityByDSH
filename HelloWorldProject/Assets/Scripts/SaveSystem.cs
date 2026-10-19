@@ -17,9 +17,10 @@ namespace AutoBattle
         /// v4：加入巅峰等级与六个技能槽；
         /// v5：加入关卡 / 章节进度；
         /// v6：加入首通记录（clearedStages）。
+        /// v7：加入无尽模式最高层（endlessBestFloor）。
         /// 旧档缺 version 字段时读到 0，据此判断需要迁移。
         /// </summary>
-        private const int CurrentSaveVersion = 6;
+        private const int CurrentSaveVersion = 7;
 
         /// <summary>装备字段迁移的版本线：低于此值的装备需要反推品质倍率。</summary>
         private const int EquipmentFieldVersion = 2;
@@ -63,6 +64,8 @@ namespace AutoBattle
             public int stage;
             public int gold;
             public int clearedCount;
+            public int endlessBestFloor;
+            public bool endlessUnlocked;
             public int version;
         }
 
@@ -109,6 +112,14 @@ namespace AutoBattle
             info.paragonLevel = data.paragonLevel;
             info.gold = data.gold;
             info.clearedCount = data.clearedStages != null ? data.clearedStages.Count : 0;
+
+            // 解锁只看「终局 11-10 是否首通」，不能用 clearedCount >= 110：
+            // 缺关或手改档会让总数虚高，而终局那一关可能根本没打。
+            info.endlessUnlocked = data.clearedStages != null &&
+                data.clearedStages.Contains(PlayerData.StageKey(GameConfig.ChapterCount, GameConfig.StagesPerChapter));
+
+            // v7 之前没有无尽模式，最高层按 0 显示（面板会显示「未解锁」）。
+            info.endlessBestFloor = data.version >= 7 ? Mathf.Clamp(data.endlessBestFloor, 0, 9999) : 0;
 
             // 与 Load 一致：旧档没有关卡字段时按 1-1 显示。
             bool hasStage = data.version >= 5;
@@ -185,6 +196,9 @@ namespace AutoBattle
             public int currentHp;
             public Equipment weapon;
             public Equipment armor;
+
+            /// <summary>v7 起：无尽模式已清过的最高层（0 = 未打过）。</summary>
+            public int endlessBestFloor;
         }
 
         public static bool HasSave => HasSaveIn(CurrentSlot);
@@ -222,6 +236,7 @@ namespace AutoBattle
                 currentHp = player.currentHp,
                 weapon = player.weapon,
                 armor = player.armor,
+                endlessBestFloor = Mathf.Clamp(player.endlessBestFloor, 0, 9999),
             };
 
             try
@@ -366,6 +381,12 @@ namespace AutoBattle
             // 生命必须夹在当前等级的真实上限内（装备变动后上限会变）。
             player.currentHp = Mathf.Clamp(data.currentHp, 1, Mathf.Max(1, player.MaxHp));
 
+            // v7：无尽最高层。老档没有这项就是 0（未解锁）。顺手把它回填到全局纪录：
+            // 全局纪录用于「删档也不丢本机最好成绩」，以本档纪录为下界。
+            int endlessBest = data.version >= 7 ? Mathf.Clamp(data.endlessBestFloor, 0, 9999) : 0;
+            player.endlessBestFloor = endlessBest;
+            EndlessRecord.SyncGlobal(endlessBest);
+
             return true;
         }
 
@@ -378,9 +399,9 @@ namespace AutoBattle
             int allMask = (1 << SkillCatalog.All.Length) - 1;
             player.ownedSkillMask &= allMask;
 
-            int perKind = Mathf.Max(1, GameConfig.SkillSlotsPerKind);
+            int perKind = PlayerData.SkillSlotsPerKind;
             var used = new bool[SkillCatalog.All.Length];
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < PlayerData.SkillSlotCount; i++)
             {
                 int id = player.GetSkillSlot(i);
                 if (id < 0 || id >= SkillCatalog.All.Length)

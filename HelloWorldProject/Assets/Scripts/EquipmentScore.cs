@@ -47,6 +47,7 @@ namespace AutoBattle
         public static float Of(PlayerData player, Equipment candidate, EquipmentSlot slot)
         {
             if (player == null || candidate == null) return 0f;
+            if (slot != EquipmentSlot.Weapon && slot != EquipmentSlot.Armor) return 0f;
 
             Equipment old = player.GetEquipment(slot);
             try
@@ -82,6 +83,7 @@ namespace AutoBattle
         /// </summary>
         public static float Dps(PlayerData p, MonsterData m)
         {
+            if (p == null || m == null) return 0f;
             float reduction = GameConfig.DamageReduction(m.defense, m.level, p.ArmorPenetration);
             float crit = Mathf.Min(p.CritChance, GameConfig.MaxCritChance);
             float perHit = p.Attack * (1f - reduction) * (1f + crit * (p.CritDamage - 1f));
@@ -91,6 +93,7 @@ namespace AutoBattle
         /// <summary>有效生命 = 最大生命 ÷ (1 - 自身减伤率)，把防御折算成「总共能扛住多少伤害」。</summary>
         public static float EffectiveHp(PlayerData p, MonsterData m)
         {
+            if (p == null) return 0f;
             float reduction = Mathf.Clamp(GameConfig.DamageReduction(p.Defense, p.level, 0f), 0f, 0.95f);
             return p.MaxHp / (1f - reduction);
         }
@@ -99,7 +102,7 @@ namespace AutoBattle
         static void PutOn(PlayerData player, EquipmentSlot slot, Equipment e)
         {
             if (slot == EquipmentSlot.Weapon) player.weapon = e;
-            else player.armor = e;
+            else if (slot == EquipmentSlot.Armor) player.armor = e;
         }
     }
 }

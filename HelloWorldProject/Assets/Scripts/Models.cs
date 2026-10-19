@@ -568,6 +568,29 @@ namespace AutoBattle
         /// <summary>按等级、类型、档次与词缀生成一只怪物（要求 4）。</summary>
         public static MonsterData CreateForLevel(int level, MonsterType type, MonsterTier tier, MonsterAffix affix)
         {
+            // 战役：Lv.110 起吃 MaxTier/终局 BOSS 强化，也吃章节族类偏向与章节压迫。
+            return CreateCore(level, type, tier, affix,
+                applyMaxTierAndFinalBoss: true, applyChapterBias: true, extraStatFactor: 1f);
+        }
+
+        /// <summary>
+        /// 无尽模式的怪物：等级直接由层号决定，但不吃 MaxTier/终局 BOSS/章节偏向/章节压迫，
+        /// 改成统一乘一个 EndlessBaseFactor。这样无尽强度只由「层号 + 一个倍率」控制，
+        /// 不会在第 110 级、第 11 章这些战役拐点上产生跳变。
+        /// </summary>
+        public static MonsterData CreateForEndlessFloor(
+            int floor, MonsterType type, MonsterTier tier, MonsterAffix affix)
+        {
+            int level = EndlessCatalog.MonsterLevelOf(floor);
+            return CreateCore(level, type, tier, affix,
+                applyMaxTierAndFinalBoss: false, applyChapterBias: false,
+                extraStatFactor: Mathf.Max(0.01f, GameConfig.EndlessBaseFactor));
+        }
+
+        private static MonsterData CreateCore(
+            int level, MonsterType type, MonsterTier tier, MonsterAffix affix,
+            bool applyMaxTierAndFinalBoss, bool applyChapterBias, float extraStatFactor)
+        {
             int lv = Mathf.Max(1, level);
             int steps = lv - 1;
             int t = (int)type;
@@ -589,7 +612,7 @@ namespace AutoBattle
             float speedFactor = GameConfig.MonsterSpeedFactorByType[t] * tierSpeedFactor * af[3];
 
             // 梯度最高档（Lv.110，主角满级时遇到）再叠一层终局强化。
-            if (lv >= GameConfig.MaxTierLevel)
+            if (applyMaxTierAndFinalBoss && lv >= GameConfig.MaxTierLevel)
             {
                 hpFactor *= GameConfig.MaxTierHpFactor;
                 attackFactor *= GameConfig.MaxTierAttackFactor;
@@ -608,19 +631,31 @@ namespace AutoBattle
 
             // 最后叠章节族类偏向：第 3 章骷髅脆而凶、第 4 章食人魔肉而慢。
             // 第 1 章（教学）与第 11 章（终局）的偏向是全 1，所以这两头的数据不受影响。
-            float[] bias = GameConfig.MonsterStatBiasOf(lv);
-            hpFactor *= bias[0];
-            attackFactor *= bias[1];
-            defenseFactor *= bias[2];
-            speedFactor *= bias[3];
+            if (applyChapterBias)
+            {
+                float[] bias = GameConfig.MonsterStatBiasOf(lv);
+                hpFactor *= bias[0];
+                attackFactor *= bias[1];
+                defenseFactor *= bias[2];
+                speedFactor *= bias[3];
+            }
 
             // 章节压迫：第 1~10 章逐章加码，第 11 章不吃（终局档由 MaxTier* 负责）。
             // 只压生命/攻击/防御，不压速度——速度对攻击间隔是非线性的，压一点就翻倍。
-            float pressure = GameConfig.ChapterPressure(
-                GameConfig.ChapterOfMonsterLevel(lv), tier == MonsterTier.Boss);
-            hpFactor *= pressure;
-            attackFactor *= pressure;
-            defenseFactor *= pressure;
+            if (applyChapterBias)
+            {
+                float pressure = GameConfig.ChapterPressure(
+                    GameConfig.ChapterOfMonsterLevel(lv), tier == MonsterTier.Boss);
+                hpFactor *= pressure;
+                attackFactor *= pressure;
+                defenseFactor *= pressure;
+            }
+
+            // 无尽倍率：只放大生命/攻击/防御，速度不动（同样因为攻击间隔是非线性的）。
+            float extra = Mathf.Max(0.01f, extraStatFactor);
+            hpFactor *= extra;
+            attackFactor *= extra;
+            defenseFactor *= extra;
 
             var m = new MonsterData
             {

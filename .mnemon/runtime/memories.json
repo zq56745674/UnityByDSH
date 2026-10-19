@@ -100,9 +100,9 @@
       "importance": "normal"
     },
     {
-      "content": "2026-10-17 按用户明确指令（\"直接提交git并推送\"）把 E:\\pytest\\unitydsh1 提交并推到 origin/main：b649ec7「平衡与 UI 修复（新档曲线/部分经验/过渡门禁/飘字DPS）+ 补入库拆分后的源码」，c873e6d「工程卫生（死代码、配置缺键警告、_archive 归档）」。当前 main 与 origin/main 一致，工作区干净；文档 3a5688f1 的「未提交」段落因此过时。commit/push 仍需事先许可。",
+      "content": "2026-10-17 按用户明确指令把 E:\\pytest\\unitydsh1 提交并推到 origin/main：b649ec7「平衡与 UI 修复」、c873e6d「工程卫生」。2026-10-18 再次按用户明确指令提交并推送 9d0524c「功能与健壮性：四功能 UI、终局结算修复、配置与存档校验」。随后按用户要求清理了未跟踪的开发截图与 _tmp；当前无未跟踪文件，仅 .mnemon 记忆文件有未提交改动。commit/push 仍需事先许可。",
       "created_at": "2026-10-17T14:54:28.043Z",
-      "updated_at": "2026-10-17T14:54:28.043Z",
+      "updated_at": "2026-10-18T15:05:44.377Z",
       "target": "memory",
       "importance": "normal"
     },

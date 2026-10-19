@@ -290,10 +290,15 @@ namespace AutoBattle
             if (!info.exists) return "\n（空档）\n\n点击开始新游戏";
             if (info.broken) return "\n⚠ 存档损坏\n\n点击重开新档";
 
+            string endless = !info.endlessUnlocked
+                ? "未解锁"
+                : info.endlessBestFloor > 0 ? $"{info.endlessBestFloor} 层" : "—";
+
             return $"\nLv.{info.level}   巅峰 {info.paragonLevel}\n" +
                    $"第 {info.chapter} 章 {info.chapter}-{info.stage}\n" +
                    $"金币 {info.gold:N0}\n" +
-                   $"首通 {info.clearedCount}/{totalStages} 关";
+                   $"首通 {info.clearedCount}/{totalStages} 关\n" +
+                   $"无尽 最高 {endless}";
         }
 
         private void OnSaveButtonClicked()
@@ -887,13 +892,26 @@ namespace AutoBattle
             StageDef current = _game.Player.CurrentStage;
             int currentKey = current != null ? current.chapter * 100 + current.stage : -1;
 
-            // 入口按钮上的关卡速览：面板不开也要对，但只有关卡真的换了才重写。
+            // 无尽进行中，左栏第一个按钮改报层号；用 900000+ 段避开战役的 chapter*100+stage。
+            bool endless = _game.EndlessActive && _game.EndlessRun != null;
+            if (endless) currentKey = 900000 + _game.EndlessRun.floor;
+
+            // 入口按钮上的速览：面板不开也要对，但只有「关卡/层号」真的换了才重写。
             if (_stageButtonLabel != null && _stageButtonStageKey != currentKey)
             {
                 _stageButtonStageKey = currentKey;
-                _stageButtonLabel.text = current != null
-                    ? $"关卡 {current.Code} · 怪 Lv.{current.monsterLevel}"
-                    : "关卡 —";
+                if (endless)
+                {
+                    int floor = _game.EndlessRun.floor;
+                    _stageButtonLabel.text =
+                        $"第 {floor} 层 · 怪 Lv.{EndlessCatalog.MonsterLevelOf(floor)}";
+                }
+                else
+                {
+                    _stageButtonLabel.text = current != null
+                        ? $"关卡 {current.Code} · 怪 Lv.{current.monsterLevel}"
+                        : "关卡 —";
+                }
             }
 
             bool open = _game.StagePanelOpen;
@@ -1051,14 +1069,14 @@ namespace AutoBattle
             }
 
             int slot = _selectedSkillSlot;
-            int slotKind = slot / GameConfig.SkillSlotsPerKind;
+            int slotKind = slot / PlayerData.SkillSlotsPerKind;
 
             if ((int)def.kind != slotKind)
             {
                 // 类别不符：优先放进同类空槽，全满则替换该类的第一个槽。
-                int baseSlot = (int)def.kind * GameConfig.SkillSlotsPerKind;
+                int baseSlot = (int)def.kind * PlayerData.SkillSlotsPerKind;
                 slot = baseSlot;
-                for (int i = 0; i < GameConfig.SkillSlotsPerKind; i++)
+                for (int i = 0; i < PlayerData.SkillSlotsPerKind; i++)
                 {
                     if (p.GetSkillSlot(baseSlot + i) < 0) { slot = baseSlot + i; break; }
                 }
@@ -1162,7 +1180,7 @@ namespace AutoBattle
             int sel = _selectedSkillSlot;
 
             _skillPanelTitle.text =
-                $"技能面板 — 槽位 {sel + 1}（{KindShort(sel / GameConfig.SkillSlotsPerKind)}）" +
+                $"技能面板 — 槽位 {sel + 1}（{KindShort(sel / PlayerData.SkillSlotsPerKind)}）" +
                 $"    巅峰 {p.paragonLevel}    已获得技能 {p.OwnedSkillCount}/{SkillCatalog.All.Length}";
 
             for (int i = 0; i < SkillCatalog.All.Length; i++)

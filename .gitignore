@@ -9,6 +9,10 @@ HelloWorldProject/[Uu]serSettings/
 HelloWorldProject/[Mm]emoryCaptures/
 HelloWorldProject/[Rr]ecordings/
 
+# Unity 崩溃恢复时自动写出的临时场景
+HelloWorldProject/Assets/_Recovery/
+HelloWorldProject/Assets/_Recovery.meta
+
 # Unity 生成的工程文件（由 Assets / ProjectSettings 重新生成）
 *.csproj
 *.unityproj

@@ -293,10 +293,23 @@ namespace AutoBattle
         /// <summary>击杀后掉落装备的概率：30%。</summary>
         public static float DropChance = 0.30f;
 
+        /// <summary>
+        /// 把品质收进固定表范围。正常掉落/读档已经清洗过品质，但公开 API
+        /// 仍可能收到直接构造的越界值；越界时回落到普通品质（而不是夹到最高档，
+        /// 否则一次坏输入就会白送传说）。
+        /// </summary>
+        public static EquipmentQuality ClampQuality(EquipmentQuality quality)
+        {
+            if (QualityNames == null || QualityNames.Length == 0) return EquipmentQuality.Common;
+            int i = (int)quality;
+            if (i < 0 || i >= QualityNames.Length) return EquipmentQuality.Common;
+            return quality;
+        }
+
         /// <summary>按品质抽取一个浮动属性倍率（含上限，均匀分布）。</summary>
         public static float RollQualityMultiplier(EquipmentQuality quality)
         {
-            int i = (int)quality;
+            int i = (int)ClampQuality(quality);
             return Random.Range(QualityMultiplierMin[i], QualityMultiplierMax[i]);
         }
 
@@ -315,7 +328,7 @@ namespace AutoBattle
         public static int SellPrice(int level, EquipmentQuality quality) =>
             Mathf.Max(1, Mathf.RoundToInt(
                 (SellBaseGold + SellGoldPerLevel * Mathf.Max(0, level - 1)) *
-                SellQualityMultipliers[(int)quality]));
+                SellQualityMultipliers[(int)ClampQuality(quality)]));
 
         // ==================== 装备强化（步骤 2） ====================
         // 强化只提升主属性：武器加攻击，衣服加防御与生命。
@@ -351,7 +364,7 @@ namespace AutoBattle
         public static int EnhanceCost(int enhanceLevel, EquipmentQuality quality) =>
             Mathf.Max(1, Mathf.RoundToInt(
                 (EnhanceBaseCost + EnhanceCostPerLevel * Mathf.Max(0, enhanceLevel)) *
-                EnhanceQualityFactors[(int)quality]));
+                EnhanceQualityFactors[(int)ClampQuality(quality)]));
 
         // ==================== 装备洗练（步骤 3） ====================
         // 洗练只重抽**副词条**：条数不变，种类与数值按掉落同分布重掷。
@@ -400,7 +413,7 @@ namespace AutoBattle
         public static int ReforgeCost(int level, EquipmentQuality quality, int reforgeCount, int lockedAffixes) =>
             Mathf.Max(1, Mathf.RoundToInt(
                 (ReforgeBaseCost + ReforgeCostPerLevel * Mathf.Max(0, level - 1)) *
-                EnhanceQualityFactors[(int)quality] *
+                EnhanceQualityFactors[(int)ClampQuality(quality)] *
                 (1f + ReforgeCostGrowth * Mathf.Max(0, reforgeCount)) *
                 Mathf.Pow(ReforgeLockFactor, Mathf.Max(0, lockedAffixes))));
 
@@ -509,8 +522,8 @@ namespace AutoBattle
 
         // ==================== 巅峰等级（满级后的成长线） ====================
 
-        /// <summary>巅峰等级上限。</summary>
-        public static int MaxParagonLevel = 200;
+        /// <summary>巅峰等级上限的代码默认值；实际值以 game_config.json 为准（2026-10-19 已设为 1000）。</summary>
+        public static int MaxParagonLevel = 1000;
 
         /// <summary>每级巅峰提供的攻击 / 防御 / 生命加成。</summary>
         public static int ParagonAttackPerLevel = 1;
@@ -525,7 +538,7 @@ namespace AutoBattle
         /// 巅峰经验的二次项：每级额外 +q×p²。
         /// 线性项只会让「越升越快」——怪给的经验是常数，需求只涨 200/级，
         /// 一只 Lv.110 Boss 就够升一级。加上二次项后 P100 一级约 22k+200k，
-        /// 越往后越慢，整条 P0→P200 才撑得起「约两小时」的终局。
+        /// 越往后越慢，整条 P0→P200 的纯战斗时间才撑得起「约两小时」的终局（含刷怪/商店约 3.8 小时）。
         ///
         /// 系数是实测校准出来的，不是拍的：EndgamePacing 用「会挑技能、会把余钱砸满强化」的
         /// 最优玩家口径跑 11-10 循环，q=12 时 P0→P200 只要 76~77 分钟（2026-10-18 实测；
@@ -566,6 +579,47 @@ namespace AutoBattle
         /// <summary>把技能基础值按技能等级放大。</summary>
         public static float ScaleSkillValue(float baseValue, int skillLevel) =>
             baseValue * (1f + (skillLevel - 1) * SkillLevelScale);
+
+        // ==================== 无尽模式 ====================
+
+        /// <summary>无尽第 1 层的怪物等级。默认从终局档（Lv.110）起步。</summary>
+        public static int EndlessBaseMonsterLevel = 110;
+
+        /// <summary>每往下一层怪物等级 +N。默认 +6：第 50 层是 Lv.404（探针基线，见 docs/endless-mode.md §12）。</summary>
+        public static int EndlessMonsterLevelStep = 6;
+
+        /// <summary>第 1 层需要击杀的怪物数。</summary>
+        public static int EndlessKillTargetBase = 3;
+
+        /// <summary>每多少层，击杀目标 +1。</summary>
+        public static int EndlessKillTargetEvery = 5;
+
+        /// <summary>击杀目标上限（层数再高也不会更久）。</summary>
+        public static int EndlessKillTargetMax = 6;
+
+        /// <summary>每多少层一个 BOSS 层。</summary>
+        public static int EndlessBossEvery = 5;
+
+        /// <summary>
+        /// 无尽怪物的额外属性倍率（只乘生命/攻击/防御，不乘速度）。
+        /// 战役里 Lv.110 的终局档已经含 MaxTier×3 与章节压迫；无尽不吃那两层，
+        /// 改用这一个显式倍率，强度才可单独调。
+        /// </summary>
+        public static float EndlessBaseFactor = 2.8f;
+
+        public static int EndlessFloorGoldBase = 300;
+        public static int EndlessFloorGoldPerFloor = 40;
+        public static int EndlessFirstClearGoldBase = 1000;
+        public static int EndlessFirstClearGoldPerFloor = 150;
+
+        /// <summary>清层后到下一层怪物出现前的停顿（游戏内秒）。</summary>
+        public static float EndlessFloorClearDelay = 2.0f;
+
+        /// <summary>重新挑战时从「最高层往回退几层」起步。</summary>
+        public static int EndlessCheckpointOffset = 4;
+
+        /// <summary>无尽掉落与击杀经验使用的等级上限。</summary>
+        public static int EndlessDropLevelCap = 150;
 
         // ==================== 存档（要求 17） ====================
 

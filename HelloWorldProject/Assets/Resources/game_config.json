@@ -78,7 +78,7 @@
   "PotionAutoUseHpPercent": 0.40,
   "PotionCooldown": 3,
   "ShopDuration": 3,
-  "MaxParagonLevel": 200,
+  "MaxParagonLevel": 1000,
   "ParagonAttackPerLevel": 1,
   "ParagonDefensePerLevel": 1,
   "ParagonHpPerLevel": 50,
@@ -105,5 +105,20 @@
   "FirstClearGoldBase": 120,
   "FirstClearGoldPerChapter": 80,
   "ChapterClearGoldBonus": 600,
-  "BannerDuration": 3.2
+  "BannerDuration": 3.2,
+
+  "EndlessBaseMonsterLevel": 110,
+  "EndlessMonsterLevelStep": 6,
+  "EndlessKillTargetBase": 3,
+  "EndlessKillTargetEvery": 5,
+  "EndlessKillTargetMax": 6,
+  "EndlessBossEvery": 5,
+  "EndlessBaseFactor": 2.8,
+  "EndlessFloorGoldBase": 300,
+  "EndlessFloorGoldPerFloor": 40,
+  "EndlessFirstClearGoldBase": 1000,
+  "EndlessFirstClearGoldPerFloor": 150,
+  "EndlessFloorClearDelay": 2.0,
+  "EndlessCheckpointOffset": 4,
+  "EndlessDropLevelCap": 150
 }

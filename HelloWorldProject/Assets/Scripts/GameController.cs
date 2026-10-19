@@ -10,7 +10,7 @@ namespace AutoBattle
     ///
     /// 本脚本只处理逻辑，不碰任何 UI；界面由 <see cref="GameUI"/> 读取这里的状态绘制。
     /// </summary>
-    public class GameController : MonoBehaviour
+    public partial class GameController : MonoBehaviour
     {
         /// <summary>战斗循环所处阶段。</summary>
         public enum State
@@ -35,6 +35,12 @@ namespace AutoBattle
             /// 和商店不同，这里没有倒计时——必须选完才继续。
             /// </summary>
             SkillChoice,
+
+            /// <summary>
+            /// 无尽一局已结束（阵亡 / 主动撤退）：战斗完全停住，
+            /// 只剩结果面板等玩家选择「再次挑战」或「返回战役」。战役里不会出现这个状态。
+            /// </summary>
+            Ended,
         }
 
         // ==================== 对外状态（UI 只读）====================
@@ -127,6 +133,26 @@ namespace AutoBattle
         /// <summary>刚刚这只怪触发了通关，重生等待要用 StageClearDelay 而不是常规值。</summary>
         private bool _justClearedStage;
 
+        // ==================== 无尽模式 ====================
+
+        /// <summary>当前跑的是战役还是无尽。切换入口只有 StartEndlessRun / ReturnToCampaign。</summary>
+        public GameMode Mode { get; private set; } = GameMode.Campaign;
+
+        /// <summary>当前这一局的无限进度（不进存档）。结束时保留给结果面板显示。</summary>
+        public EndlessRunState EndlessRun { get; private set; }
+
+        public bool EndlessActive => Mode == GameMode.Endless;
+
+        /// <summary>首通 11-10 才解锁；只认首通记录，不看 maxChapterUnlocked。</summary>
+        public bool EndlessUnlocked =>
+            Player != null && Player.IsStageFirstCleared(GameConfig.ChapterCount, GameConfig.StagesPerChapter);
+
+        /// <summary>本层还剩几只；无尽以外返回 0，UI 用 EndlessActive 判断要不要显示。</summary>
+        public int EndlessKillsLeft => EndlessRun != null ? EndlessRun.KillsLeft : 0;
+
+        public bool EndlessPanelOpen { get; private set; }
+        public bool EndlessResultOpen { get; private set; }
+
         // ==================== 生命周期 ====================
 
         private void Awake()
@@ -173,7 +199,7 @@ namespace AutoBattle
             // 任何时刻都能点，战斗中点开就是一整块浮层盖住血条让怪白打，所以一并冻住。
             // 设置 / 引导 / 对比同理：它们都能从常驻按钮点开，必须和别的浮层一样有冻结权。
             if (StagePanelOpen || SavePanelOpen || EnhancePanelOpen || ReforgePanelOpen || SkillPanelOpen
-                || SettingsOpen || GuideOpen || CompareOpen) return;
+                || SettingsOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen) return;
 
             // 游戏速度只影响战斗推进，不影响存档节奏（要求 16）。
             float dt = Time.deltaTime * SpeedMultiplier;
@@ -288,6 +314,23 @@ namespace AutoBattle
         {
             if (Player == null) return;
 
+            // 无尽已经结束、结果面板还开着时，必须先选「再次挑战」或「返回战役」：
+            // 直接跳关会把结果面板留在屏幕上，下一次刷新还会按旧局数据重画。
+            if (EndlessResultOpen)
+            {
+                AddLog("◀ 本局已结束，请先在结果面板选择「再次挑战」或「返回战役」", GameConfig.LogWarn);
+                return;
+            }
+
+            // 无尽局内不能直接跳战役关：那会把「这一局在哪层」和「战役进度」搅在一起。
+            // 先撤退回战役，再选关。
+            if (EndlessActive)
+            {
+                AddLog("◀ 无尽进行中，先「撤退」再选关", GameConfig.LogWarn);
+                StagePanelOpen = false;
+                return;
+            }
+
             if (!IsStageUnlocked(chapter, stage))
             {
                 AddLog($"🔒 第 {chapter} 章尚未解锁（当前最高 第 {MaxChapterUnlocked} 章）",
@@ -297,12 +340,20 @@ namespace AutoBattle
 
             StageDef def = StageCatalog.Get(chapter, stage);
 
+            // 进关/重开当前关都必须丢掉「刚通关」标记：否则同关重开还会按通关延迟重生，
+            // 甚至把下一只怪的首通判定带错。
+            _justClearedStage = false;
+
             StageDef cur = Player.CurrentStage;
             if (cur != null && cur.chapter == chapter && cur.stage == stage)
             {
-                // 同一关：只把本关进度推倒重来，不动战斗状态。
+                // 同一关：把本关进度推倒重来。重生/复活计时器也要清掉：
+                // 否则刚刚通关留下的 StageClearDelay（或阵亡复活倒计时）会继续生效，
+                // 玩家点了「重开」却还要多等几秒才刷怪。
                 Player.stageKillCount = 0;
                 _pendingTier = MonsterTier.Normal;
+                _respawnTimer = 0f;
+                _reviveTimer = 0f;
                 AddLog($"↻ {def.Title} 重新开始", GameConfig.LogInfo);
                 StagePanelOpen = false;
                 return;
@@ -331,7 +382,8 @@ namespace AutoBattle
         // ---- 五个浮层（选关 / 技能 / 存档 / 强化 / 洗练）互斥，规则只在这一处 ----
 
         /// <summary>三选一还没选完时不许开任何浮层：候选卡会压在浮层上面，两层叠着没法看。</summary>
-        private bool ChoicePending => CurrentState == State.SkillChoice || PendingSkillPicks > 0;
+        private bool ChoicePending =>
+            CurrentState == State.SkillChoice || PendingSkillPicks > 0 || EndlessResultOpen;
 
         /// <summary>关掉全部浮层。任何 Open 之前先走这里，保证同时只开一个。</summary>
         private void CloseAllPanels()
@@ -344,12 +396,22 @@ namespace AutoBattle
             SettingsOpen = false;
             GuideOpen = false;
             CompareOpen = false;
+            EndlessPanelOpen = false;
         }
 
         /// <summary>打开 / 关闭选关面板。</summary>
         public void ToggleStagePanel()
         {
             if (ChoicePending) return;
+
+            // 无尽局内不开选关：层数由 EndlessRun.floor 决定，选关只会制造两份进度。
+            // 面板已经开着时仍然允许关掉，避免被卡住。
+            if (EndlessActive && !StagePanelOpen)
+            {
+                AddLog("◀ 无尽进行中，先「撤退」再选关", GameConfig.LogWarn);
+                return;
+            }
+
             bool open = !StagePanelOpen;
             CloseAllPanels();
             StagePanelOpen = open;
@@ -607,6 +669,9 @@ namespace AutoBattle
             slot = Mathf.Clamp(slot, 0, SaveSystem.SlotCount - 1);
             if (slot == SaveSystem.CurrentSlot) return;
 
+            // 换槽等于结束当前无尽局（不弹结果面板），再把战役进度落盘。
+            if (EndlessActive) EndEndlessRun(EndlessEndReason.SlotChanged);
+
             // 当前进度先落盘，否则切走之后这一段就没了。
             SaveSystem.Save(Player);
             SaveSystem.SelectSlot(slot);
@@ -639,6 +704,7 @@ namespace AutoBattle
             if (slot == SaveSystem.CurrentSlot)
             {
                 // 删的是当前槽：直接按新档重开，避免界面停在旧数据上。
+                if (EndlessActive) EndEndlessRun(EndlessEndReason.SlotChanged);
                 Player = new PlayerData();
                 Player.FillHp();
                 _loadedFromSave = false;
@@ -654,6 +720,7 @@ namespace AutoBattle
         /// <summary>重置：清空存档与全部进度，回到初始状态（要求 16）。</summary>
         public void ResetGame()
         {
+            if (EndlessActive) EndEndlessRun(EndlessEndReason.Reset);
             SaveSystem.Clear();
 
             Player = new PlayerData();
@@ -685,6 +752,10 @@ namespace AutoBattle
             _justClearedStage = false;
             IsRunning = false;
             _runStarted = false;
+            Mode = GameMode.Campaign;
+            EndlessRun = null;
+            EndlessPanelOpen = false;
+            EndlessResultOpen = false;
             CloseAllPanels();
             ClearPendingDrops();
             CurrentState = State.WaitingRespawn;
@@ -726,10 +797,10 @@ namespace AutoBattle
         /// </summary>
         public bool EquipSkill(int slot, SkillId id)
         {
-            if (slot < 0 || slot >= GameConfig.SkillSlotsPerKind * 3) return false;
+            if (slot < 0 || slot >= PlayerData.SkillSlotCount) return false;
 
             SkillDef def = SkillCatalog.Get(id);
-            int slotKind = slot / GameConfig.SkillSlotsPerKind;
+            int slotKind = slot / PlayerData.SkillSlotsPerKind;
 
             if ((int)def.kind != slotKind)
             {
@@ -758,7 +829,7 @@ namespace AutoBattle
         /// <summary>卸下某个槽位的技能。</summary>
         public void UnequipSkill(int slot)
         {
-            if (slot < 0 || slot >= GameConfig.SkillSlotsPerKind * 3) return;
+            if (slot < 0 || slot >= PlayerData.SkillSlotCount) return;
 
             int id = Player.GetSkillSlot(slot);
             if (id < 0) return;
@@ -773,9 +844,9 @@ namespace AutoBattle
         private void TryAutoEquip(SkillId id)
         {
             SkillDef def = SkillCatalog.Get(id);
-            int baseSlot = (int)def.kind * GameConfig.SkillSlotsPerKind;
+            int baseSlot = (int)def.kind * PlayerData.SkillSlotsPerKind;
 
-            for (int i = 0; i < GameConfig.SkillSlotsPerKind; i++)
+            for (int i = 0; i < PlayerData.SkillSlotsPerKind; i++)
             {
                 if (Player.GetSkillSlot(baseSlot + i) < 0)
                 {
@@ -1004,6 +1075,13 @@ namespace AutoBattle
         /// </summary>
         private void SpawnMonster()
         {
+            // 无尽头几层只有 1 只怪（killTarget=1）：没有 ResolveStageProgress 帮忙预告，
+            // 这里得提前把关底档次塞进 _pendingTier，否则那只 Boss 会以普通怪身份出现。
+            if (EndlessActive && _pendingTier == MonsterTier.Normal && EndlessKillsLeft == 1)
+            {
+                _pendingTier = EndlessCatalog.Get(EndlessRun.floor).clearTier;
+            }
+
             if (_pendingTier != MonsterTier.Normal)
             {
                 OpenShop(_pendingTier);
@@ -1035,6 +1113,12 @@ namespace AutoBattle
         /// </summary>
         private void SpawnMonsterNow()
         {
+            if (EndlessActive)
+            {
+                SpawnEndlessMonsterNow();
+                return;
+            }
+
             // 关卡制（步骤 4a）：怪物等级由关卡固定，不再跟随主角等级。
             // 这样低级关不会因为主角变强而变难，高级关也不会被主角等级拔高。
             int monsterLevel = Player.CurrentStage.monsterLevel;
@@ -1128,7 +1212,7 @@ namespace AutoBattle
         /// <summary>横幅副标题（可空）。</summary>
         public string BannerSubtitle { get; private set; } = string.Empty;
 
-        /// <summary>横幅剩余时间（真实秒，受速度档位影响）。</summary>
+        /// <summary>横幅剩余时间（真实秒，不受速度档位影响——TickBanner 用 unscaledDeltaTime）。</summary>
         public float BannerTimeLeft { get; private set; }
 
         /// <summary>弹一条居中横幅。空标题等价于立刻收起。</summary>
@@ -1153,6 +1237,13 @@ namespace AutoBattle
         /// <summary>击杀结算：经验、升级、掉落、自动装备（要求 8、11、14）。</summary>
         private void HandleMonsterKilled()
         {
+            // 无尽有自己的一套层循环：不碰战役关卡计数，也不走 ResolveStageProgress。
+            if (EndlessActive)
+            {
+                HandleEndlessMonsterKilled();
+                return;
+            }
+
             // 1) 计数
             TotalKills++;
 
@@ -1233,9 +1324,15 @@ namespace AutoBattle
 
             if (unlocked) AddLog($"✦ 新章节解锁：第 {newMax} 章", GameConfig.LogUnlock);
 
+            // 无尽只认「首通 11-10」，不看章节解锁：其它入口都无法把玩家带到第 11 章末。
+            bool endlessUnlocked = firstClear
+                && clearedChapter == GameConfig.ChapterCount && chapterFinal;
+            if (endlessUnlocked) AddLog("✦ 无尽模式已解锁 —— 左上角「无尽」进入", GameConfig.LogUnlock);
+
             if (firstClear || unlocked)
             {
-                ShowClearBanner(clearedChapter, clearedStage, chapterFinal, firstClear, clearGold, unlocked, newMax);
+                ShowClearBanner(clearedChapter, clearedStage, chapterFinal, firstClear, clearGold,
+                    unlocked, newMax, endlessUnlocked);
             }
 
             if (unlocked) SaveSystem.Save(Player);
@@ -1261,7 +1358,7 @@ namespace AutoBattle
 
         /// <summary>通关横幅：首通奖励与章节解锁合成一条，避免后一条把前一条顶掉。</summary>
         private void ShowClearBanner(int clearedChapter, int clearedStage, bool chapterFinal,
-            bool firstClear, int clearGold, bool unlocked, int newMax)
+            bool firstClear, int clearGold, bool unlocked, int newMax, bool endlessUnlocked)
         {
             string title = chapterFinal
                 ? $"★ 第 {clearedChapter} 章 通关！"
@@ -1273,6 +1370,11 @@ namespace AutoBattle
             {
                 string unlockText = $"第 {newMax} 章已解锁（怪物 Lv.{GameConfig.ChapterMonsterLevelStep * (newMax - 1) + 1}~{GameConfig.ChapterMonsterLevelStep * newMax}）";
                 sub = string.IsNullOrEmpty(sub) ? unlockText : sub + " · " + unlockText;
+            }
+            if (endlessUnlocked)
+            {
+                const string endlessText = "✦ 无尽模式已解锁";
+                sub = string.IsNullOrEmpty(sub) ? endlessText : sub + " · " + endlessText;
             }
             ShowBanner(title, sub);
         }
@@ -1292,9 +1394,10 @@ namespace AutoBattle
         /// 回血按档次区分：普通 10%、精英 50%、Boss 回满。
         /// 真正让挂机不中断的仍是「阵亡后自动复活」，回血只是节奏缓冲。
         /// </summary>
-        private int GrantKillReward()
+        private int GrantKillReward(int rewardLevel = -1)
         {
-            int reward = GameConfig.MonsterExpReward(Monster.level, Monster.type, Monster.tier);
+            int level = rewardLevel > 0 ? rewardLevel : Monster.level;
+            int reward = GameConfig.MonsterExpReward(level, Monster.type, Monster.tier);
             AddLog($"☠ 击杀 {Monster.Title}，获得 {reward} 经验", GameConfig.LogGold);
 
             int healAmount = Mathf.RoundToInt(
@@ -1363,11 +1466,19 @@ namespace AutoBattle
         /// </summary>
         private void ResolveDrops()
         {
+            // 防御性检查：结算入口只应在击杀后调用，但读档/重开或异常状态
+            // 下 Monster 可能已经被清掉，不能在这里直接解引用。
+            if (Player == null || Monster == null) return;
+
             int dropCount = GameConfig.MonsterTierGuaranteedDrops[(int)Monster.tier];
             if (dropCount == 0 && LootSystem.RollDrop()) dropCount = 1;
 
             float[] fixedWeights = GameConfig.MonsterTierDropQualityWeights[(int)Monster.tier];
             int dropLevel = Monster.tier == MonsterTier.Normal ? Player.level : Monster.level;
+
+            // 无尽层数没有上限，掉落等级必须有：否则第 300 层会刷出 Lv.700+ 的装备，
+            // 把战役与无尽两条成长线一起冲垮。
+            if (EndlessActive) dropLevel = Mathf.Min(dropLevel, GameConfig.EndlessDropLevelCap);
 
             for (int i = 0; i < dropCount; i++)
             {
@@ -1403,7 +1514,11 @@ namespace AutoBattle
                     TotalSold++;
                     TotalGoldEarned += gold;
 
-                    AddLog($"  $ 弱于当前{current.SlotName}（{EquipmentScore.Of(Player, dropped, dropped.slot):0} < {EquipmentScore.Of(Player, current, current.slot):0}），卖出 +{gold} 金币（共 {Player.gold}）",
+                    // current 理论上不会为空（空槽会在 TryAutoEquip 里直接穿戴），
+                    // 但卖店分支是异常兜底，不能再让一个空引用把整轮掉落结算打断。
+                    string slotName = current != null ? current.SlotName : dropped.SlotName;
+                    float currentScore = current != null ? EquipmentScore.Of(Player, current, current.slot) : 0f;
+                    AddLog($"  $ 弱于当前{slotName}（{EquipmentScore.Of(Player, dropped, dropped.slot):0} < {currentScore:0}），卖出 +{gold} 金币（共 {Player.gold}）",
                         GameConfig.LogGold);
                     Debug.Log($"[AutoBattle] 卖出 {dropped.Title} +{gold} 金币");
                 }
@@ -1414,11 +1529,13 @@ namespace AutoBattle
         /// 进入 0.5 秒重生等待（要求 1）。刚通关那一只多停一会儿（StageClearDelay）：
         /// 否则首通横幅还没看清，下一关的怪已经在打了——4a 加的这个配置项之前根本没接线。
         /// </summary>
-        private void EnterRespawnWait()
+        private void EnterRespawnWait(float delay = -1f)
         {
-            float respawnDelay = _justClearedStage
-                ? GameConfig.StageClearDelay
-                : GameConfig.MonsterRespawnDelay;
+            float respawnDelay = delay >= 0f
+                ? delay
+                : _justClearedStage
+                    ? GameConfig.StageClearDelay
+                    : GameConfig.MonsterRespawnDelay;
             _justClearedStage = false;
 
             Monster = null;
@@ -1493,6 +1610,15 @@ namespace AutoBattle
         private void HandlePlayerDied()
         {
             TotalDeaths++;
+
+            // 无尽没有复活：死了这一局就结束，结果面板让玩家选再次挑战还是回战役。
+            if (EndlessActive)
+            {
+                AddLog($"✖ 无尽第 {EndlessRun.floor} 层阵亡（本局清除 {EndlessRun.clearedThisRun} 层）",
+                    GameConfig.LogDanger);
+                EndEndlessRun(EndlessEndReason.Death);
+                return;
+            }
 
             // 阵亡不给经验（2026-10-18）：以前按打掉的血量返经验，结果「送死」成了
             // 升级最快的打法，终局那堵墙变成「死够次数自动过」。现在的循环回到设计意图：

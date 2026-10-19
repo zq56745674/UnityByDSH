@@ -111,7 +111,13 @@ namespace AutoBattle
         /// <summary>关卡编码（PlayerData.StageKey）还原成章节 / 关卡号后再算奖励。</summary>
         public static int FirstClearGoldOfKey(int stageKey)
         {
-            return FirstClearGold(PlayerData.ChapterOfKey(stageKey), PlayerData.StageOfKey(stageKey));
+            int chapter = PlayerData.ChapterOfKey(stageKey);
+            int stage = PlayerData.StageOfKey(stageKey);
+            // 首通记录是 List<int>，读档已清洗；这里再挡一次直接改列表/旧档残留的非法 key，
+            // 避免它们被当成“越靠后的章节”反复算进首通总额。
+            if (chapter < FirstChapter || chapter > ChapterCount) return 0;
+            if (stage < 1 || stage > StagesPerChapter) return 0;
+            return FirstClearGold(chapter, stage);
         }
 
         /// <summary>前 chapters 章全部首通能拿到的金币总额（用于进度总览的分母）。</summary>

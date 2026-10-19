@@ -91,7 +91,7 @@ namespace AutoBattle
         public float PotionAutoUseHpPercent = 0.40f;
         public float PotionCooldown = 3f;
         public float ShopDuration = 3f;
-        public int MaxParagonLevel = 200;
+        public int MaxParagonLevel = 1000;
         public int ParagonAttackPerLevel = 1;
         public int ParagonDefensePerLevel = 1;
         public int ParagonHpPerLevel = 50;
@@ -123,5 +123,21 @@ namespace AutoBattle
         public int FirstClearGoldPerChapter = 80;
         public int ChapterClearGoldBonus = 600;
         public float BannerDuration = 3.2f;
+
+        // ---- 无尽模式 ----
+        public int EndlessBaseMonsterLevel = 110;
+        public int EndlessMonsterLevelStep = 6;
+        public int EndlessKillTargetBase = 3;
+        public int EndlessKillTargetEvery = 5;
+        public int EndlessKillTargetMax = 6;
+        public int EndlessBossEvery = 5;
+        public float EndlessBaseFactor = 2.8f;
+        public int EndlessFloorGoldBase = 300;
+        public int EndlessFloorGoldPerFloor = 40;
+        public int EndlessFirstClearGoldBase = 1000;
+        public int EndlessFirstClearGoldPerFloor = 150;
+        public float EndlessFloorClearDelay = 2.0f;
+        public int EndlessCheckpointOffset = 4;
+        public int EndlessDropLevelCap = 150;
     }
 }

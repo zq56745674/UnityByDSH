@@ -182,7 +182,7 @@ namespace AutoBattle
         // 被动技能会改防御/暴击/攻速，这些直接进 EquipmentScore 的公式。
         // 换技能不改装备对象，也得让缓存失效，否则技能一换装备评分还是旧数字。
         private int _scoreCachedSkillMask = -1;
-        private readonly int[] _scoreCachedSkillSlots = { int.MinValue, int.MinValue, int.MinValue, int.MinValue, int.MinValue, int.MinValue };
+        private readonly int[] _scoreCachedSkillSlots = new int[PlayerData.SkillSlotCount]; // 首轮由 mask=-1 强制重建
         private string _scoreWeaponText;
         private string _scoreWeaponMeta;
         private string _scoreArmorMeta;
@@ -329,6 +329,7 @@ namespace AutoBattle
             BuildReforgePanel(root);
             BuildSettingsPanel(root);
             BuildComparePanel(root);
+            BuildEndlessPanel(root);
             // 引导最后建（横幅之下另算）：它的遮罩与高亮框要压住所有浮层。
             BuildGuide(root);
             // 横幅必须最后建：它要盖在选关 / 技能面板之上。
@@ -374,6 +375,10 @@ namespace AutoBattle
             Image img = CreateImage(panel, "HeroPortrait", x, y, w, h, Color.white);
             img.sprite = hero;
             img.preserveAspect = true;
+
+            // 待机动画：呼吸/浮动/眨眼。立绘本体只有一张图 + 一张只闭眼的衍生帧，
+            // 变换幅度在 GameUI.Portrait.cs 里统一控制，避免在构建代码里散落魔法数。
+            SetupHeroPortrait(img, glow, floorLight);
         }
 
         private void BuildLeftPanel(Transform root)
@@ -409,11 +414,18 @@ namespace AutoBattle
 
             // 选关入口：立绘右侧那列的等级行下面。4b 时把关卡信息从等级行里拿出来做成按钮，
             // 顺便让等级行不至于被「关卡 11-10 · 怪 Lv.110」撑爆。
-            _stageButton = CreateButton(panel, "StageButton", "", colX, 76, colW, 24,
+            _stageButton = CreateButton(panel, "StageButton", "", colX, 76, 150, 24,
                 GameConfig.BtnHeader, out _stageButtonLabel);
             _stageButtonLabel.fontSize = 13;
             _stageButtonLabel.alignment = TextAnchor.MiddleCenter;
             _stageButton.onClick.AddListener(OnStageButtonClicked);
+
+            // 无尽入口：贴在关卡按钮右边。60 宽只放得下「无尽 / 记录」两个短词。
+            _endlessButton = CreateButton(panel, "EndlessButton", "无尽", 324, 76, 60, 24,
+                GameConfig.BtnHeader, out _endlessButtonLabel);
+            _endlessButtonLabel.fontSize = 13;
+            _endlessButtonLabel.alignment = TextAnchor.MiddleCenter;
+            _endlessButton.onClick.AddListener(OnEndlessButtonClicked);
 
             _hpText = CreateText(panel, "HpText", "", colX, 104, colW, 20, 15, GameConfig.TextNormal, TextAnchor.MiddleLeft);
             _hpFill = CreateBar(panel, "HpBar", colX, 126, colW, 16, GameConfig.BarTrackHp, GameConfig.FillHp);
@@ -484,8 +496,8 @@ namespace AutoBattle
         /// </summary>
         private void BuildSkillBar(Transform panel)
         {
-            const int slotCount = 6;
-            int perKind = GameConfig.SkillSlotsPerKind;        // 2
+            const int slotCount = PlayerData.SkillSlotCount;
+            int perKind = PlayerData.SkillSlotsPerKind;        // 2
             int kindCount = slotCount / perKind;               // 3
             const float slotW = 126f;
             const float slotH = 42f;

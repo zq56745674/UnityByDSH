@@ -37,8 +37,15 @@ namespace AutoBattle
 
         // ==================== 技能运行状态 ====================
 
+        /// <summary>
+        /// 单次 Tick 最多结算多少次出手。极端 dt（编辑器卡顿、断点恢复、探针直接传大值）
+        /// 会让 while 追帧循环跑上很久；超过这个上限就丢弃剩余追帧时间。
+        /// 正常帧（60fps，最慢 0.2 秒一次）远达不到这个值。
+        /// </summary>
+        private const int MaxCatchUpAttacks = 256;
+
         /// <summary>两个主动技能槽各自的剩余冷却（游戏内秒）。</summary>
-        private readonly float[] _activeCooldown = new float[GameConfig.SkillSlotsPerKind];
+        private readonly float[] _activeCooldown = new float[PlayerData.SkillSlotsPerKind];
 
         /// <summary>主动技能共享的公共冷却剩余。</summary>
         private float _globalCooldown;
@@ -117,9 +124,12 @@ namespace AutoBattle
         /// 最后仍要夹一层 MinAttackInterval —— 否则攻速副词条能把这层下限再穿过去，
         /// 「每秒最多 5 下」就不是硬上限了。
         /// </summary>
-        public static float PlayerAttackInterval(PlayerData player) =>
-            Mathf.Max(GameConfig.MinAttackInterval,
+        public static float PlayerAttackInterval(PlayerData player)
+        {
+            if (player == null) return Mathf.Max(0.01f, GameConfig.MinAttackInterval);
+            return Mathf.Max(GameConfig.MinAttackInterval,
                 GameConfig.AttackInterval(player.Speed) / (1f + player.AttackSpeedBonus));
+        }
 
         /// <summary>
         /// 百分比减伤伤害公式：
@@ -207,7 +217,8 @@ namespace AutoBattle
 
             // ---- 主角出手 ----
             _playerAttackTimer -= dt;
-            while (_playerAttackTimer <= 0f && !monster.IsDead)
+            int catchUp = 0;
+            while (_playerAttackTimer <= 0f && !monster.IsDead && catchUp++ < MaxCatchUpAttacks)
             {
                 float giant = GiantSlayerFactor(player, monster);
                 int attack = EffectiveAttack(player);
@@ -250,9 +261,14 @@ namespace AutoBattle
 
             if (monster.IsDead) return BattleTickResult.MonsterKilled;
 
+            // 追帧上限触发时 timer 仍可能是负数，直接归位，避免下一帧继续补算同一段丢失时间。
+            if (_playerAttackTimer <= 0f) _playerAttackTimer = PlayerAttackInterval(player);
+
             // ---- 怪物出手 ----
             monster.attackTimer -= dt;
-            while (monster.attackTimer <= 0f && !monster.IsDead && player.currentHp > 0)
+            catchUp = 0;
+            while (monster.attackTimer <= 0f && !monster.IsDead && player.currentHp > 0
+                   && catchUp++ < MaxCatchUpAttacks)
             {
                 float giant = GiantSlayerFactor(player, monster);
 
@@ -315,6 +331,14 @@ namespace AutoBattle
                 monster.attackTimer += GameConfig.AttackInterval(monster.speed);
             }
 
+            // 追帧上限触发时同样把负计时归位，避免跨帧补算。
+            if (monster.attackTimer <= 0f && !monster.IsDead && player.currentHp > 0)
+                monster.attackTimer = GameConfig.AttackInterval(monster.speed);
+
+            // 反击可能在本轮怪物出手时直接打死怪物。这里必须立刻结算，
+            // 否则 Tick 会先返回 Ongoing，击杀要晚一帧才被 GameController 处理。
+            if (monster.IsDead) return BattleTickResult.MonsterKilled;
+
             // 濒死爆发（触发）：这一击本来会致死时留 1 点血，并进入「5 秒内不会死亡」。
             // 冷却没就绪时，只要还在那 5 秒窗口里同样不会死。
             if (player.currentHp <= 0 && player.HasSkill(SkillId.NearDeathBurst))
@@ -352,10 +376,12 @@ namespace AutoBattle
             if (_nearDeathCooldown > 0f) _nearDeathCooldown -= dt;
 
             // ---- 护盾生成：按 cd 反复刷新护盾（取较大值，不叠加） ----
+            // 计时器永远走：以前只在「当前装备了护盾技能」时递减，卸下技能后 timer 冻结，
+            // 再装回来会保留一个旧倒计时（甚至立刻触发）。
+            if (_shieldTimer > 0f) _shieldTimer = Mathf.Max(0f, _shieldTimer - dt);
             if (player.HasSkill(SkillId.ShieldGen))
             {
                 SkillDef def = SkillCatalog.Get(SkillId.ShieldGen);
-                _shieldTimer -= dt;
 
                 if (_shieldTimer <= 0f)
                 {

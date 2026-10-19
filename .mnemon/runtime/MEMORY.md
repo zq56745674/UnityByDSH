@@ -22,7 +22,7 @@ HelloWorldProject 的日志有两条写入路径：GameController.AddLog 维护 
 §
 HelloWorldProject 的 game_config.json 必须与 GameConfigData 的 97 个字段一一对应（当前 97 键）；GameConfig.Loader 加载后会用 ReportMissingKeys 对缺键打警告，缺字段不再静默回退默认值。历史备份、拆分前旧代码与一次性开发截图统一放工作区根的 _archive/（已 gitignore，内含 README 说明），不要留在仓库根或 Assets 里。
 §
-2026-10-17 按用户明确指令（"直接提交git并推送"）把 E:\pytest\unitydsh1 提交并推到 origin/main：b649ec7「平衡与 UI 修复（新档曲线/部分经验/过渡门禁/飘字DPS）+ 补入库拆分后的源码」，c873e6d「工程卫生（死代码、配置缺键警告、_archive 归档）」。当前 main 与 origin/main 一致，工作区干净；文档 3a5688f1 的「未提交」段落因此过时。commit/push 仍需事先许可。
+2026-10-17 按用户明确指令把 E:\pytest\unitydsh1 提交并推到 origin/main：b649ec7「平衡与 UI 修复」、c873e6d「工程卫生」。2026-10-18 再次按用户明确指令提交并推送 9d0524c「功能与健壮性：四功能 UI、终局结算修复、配置与存档校验」。随后按用户要求清理了未跟踪的开发截图与 _tmp；当前无未跟踪文件，仅 .mnemon 记忆文件有未提交改动。commit/push 仍需事先许可。
 §
 验收 UI 的两条操作经验（2026-10-18）：Play 模式用反射改设置/面板后，必须等 400–500ms 让 Refresh 跑过一帧再读文本，否则会读到上一帧（技能池推荐分、对比面板 _compareDirty 都踩过）；cc-safety-net 会拦截 `git checkout -- <file>`（视为丢弃未提交改动），要恢复单个文件改用 Start-Process git -ArgumentList @('-C',$repo,'show','HEAD:path') -RedirectStandardOutput $dest。
 §

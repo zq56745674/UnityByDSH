@@ -257,17 +257,16 @@
     "chapterPerType": 20,
     "transition": [
         "ch1|cleared=1|endLevel=11|attempts=10|deaths=0|seconds=166",
-        "ch2|cleared=1|endLevel=22|attempts=10|deaths=0|seconds=107",
-        "ch3|cleared=1|endLevel=31|attempts=10|deaths=0|seconds=79",
-        "ch4|cleared=1|endLevel=43|attempts=10|deaths=0|seconds=77",
-        "ch5|cleared=1|endLevel=54|attempts=10|deaths=0|seconds=59",
-        "ch6|cleared=1|endLevel=64|attempts=10|deaths=0|seconds=45",
-        "ch7|cleared=1|endLevel=77|attempts=10|deaths=0|seconds=69",
-        "ch8|cleared=1|endLevel=89|attempts=10|deaths=0|seconds=43",
-        "ch9|cleared=1|endLevel=100|attempts=10|deaths=0|seconds=36",
-        "ch10|cleared=1|endLevel=100|attempts=10|deaths=0|seconds=36",
-        "ch11|cleared=1|endLevel=100|attempts=39|deaths=30|seconds=112",
-        "end|stuck=0|endgame=1|level=100|paragon=48|kills=549|deaths=30",
-        "endgame|chapter=11|stage=10|paragon=48|attempts=30"
+        "ch2|cleared=1|endLevel=21|attempts=10|deaths=0|seconds=114",
+        "ch3|cleared=1|endLevel=31|attempts=10|deaths=0|seconds=73",
+        "ch4|cleared=1|endLevel=43|attempts=10|deaths=0|seconds=96",
+        "ch5|cleared=1|endLevel=54|attempts=10|deaths=0|seconds=75",
+        "ch6|cleared=1|endLevel=64|attempts=10|deaths=0|seconds=53",
+        "ch7|cleared=1|endLevel=76|attempts=10|deaths=0|seconds=66",
+        "ch8|cleared=1|endLevel=89|attempts=10|deaths=0|seconds=45",
+        "ch9|cleared=1|endLevel=100|attempts=10|deaths=0|seconds=25",
+        "ch10|cleared=1|endLevel=100|attempts=10|deaths=0|seconds=38",
+        "ch11|cleared=1|endLevel=100|attempts=20|deaths=10|seconds=62",
+        "end|stuck=0|endgame=0|level=100|paragon=44|kills=505|deaths=10"
     ]
 }

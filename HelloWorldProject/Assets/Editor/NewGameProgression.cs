@@ -52,6 +52,7 @@ namespace AutoBattle.EditorTools
             public int gold;
             public int deaths;
             public int kills;
+            public int reforgeSpent;
             public float seconds;
             public bool stuck;
             public string stuckReason = "";
@@ -72,16 +73,18 @@ namespace AutoBattle.EditorTools
         /// <param name="seed">随机种子；同种子结果可复现（掉落、怪物类型、词缀、伤害浮动）。</param>
         /// <param name="maxAttemptsPerStage">单关最多重试几次；超过就判定为卡死并停止整轮。</param>
         /// <param name="verbose">true 时逐关输出一行。</param>
-        public static string Run(int seed = 12345, int maxAttemptsPerStage = 30, bool verbose = false)
+        /// <param name="reforgeQuality">关底前把词条洗到多少质量；0 = 不洗练，用于对照。</param>
+        public static string Run(int seed = 12345, int maxAttemptsPerStage = 30, bool verbose = false,
+            float reforgeQuality = ProbePolicy.DefaultReforgeQuality)
         {
-            SimResult r = Simulate(seed, maxAttemptsPerStage, verbose, out string detail);
+            SimResult r = Simulate(seed, maxAttemptsPerStage, verbose, reforgeQuality, out string detail);
             var sb = new StringBuilder();
             sb.AppendLine($"[NewGameProgression] seed={seed}  单关上限 {maxAttemptsPerStage} 次尝试");
             sb.AppendLine("口径：真实 BattleSystem + 真实经验/掉落/药剂；普通怪连战、关底回满血、精英不回；阵亡不给经验；终局 BOSS 类型轮换");
             sb.AppendLine();
             sb.Append(detail);
             sb.AppendLine();
-            sb.AppendLine($"总击杀 {r.kills}   总阵亡 {r.deaths}   模拟时长 {Minutes(r.seconds)}   结束时 Lv.{r.level} 巅峰 {r.paragonLevel} 金币 {r.gold}");
+            sb.AppendLine($"总击杀 {r.kills}   总阵亡 {r.deaths}   模拟时长 {Minutes(r.seconds)}   结束时 Lv.{r.level} 巅峰 {r.paragonLevel} 金币 {r.gold}   洗练花费 {r.reforgeSpent:N0}");
             if (r.stuck)
             {
                 sb.AppendLine($"✖ 卡死：{r.stuckChapter}-{r.stuckStage}（{r.stuckReason}）");
@@ -105,7 +108,7 @@ namespace AutoBattle.EditorTools
         /// </summary>
         public static string RunAssert(int seed = 12345, int maxAttemptsPerStage = 30)
         {
-            SimResult r = Simulate(seed, maxAttemptsPerStage, false, out _);
+            SimResult r = Simulate(seed, maxAttemptsPerStage, false, ProbePolicy.DefaultReforgeQuality, out _);
             List<string> problems = CheckInvariants(r);
             var sb = new StringBuilder();
             foreach (string p in problems) sb.AppendLine("FAIL  " + p);
@@ -125,7 +128,7 @@ namespace AutoBattle.EditorTools
         /// </summary>
         public static string[] Trace(int seed = 12345, int maxAttemptsPerStage = 30)
         {
-            SimResult r = Simulate(seed, maxAttemptsPerStage, false, out _);
+            SimResult r = Simulate(seed, maxAttemptsPerStage, false, ProbePolicy.DefaultReforgeQuality, out _);
             return Summary(r);
         }
 
@@ -217,7 +220,7 @@ namespace AutoBattle.EditorTools
             return lines.ToArray();
         }
 
-        static SimResult Simulate(int seed, int maxAttemptsPerStage, bool verbose, out string detail)
+        static SimResult Simulate(int seed, int maxAttemptsPerStage, bool verbose, float reforgeQuality, out string detail)
         {
             Random.InitState(seed);
 
@@ -294,6 +297,8 @@ namespace AutoBattle.EditorTools
 
                         // ---- 关底：精英 / Boss ----
                         FillPotions(p);          // 开商店时自动补药
+                        // 与真人一致：有余钱就把拖后腿的词条洗到 80%，再打关底。
+                        r.reforgeSpent += ProbePolicy.SpendGoldOnReforge(p, reforgeQuality);
                         // 与 SpawnMonsterNow 一致：默认不回血（HealBeforeFight=false），整关是一条消耗链
                         if (def.clearTier == MonsterTier.Boss || GameConfig.HealBeforeFight) p.FillHp();
 

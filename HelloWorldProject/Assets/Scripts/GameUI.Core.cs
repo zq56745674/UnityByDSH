@@ -26,6 +26,7 @@ namespace AutoBattle
             bool textTick = TickTextClock();
 
             TickFloats(Time.deltaTime);
+            TickHeroPortrait();
             RefreshBuffBar(_game.Player, textTick);
             RefreshDps(dt, textTick);
             ParseNewLogs();
@@ -175,6 +176,16 @@ namespace AutoBattle
         {
             if (_dpsText == null) return;
 
+            // 非战斗态把平滑值清掉：否则停在「等待下一只怪」或阵亡界面时，
+            // 胶囊会一直显示上一场战斗的 DPS，看起来像还在输出。
+            bool fighting = _game.CurrentState == GameController.State.Fighting;
+            if (!fighting)
+            {
+                _dpsSmoothed = 0f;
+                _dpsDamageAccum = 0f;
+                _dpsWindowTime = 0f;
+            }
+
             // DPS 胶囊整个隐藏：只清文本不够，胶囊底与边框还留在日志标题行上。
             if (!GameSettings.ShowDps)
             {
@@ -184,7 +195,6 @@ namespace AutoBattle
             if (_dpsPill != null && !_dpsPill.gameObject.activeSelf) _dpsPill.gameObject.SetActive(true);
 
             // 积分必须逐帧做：这是这段时间窗里的真实跳数，和文本节拍不是一个东西。
-            bool fighting = _game.CurrentState == GameController.State.Fighting;
             if (fighting && dt > 0f)
             {
                 _dpsWindowTime += dt;
@@ -447,10 +457,13 @@ namespace AutoBattle
                 var sig = new Sig();
                 sig.Add(m.level);
                 sig.Add((int)m.tier);
+                sig.Add((int)m.type);
                 sig.Add(m.maxHp);
                 sig.Add(m.attack);
                 sig.Add(m.defense);
                 sig.Add(m.speed, 100f);
+                sig.Add(m.critChance);
+                sig.Add(m.critDamage);
                 sig.Add(m.HasAffix ? m.AffixName : string.Empty);
                 if (sig.Value != _sigMonsterCard)
                 {
@@ -583,7 +596,8 @@ namespace AutoBattle
             {
                 bool modalOpen = IsOpen(_skillPanel) || IsOpen(_skillChoicePanel) || IsOpen(_stagePanel)
                     || IsOpen(_savePanel) || IsOpen(_enhancePanel) || IsOpen(_reforgePanel)
-                    || IsOpen(_settingsPanel) || IsOpen(_comparePanel) || IsOpen(_guideRoot);
+                    || IsOpen(_settingsPanel) || IsOpen(_comparePanel) || IsOpen(_endlessPanel)
+                    || IsOpen(_endlessResultPanel) || IsOpen(_guideRoot);
                 if (_modalDim.gameObject.activeSelf != modalOpen) _modalDim.gameObject.SetActive(modalOpen);
             }
         }
@@ -601,6 +615,7 @@ namespace AutoBattle
             RefreshReforgePanel();
             RefreshSettingsPanel();
             RefreshComparePanel();
+            RefreshEndlessPanel();
             RefreshGuide();
             RefreshBanner();
         }
@@ -740,6 +755,7 @@ namespace AutoBattle
                 case GameController.State.Reviving: return "复活中";
                 case GameController.State.Shopping: return "商店中";
                 case GameController.State.SkillChoice: return "选技能";
+                case GameController.State.Ended: return "本局结束";
                 default: return s.ToString();
             }
         }

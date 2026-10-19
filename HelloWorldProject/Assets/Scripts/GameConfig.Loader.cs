@@ -171,7 +171,8 @@ namespace AutoBattle
         private static void SanitizeValues()
         {
             MaxLevel = ClampInt(MaxLevel, 1, 9999, nameof(MaxLevel));
-            MaxParagonLevel = ClampInt(MaxParagonLevel, 0, 9999, nameof(MaxParagonLevel));
+            // 巅峰上限是玩法口径（2026-10-19 由 200 提到 1000）：配置可以调低，但不能越过 1000。
+            MaxParagonLevel = ClampInt(MaxParagonLevel, 0, 1000, nameof(MaxParagonLevel));
             EnhanceMaxLevel = ClampInt(EnhanceMaxLevel, 0, 999, nameof(EnhanceMaxLevel));
             MaxLogEntries = ClampInt(MaxLogEntries, 1, 100000, nameof(MaxLogEntries));
 
@@ -189,7 +190,7 @@ namespace AutoBattle
 
             // UI 固定画 6 个槽（三类 × 2），存档也只有 6 个槽字段：
             // 这个值不是自由的每类数量，必须保持 2，否则槽位索引与技能类别会错位。
-            SkillSlotsPerKind = ClampInt(SkillSlotsPerKind, 2, 2, nameof(SkillSlotsPerKind));
+            SkillSlotsPerKind = ClampInt(SkillSlotsPerKind, PlayerData.SkillSlotsPerKind, PlayerData.SkillSlotsPerKind, nameof(SkillSlotsPerKind));
             SkillChoiceCount = ClampInt(SkillChoiceCount, 1, 15, nameof(SkillChoiceCount));
 
             AttackIntervalBase = ClampFloat(AttackIntervalBase, 0.01f, 10000f, nameof(AttackIntervalBase));
@@ -200,6 +201,22 @@ namespace AutoBattle
             PlayerReviveDelay = ClampFloat(PlayerReviveDelay, 0.01f, 10000f, nameof(PlayerReviveDelay));
             BannerDuration = ClampFloat(BannerDuration, 0f, 10000f, nameof(BannerDuration));
             AutoSaveInterval = ClampFloat(AutoSaveInterval, 0.1f, 10000f, nameof(AutoSaveInterval));
+
+            // 无尽模式：每个字段都直接进循环/索引/金币公式，0 或负数必须挡住。
+            EndlessBaseMonsterLevel = ClampInt(EndlessBaseMonsterLevel, 1, 9999, nameof(EndlessBaseMonsterLevel));
+            EndlessMonsterLevelStep = ClampInt(EndlessMonsterLevelStep, 1, 9999, nameof(EndlessMonsterLevelStep));
+            EndlessKillTargetBase = ClampInt(EndlessKillTargetBase, 1, 9999, nameof(EndlessKillTargetBase));
+            EndlessKillTargetEvery = ClampInt(EndlessKillTargetEvery, 1, 9999, nameof(EndlessKillTargetEvery));
+            EndlessKillTargetMax = ClampInt(EndlessKillTargetMax, 1, 9999, nameof(EndlessKillTargetMax));
+            EndlessBossEvery = ClampInt(EndlessBossEvery, 1, 9999, nameof(EndlessBossEvery));
+            EndlessBaseFactor = ClampFloat(EndlessBaseFactor, 0.01f, 100f, nameof(EndlessBaseFactor));
+            EndlessFloorGoldBase = ClampInt(EndlessFloorGoldBase, 0, 1000000, nameof(EndlessFloorGoldBase));
+            EndlessFloorGoldPerFloor = ClampInt(EndlessFloorGoldPerFloor, 0, 1000000, nameof(EndlessFloorGoldPerFloor));
+            EndlessFirstClearGoldBase = ClampInt(EndlessFirstClearGoldBase, 0, 1000000, nameof(EndlessFirstClearGoldBase));
+            EndlessFirstClearGoldPerFloor = ClampInt(EndlessFirstClearGoldPerFloor, 0, 1000000, nameof(EndlessFirstClearGoldPerFloor));
+            EndlessFloorClearDelay = ClampFloat(EndlessFloorClearDelay, 0f, 10000f, nameof(EndlessFloorClearDelay));
+            EndlessCheckpointOffset = ClampInt(EndlessCheckpointOffset, 0, 9999, nameof(EndlessCheckpointOffset));
+            EndlessDropLevelCap = ClampInt(EndlessDropLevelCap, 1, 9999, nameof(EndlessDropLevelCap));
         }
 
         /// <summary>把当前生效的数值序列化成 JSON（用于生成初始配置文件，或导出改过的数值）。</summary>

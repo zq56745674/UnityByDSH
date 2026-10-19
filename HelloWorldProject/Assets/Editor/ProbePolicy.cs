@@ -4,7 +4,7 @@ using UnityEngine;
 namespace AutoBattle.EditorTools
 {
     /// <summary>
-    /// 探针的「玩家决策层」：三选一挑哪张、拿到技能装哪格、金币什么时候拿去强化。
+    /// 探针的「玩家决策层」：三选一挑哪张、拿到技能装哪格、金币什么时候拿去强化 / 洗练。
     ///
     /// 为什么单独抽一层：改动前的探针只会拿「候选里的第一张」（等于随机抽卡），
     /// 而且从没有一步走过 GameController.EnhanceEquipment —— 于是模拟出来的是一个
@@ -17,6 +17,9 @@ namespace AutoBattle.EditorTools
     ///   输一场按打掉的血量给 0~1 分。多赢一场的价值远大于快几秒，所以胜率是主序。
     /// - 强化按「每金币换来的评分增量」挑槽位，评分口径与 EquipmentScore 相同
     ///   （期望 DPS + 有效生命 ÷ 8），因此强化的决策和自动换装的决策在同一把尺子上。
+    /// - 洗练按「词条质量」做贪心：达到目标质量（默认 80%）就停；每次只洗更差的一件，
+    ///   把已经达到目标质量的那几条锁住，避免把好词条洗掉。这个策略与 docs/equipment-reforge.md
+    ///   的「80% 是可接受线、90% 是追梦线」一致，也是普通人真会做的操作。
     /// </summary>
     public static class ProbePolicy
     {
@@ -243,6 +246,104 @@ namespace AutoBattle.EditorTools
             }
 
             return spent;
+        }
+
+        // ==================== 金币：洗练 ====================
+
+        /// <summary>
+        /// 探针的洗练停止线：词条质量 80%。docs/equipment-reforge.md 把它定义为
+        /// 「可接受线」——再往上每 5% 的价格接近翻倍，长线探针不该假设玩家追到 90%。
+        /// </summary>
+        public const float DefaultReforgeQuality = 0.80f;
+
+        /// <summary>
+        /// 把金币花在洗练上，直到两件装备的词条质量都达到 targetQuality，或金币只剩药钱。
+        /// 每次挑「质量更低的那件」洗；洗之前锁住该件里已经达到目标质量的词条，
+        /// 所以只会重抽拖后腿的那几条。返回共花掉多少金币。
+        ///
+        /// 为什么不做穷举：洗练是随机过程，穷举要把每条词条的未来价值都算进去，
+        /// 成本远高于收益。这里模拟的是「普通人能做到的贪心」——先锁好的、再洗差的，
+        /// 达到 80% 就停，正好对应文档里的性价比拐点。
+        /// </summary>
+        public static int SpendGoldOnReforge(PlayerData p, float targetQuality = DefaultReforgeQuality,
+            int extraReserve = 0, int maxSteps = 128)
+        {
+            targetQuality = Mathf.Clamp01(targetQuality);
+            int spent = 0;
+            int reserve = PotionReserve(p) + extraReserve;
+
+            for (int step = 0; step < maxSteps; step++)
+            {
+                Equipment bestEquip = null;
+                int bestMask = 0;
+                int bestCost = 0;
+                float bestQuality = float.MaxValue;
+
+                foreach (EquipmentSlot slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor })
+                {
+                    Equipment e = p.GetEquipment(slot);
+                    if (e == null || !e.CanReforge) continue;
+
+                    float quality = e.AffixQuality;
+                    if (quality >= targetQuality) continue;
+
+                    int mask = LockMaskAt(e, targetQuality);
+                    int locked = e.LockedAffixCount(mask);
+                    if (locked >= e.AffixCount) continue;
+
+                    int cost = e.ReforgeCostWithLocks(locked);
+                    if (p.gold - cost < reserve) continue;
+
+                    if (quality < bestQuality || (Mathf.Approximately(quality, bestQuality) && cost < bestCost))
+                    {
+                        bestEquip = e;
+                        bestMask = mask;
+                        bestCost = cost;
+                        bestQuality = quality;
+                    }
+                }
+
+                if (bestEquip == null) break;
+
+                // 与 GameController.ReforgeEquipment 同一步骤：先记旧生命上限，再扣钱、洗练、补血。
+                int oldMaxHp = p.MaxHp;
+                p.gold -= bestCost;
+                LootSystem.ReforgeAffixes(bestEquip, bestMask);
+                bestEquip.reforgeCount++;
+
+                int newMaxHp = p.MaxHp;
+                p.currentHp = Mathf.Min(newMaxHp, p.currentHp + Mathf.Max(0, newMaxHp - oldMaxHp));
+                spent += bestCost;
+            }
+
+            return spent;
+        }
+
+        /// <summary>把「当前已达到目标质量」的词条锁住；没有词条或全都没达标时返回 0。</summary>
+        static int LockMaskAt(Equipment e, float targetQuality)
+        {
+            int mask = 0;
+            float levelScale = 1f + e.level * GameConfig.EquipAffixLevelScale;
+            for (int i = 0; i <= (int)EquipmentAffix.ArmorPen; i++)
+            {
+                EquipmentAffix kind = (EquipmentAffix)i;
+                float q = AffixPercent(e, kind, levelScale);
+                if (q >= targetQuality) mask |= Equipment.AffixBit(kind);
+            }
+            return mask;
+        }
+
+        /// <summary>单条词条的百分位；没有这条词条时返回 0。算法与 Equipment.AffixQuality 一致。</summary>
+        static float AffixPercent(Equipment e, EquipmentAffix kind, float levelScale)
+        {
+            float value = e.AffixValue(kind);
+            if (value <= 0f) return 0f;
+
+            int k = (int)kind;
+            float min = GameConfig.EquipAffixMin[k];
+            float max = GameConfig.EquipAffixMax[k];
+            if (max <= min) return 1f;
+            return Mathf.Clamp01((value / levelScale - min) / (max - min));
         }
 
         /// <summary>强化这一件一级能涨多少评分（临时加一级再退回，不改状态）。</summary>

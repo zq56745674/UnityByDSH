@@ -11,6 +11,12 @@ namespace AutoBattle
     [Serializable]
     public class PlayerData
     {
+        /// <summary>每类技能的槽位数：主动 / 被动 / 触发各 2 个。</summary>
+        public const int SkillSlotsPerKind = 2;
+
+        /// <summary>技能槽总数（三类 × 每类槽位）。存档/UI/战斗循环都以这个常量为准。</summary>
+        public const int SkillSlotCount = SkillSlotsPerKind * 3;
+
         public int level = 1;
         public int exp = 0;
 
@@ -62,6 +68,12 @@ namespace AutoBattle
         /// 用 List&lt;int&gt; 而不是 HashSet&lt;int&gt;：JsonUtility 不序列化 HashSet。
         /// </summary>
         public List<int> clearedStages = new List<int>();
+
+        /// <summary>
+        /// 本存档在无尽模式里清过的最高层（0 = 还没打过）。只记「已清完」的层，
+        /// 死在第 N 层不算第 N 层。可被无尽模式写，也可以被手改档写坏，读档时夹 0..9999。
+        /// </summary>
+        public int endlessBestFloor;
 
         /// <summary>把关卡编码成 clearedStages 里的整数。章节 &lt; 100，所以两位关卡号放得下。</summary>
         public static int StageKey(int chapter, int stage) => chapter * 100 + stage;
@@ -358,10 +370,13 @@ namespace AutoBattle
             exp += amount;
             int gained = 0;
 
-            // 用 while 支持一次击杀连升多级。
-            while (!IsMaxLevel && exp >= ExpToNextLevel)
+            // 用 while 支持一次击杀连升多级；need<=0 时立即停手，
+            // 防止热改/探针把经验公式改成 0 或负数后在这里空转。
+            while (!IsMaxLevel)
             {
-                exp -= ExpToNextLevel;
+                int need = ExpToNextLevel;
+                if (need <= 0 || exp < need) break;
+                exp -= need;
                 level++;
                 gained++;
             }
@@ -378,9 +393,11 @@ namespace AutoBattle
             paragonExp += amount;
             int gained = 0;
 
-            while (!IsMaxParagon && paragonExp >= ParagonExpToNext)
+            while (!IsMaxParagon)
             {
-                paragonExp -= ParagonExpToNext;
+                int need = ParagonExpToNext;
+                if (need <= 0 || paragonExp < need) break;
+                paragonExp -= need;
                 paragonLevel++;
                 gained++;
             }
@@ -487,7 +504,7 @@ namespace AutoBattle
         /// <summary>某个技能当前装在哪个槽位；没装返回 -1。</summary>
         public int FindSkillSlot(int skillId)
         {
-            for (int i = 0; i < 6; i++) if (GetSkillSlot(i) == skillId) return i;
+            for (int i = 0; i < SkillSlotCount; i++) if (GetSkillSlot(i) == skillId) return i;
             return -1;
         }
     }

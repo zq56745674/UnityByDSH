@@ -21,10 +21,14 @@ namespace AutoBattle
         /// </summary>
         public static EquipmentQuality RollQuality(float highQualityBonus = 0f)
         {
+            // 爆率加成来自配置或探针，NaN / 负数都不该把整张权重表搅成负值。
             float boosted = 1f + highQualityBonus;
+            if (float.IsNaN(boosted) || float.IsInfinity(boosted) || boosted < 0f) boosted = 1f;
 
             float total = 0f;
             for (int i = 0; i < GameConfig.QualityWeights.Length; i++) total += Weight(i, boosted);
+
+            if (total <= 0f || float.IsNaN(total)) return EquipmentQuality.Common;
 
             float roll = Random.value * total;
             float cumulative = 0f;
@@ -36,13 +40,20 @@ namespace AutoBattle
             }
 
             // 浮点累加误差兜底。
-            return (EquipmentQuality)(GameConfig.QualityWeights.Length - 1);
+            return (EquipmentQuality)Mathf.Clamp(
+                GameConfig.QualityWeights.Length - 1, 0, GameConfig.QualityNames.Length - 1);
+        }
+
+        /// <summary>权重只接受有限非负值；其它情况按 0 处理，避免整次抽取落到非法档位。</summary>
+        private static float SanitizeWeight(float w)
+        {
+            return float.IsNaN(w) || float.IsInfinity(w) || w <= 0f ? 0f : w;
         }
 
         /// <summary>取第 index 档品质的权重，高品质档乘上爆率加成。</summary>
         private static float Weight(int index, float boosted)
         {
-            float w = GameConfig.QualityWeights[index];
+            float w = SanitizeWeight(GameConfig.QualityWeights[index]);
             return IsHighQuality((EquipmentQuality)index) ? w * boosted : w;
         }
 
@@ -59,19 +70,24 @@ namespace AutoBattle
         /// </summary>
         public static EquipmentQuality RollQualityWithWeights(float[] weights)
         {
+            // 调用方来自保底掉落表；空表 / 全 0 / 负权重时不能返回 -1 或越界品质，
+            // 否则后面的 GameConfig.RollQualityMultiplier 会直接索引坏档。
+            int count = weights == null ? 0 : Mathf.Min(weights.Length, GameConfig.QualityNames.Length);
             float total = 0f;
-            for (int i = 0; i < weights.Length; i++) total += weights[i];
+            for (int i = 0; i < count; i++) total += SanitizeWeight(weights[i]);
+
+            if (total <= 0f || float.IsNaN(total)) return EquipmentQuality.Common;
 
             float roll = Random.value * total;
             float cumulative = 0f;
 
-            for (int i = 0; i < weights.Length; i++)
+            for (int i = 0; i < count; i++)
             {
-                cumulative += weights[i];
+                cumulative += SanitizeWeight(weights[i]);
                 if (roll < cumulative) return (EquipmentQuality)i;
             }
 
-            return (EquipmentQuality)(weights.Length - 1);
+            return (EquipmentQuality)Mathf.Clamp(count - 1, 0, GameConfig.QualityNames.Length - 1);
         }
 
         /// <summary>按指定等级与品质权重生成一件装备（精英 / Boss 的保底掉落，等级取怪物自身等级）。</summary>
@@ -88,7 +104,11 @@ namespace AutoBattle
         /// </summary>
         public static Equipment CreateEquipment(EquipmentSlot slot, int level, EquipmentQuality quality)
         {
-            int steps = Mathf.Max(0, level - 1);
+            // 公开入口也当边界处理：直接构造的装备/探针可能传 0 级或越界品质，
+            // 在这里夹好，后面的品质表与等级成长就都不用再各写一份兜底。
+            level = Mathf.Max(1, level);
+            quality = GameConfig.ClampQuality(quality);
+            int steps = level - 1;
             float multiplier = GameConfig.RollQualityMultiplier(quality);
 
             var e = new Equipment
@@ -130,7 +150,7 @@ namespace AutoBattle
         /// </summary>
         private static void RollAffixes(Equipment e, int level)
         {
-            int q = (int)e.quality;
+            int q = (int)GameConfig.ClampQuality(e.quality);
             // Random.Range 的 int 重载上界不含，所以 +1 才能取到上限。
             int count = Random.Range(GameConfig.EquipAffixCountMin[q], GameConfig.EquipAffixCountMax[q] + 1);
             RollAffixes(e, level, count);
@@ -168,7 +188,7 @@ namespace AutoBattle
                 pool[j] = tmp;
             }
 
-            float levelScale = 1f + level * GameConfig.EquipAffixLevelScale;
+            float levelScale = 1f + Mathf.Max(0, level) * GameConfig.EquipAffixLevelScale;
 
             for (int i = 0; i < count && i < available; i++)
             {
