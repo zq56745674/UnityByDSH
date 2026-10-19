@@ -22,10 +22,12 @@ HelloWorldProject 的日志有两条写入路径：GameController.AddLog 维护 
 §
 HelloWorldProject 的 game_config.json 必须与 GameConfigData 的 97 个字段一一对应（当前 97 键）；GameConfig.Loader 加载后会用 ReportMissingKeys 对缺键打警告，缺字段不再静默回退默认值。历史备份、拆分前旧代码与一次性开发截图统一放工作区根的 _archive/（已 gitignore，内含 README 说明），不要留在仓库根或 Assets 里。
 §
-2026-10-19 按用户明确指令提交并推送 6cfecf3「无尽模式、立绘待机与 P1000 平衡收尾」：无尽模式（层目录/记录/UI/存档 v7）、立绘眨眼待机、巅峰上限 1000、P1000 终局与无尽实测、探针模拟洗练、README/平衡/文档与截图，共 67 文件 +5608/-213。此前 b649ec7、c873e6d、9d0524c 均已推送；当前 HEAD=origin/main=6cfecf3，工作区干净。commit/push 仍需事先明确许可。
+2026-10-19 按用户明确指令提交并推送 6cfecf3「无尽模式、立绘待机与 P1000 平衡收尾」：无尽模式（层目录/记录/UI/存档 v7）、立绘眨眼待机、巅峰上限 1000、P1000 终局与无尽实测、探针模拟洗练、README/平衡/文档与截图，共 67 文件 +5608/-213。随后又推送 7d0cd0d「五装备槽与攻速软上限」（32 文件 +1661/-662），当前 HEAD=origin/main=7d0cd0d，工作区干净。commit/push 仍需事先明确许可。
 §
 验收 UI 的两条操作经验（2026-10-18）：Play 模式用反射改设置/面板后，必须等 400–500ms 让 Refresh 跑过一帧再读文本，否则会读到上一帧（技能池推荐分、对比面板 _compareDirty 都踩过）；cc-safety-net 会拦截 `git checkout -- <file>`（视为丢弃未提交改动），要恢复单个文件改用 Start-Process git -ArgumentList @('-C',$repo,'show','HEAD:path') -RedirectStandardOutput $dest。
 §
 HelloWorldProject 终局 11-10 结算语义（2026-10-18 修）：首通时正常发奖/横幅并立即把 Player.stageKillCount 归零；之后继续刷同一关，ResolveStageClear 里的 SuppressFinalStageFarmKill 会吞掉满轮击杀（不再每次多等 StageClearDelay=3s、也不再刷通关日志）。HandleMonsterKilled 早已拆成约 29 行调度（ResolveStageProgress / GrantKillReward / ResolveLevelUp / ResolveDrops / EnterRespawnWait），README 的「182 行未拆」旧条目已删；此次把 55 行的 ResolveStageProgress 再拆成 ResolveStageClear / SuppressFinalStageFarmKill / ShowClearBanner / AnnounceStageBossIfNext。
 §
 HelloWorldProject 的 AutoSaveTick（GameController.cs:1541-1547）每 AutoSaveInterval（默认 5 秒）无条件 Save 当前存档槽，Play 模式里改 Player 后逗留超过 5 秒就会覆盖磁盘存档；测试前应先备份或测试后立即恢复，2026-10-18 曾因此把 6 个技能槽清空，后按截图恢复。
+§
+本机 github.com / api.github.com 等被 Watt Toolkit（Steam++）写入 hosts 映射到 127.0.0.1；未开加速时 git fetch/push 报 Failed to connect port 443。push 前启动 `D:\Program Files\Steam++\Steam++.exe`，并用 `git -c http.schannelCheckRevoke=false push origin main`（本地 443 代理证书吊销检查失败），推送后可关闭 Steam++。2026-10-19 以此法推送 7d0cd0d 成功。
