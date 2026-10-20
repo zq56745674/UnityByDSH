@@ -159,5 +159,23 @@ namespace AutoBattle
         public float EndlessFloorClearDelay = 2.0f;
         public int EndlessCheckpointOffset = 4;
         public int EndlessDropLevelCap = 150;
+
+        // ---- 转生 ----
+        public int RebirthUnlockParagon = 100;
+        public float RebirthBattlePerRank = 0.01f;
+        public float RebirthExpPerRank = 0.20f;
+        public float RebirthGoldPerRank = 0.20f;
+        public float RebirthDropPerRank = 0.02f;
+        public int RebirthLegacyLevelPerRank = 2;
+        public int RebirthAlchemyPotionPerRank = 1;
+        public int RebirthAlchemyGoldPerRank = 500;
+        public int RebirthBattleCostBase = 3;
+        public int RebirthGrowthCostBase = 2;
+        public int RebirthFortuneCostBase = 2;
+        public int RebirthLegacyCostBase = 4;
+        public int RebirthAlchemyCostBase = 1;
+        public int RebirthMarkParagonStep = 100;
+        public int RebirthMarkFloorStep = 50;
+        public int RebirthMarkGoldBase = 100000;
     }
 }

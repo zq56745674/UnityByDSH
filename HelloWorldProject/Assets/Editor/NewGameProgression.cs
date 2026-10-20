@@ -62,6 +62,11 @@ namespace AutoBattle.EditorTools
             /// <summary>走到了终局（11-10）并进入「刷小怪 → 打 BOSS」的循环。
             /// 这一步不是卡死：每轮小怪都给经验，巅峰会一直涨，只是要磨很久。</summary>
             public bool reachedEndgame;
+
+            /// <summary>本世起始状态（转生模拟时由行囊/传承决定）。</summary>
+            public int stageStartLevel;
+            public int stageStartGold;
+            public int stageStartPotions;
         }
 
         [MenuItem("Tools/测试/新档进度探针（从头打到底）")]
@@ -75,12 +80,17 @@ namespace AutoBattle.EditorTools
         /// <param name="verbose">true 时逐关输出一行。</param>
         /// <param name="reforgeQuality">关底前把词条洗到多少质量；0 = 不洗练，用于对照。</param>
         public static string Run(int seed = 12345, int maxAttemptsPerStage = 30, bool verbose = false,
-            float reforgeQuality = ProbePolicy.DefaultReforgeQuality)
+            float reforgeQuality = ProbePolicy.DefaultReforgeQuality,
+            int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
+            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0, int bonusGold = 0)
         {
-            SimResult r = Simulate(seed, maxAttemptsPerStage, verbose, reforgeQuality, out string detail);
+            SimResult r = Simulate(seed, maxAttemptsPerStage, verbose, reforgeQuality, out string detail,
+                rebirthBattleRank, rebirthGrowthRank, rebirthFortuneRank, rebirthLegacyRank, rebirthAlchemyRank, bonusGold);
             var sb = new StringBuilder();
             sb.AppendLine($"[NewGameProgression] seed={seed}  单关上限 {maxAttemptsPerStage} 次尝试");
             sb.AppendLine("口径：真实 BattleSystem + 真实经验/掉落/药剂；普通怪连战、关底回满血、精英不回；阵亡不给经验；终局 BOSS 类型轮换");
+            if (rebirthBattleRank + rebirthGrowthRank + rebirthFortuneRank + rebirthLegacyRank + rebirthAlchemyRank > 0)
+                sb.AppendLine($"转生加成：战斗 {rebirthBattleRank} / 历练 {rebirthGrowthRank} / 财运 {rebirthFortuneRank} / 传承 {rebirthLegacyRank} / 行囊 {rebirthAlchemyRank}（起始 Lv.{r.stageStartLevel}，金币 {r.stageStartGold:N0}，药剂 {r.stageStartPotions}）");
             sb.AppendLine();
             sb.Append(detail);
             sb.AppendLine();
@@ -220,17 +230,24 @@ namespace AutoBattle.EditorTools
             return lines.ToArray();
         }
 
-        static SimResult Simulate(int seed, int maxAttemptsPerStage, bool verbose, float reforgeQuality, out string detail)
+        static SimResult Simulate(int seed, int maxAttemptsPerStage, bool verbose, float reforgeQuality, out string detail,
+            int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
+            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0, int bonusGold = 0)
         {
             Random.InitState(seed);
 
-            var p = new PlayerData();
-            p.FillHp();
+            var p = CreateStartPlayer(rebirthBattleRank, rebirthGrowthRank, rebirthFortuneRank,
+                rebirthLegacyRank, rebirthAlchemyRank, bonusGold);
 
             var battle = new BattleSystem();
-            var r = new SimResult();
+            var r = new SimResult
+            {
+                stageStartLevel = p.level,
+                stageStartGold = p.gold,
+                stageStartPotions = p.potionCount,
+            };
             var sb = new StringBuilder();
-            sb.AppendLine($"起始：Lv.{p.level}  攻 {p.Attack}  防 {p.Defense}  血 {p.MaxHp}  金币 {p.gold}  药剂 {p.potionCount}");
+            sb.AppendLine($"起始：Lv.{p.level}  攻 {p.Attack}  防 {p.Defense}  血 {p.MaxHp}  金币 {p.gold}  药剂 {p.potionCount}  转生世数 {p.rebirthCount}");
 
             int maxAttempts = Mathf.Max(1, maxAttemptsPerStage);
 
@@ -351,7 +368,7 @@ namespace AutoBattle.EditorTools
                     }
 
                     // 首通金币（真实规则：只发一次）
-                    if (p.MarkStageFirstCleared(c, s)) p.gold += StageCatalog.FirstClearGold(c, s);
+                    if (p.MarkStageFirstCleared(c, s)) p.AddGold(StageCatalog.FirstClearGold(c, s));
                 }
 
                 if (!r.stuck)
@@ -462,7 +479,7 @@ namespace AutoBattle.EditorTools
             int dropCount = GameConfig.MonsterTierGuaranteedDrops[(int)m.tier];
             // 五槽时代掉落率随解锁数上涨，且智能掉落会优先补空槽——探针必须和实机同口径，
             // 否则「新档多久凑齐四件」会被系统性高估。
-            if (dropCount == 0 && LootSystem.RollDrop(p.UnlockedEquipmentSlotCount)) dropCount = 1;
+            if (dropCount == 0 && LootSystem.RollDrop(p.UnlockedEquipmentSlotCount, p.RebirthDropBonus)) dropCount = 1;
 
             float[] weights = GameConfig.MonsterTierDropQualityWeights[(int)m.tier];
             int dropLevel = m.tier == MonsterTier.Normal ? p.level : m.level;
@@ -474,7 +491,7 @@ namespace AutoBattle.EditorTools
                     : LootSystem.CreateRandomEquipment(dropLevel, 0f, p);
 
                 if (TryAutoEquip(p, dropped)) continue;
-                p.gold += GameConfig.SellPrice(dropped.level, dropped.quality);
+                p.AddGold(GameConfig.SellPrice(dropped.level, dropped.quality));
             }
         }
 
@@ -495,6 +512,31 @@ namespace AutoBattle.EditorTools
             if (delta > 0) p.currentHp = Mathf.Min(p.MaxHp, p.currentHp + delta);
             else p.currentHp = Mathf.Min(p.currentHp, p.MaxHp);
             return true;
+        }
+
+        /// <summary>建一个本世起始角色：五条转生加成先落到 PlayerData，再按传承/行囊给起始等级、金币与药剂。</summary>
+        static PlayerData CreateStartPlayer(int battle, int growth, int fortune, int legacy, int alchemy, int bonusGold = 0)
+        {
+            var p = new PlayerData();
+            if (battle + growth + fortune + legacy + alchemy > 0)
+            {
+                p.rebirthCount = 1;
+                p.SetRebirthRank(RebirthTrack.Battle, battle);
+                p.SetRebirthRank(RebirthTrack.Growth, growth);
+                p.SetRebirthRank(RebirthTrack.Fortune, fortune);
+                p.SetRebirthRank(RebirthTrack.Legacy, legacy);
+                p.SetRebirthRank(RebirthTrack.Alchemy, alchemy);
+                p.level = p.RebirthStartLevel;
+                p.gold = p.RebirthStartGold;
+                p.potionCount = p.RebirthStartPotions;
+            }
+            if (bonusGold > 0)
+            {
+                p.gold = Mathf.Max(0, p.gold + bonusGold);
+                p.stats.goldEarned = p.gold;
+            }
+            p.FillHp();
+            return p;
         }
 
         /// <summary>自动补药：与 AutoFillPotions（:728-751）同规则，只在开商店时调用。</summary>

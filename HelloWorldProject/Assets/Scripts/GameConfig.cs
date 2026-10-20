@@ -690,6 +690,47 @@ namespace AutoBattle
         /// <summary>无尽掉落与击杀经验使用的等级上限。</summary>
         public static int EndlessDropLevelCap = 150;
 
+        // ==================== 转生（docs/rebirth.md） ====================
+
+        /// <summary>解锁轮回所需的巅峰等级。</summary>
+        public static int RebirthUnlockParagon = 100;
+
+        /// <summary>战斗本能每级：攻击 / 防御 / 最大生命 +1%。</summary>
+        public static float RebirthBattlePerRank = 0.01f;
+
+        /// <summary>历练每级：经验获取 +20%。</summary>
+        public static float RebirthExpPerRank = 0.20f;
+
+        /// <summary>财运每级：正向金币 +20%。</summary>
+        public static float RebirthGoldPerRank = 0.20f;
+
+        /// <summary>财运每级：掉落率 +2%（加算）。</summary>
+        public static float RebirthDropPerRank = 0.02f;
+
+        /// <summary>传承每级：下次转生起始等级 +2。</summary>
+        public static int RebirthLegacyLevelPerRank = 2;
+
+        /// <summary>行囊每级：下次转生起始药剂 +1。</summary>
+        public static int RebirthAlchemyPotionPerRank = 1;
+
+        /// <summary>行囊每级：下次转生起始金币 +500。</summary>
+        public static int RebirthAlchemyGoldPerRank = 500;
+
+        public static int RebirthBattleCostBase = 3;
+        public static int RebirthGrowthCostBase = 2;
+        public static int RebirthFortuneCostBase = 2;
+        public static int RebirthLegacyCostBase = 4;
+        public static int RebirthAlchemyCostBase = 1;
+
+        /// <summary>每多少巅峰折 1 枚印记（上限 10）。</summary>
+        public static int RebirthMarkParagonStep = 100;
+
+        /// <summary>无尽每多少层折 1 枚印记（上限 5）。</summary>
+        public static int RebirthMarkFloorStep = 50;
+
+        /// <summary>金币印记的基准：每翻一倍多 1 枚（上限 14）。</summary>
+        public static int RebirthMarkGoldBase = 100000;
+
         // ==================== 存档（要求 17） ====================
 
         public const string SaveKey = "AutoBattleDemo.Save.v1";

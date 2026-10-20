@@ -79,9 +79,13 @@ namespace AutoBattle.EditorTools
         /// 单个巅峰等级的胜率行。拆出来是为了能分批调用——trials 上到 30 时，
         /// 一次跑完 8 个等级的场次会让 Unity 主线程阻塞到 pipeline 心跳超时。
         /// </summary>
-        public static string RunWinrateCell(int paragon, int perType, bool resetHp, bool detail, int trials, bool smartPick = true)
+        public static string RunWinrateCell(int paragon, int perType, bool resetHp, bool detail, int trials, bool smartPick = true,
+                                            int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
+                                            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0)
         {
-            float[] acc = RunWinrateRow(paragon, perType, resetHp, trials, smartPick, out int skillSum, out int[] accWin);
+            float[] acc = RunWinrateRow(paragon, perType, resetHp, trials, smartPick,
+                rebirthBattleRank, rebirthGrowthRank, rebirthFortuneRank, rebirthLegacyRank, rebirthAlchemyRank,
+                out int skillSum, out int[] accWin);
             var sb = new StringBuilder();
             sb.Append($"{paragon,4}  {(float)skillSum / trials,4:0.0}   ");
             for (int c = 0; c < acc.Length; c++) sb.Append($"{acc[c] * 100f,8:0.0}%  ");
@@ -102,6 +106,16 @@ namespace AutoBattle.EditorTools
         public static float[] RunWinrateRow(int paragon, int perType, bool resetHp, int trials, bool smartPick,
                                             out int skillSum, out int[] accWin)
         {
+            return RunWinrateRow(paragon, perType, resetHp, trials, smartPick,
+                0, 0, 0, 0, 0, out skillSum, out accWin);
+        }
+
+        /// <summary>带转生加成的重载；五条 rank 默认由上面的重载传 0，保持旧基线不变。</summary>
+        public static float[] RunWinrateRow(int paragon, int perType, bool resetHp, int trials, bool smartPick,
+                                            int rebirthBattleRank, int rebirthGrowthRank, int rebirthFortuneRank,
+                                            int rebirthLegacyRank, int rebirthAlchemyRank,
+                                            out int skillSum, out int[] accWin)
+        {
             var battle = new BattleSystem();
             float[] w = { 0.45f, 0.30f, 0.25f };
             int[] lvArr = { 100, 100, 110, 110 };
@@ -112,7 +126,8 @@ namespace AutoBattle.EditorTools
             skillSum = 0;
             for (int tr = 0; tr < trials; tr++)
             {
-                var p = Build(paragon, smartPick);
+                var p = Build(paragon, smartPick, rebirthBattleRank, rebirthGrowthRank,
+                    rebirthFortuneRank, rebirthLegacyRank, rebirthAlchemyRank);
                 skillSum += p.OwnedSkillCount;
                 for (int c = 0; c < lvArr.Length; c++)
                 {
@@ -247,7 +262,9 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>构造一个满级主角：传说五件套 + 按「巅峰每 10 级随机一个技能」自动装备。</summary>
-        static PlayerData Build(int paragon, bool smartPick = true)
+        static PlayerData Build(int paragon, bool smartPick = true,
+            int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
+            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0)
         {
             var p = new PlayerData();
             p.level = 100;
@@ -289,6 +306,16 @@ namespace AutoBattle.EditorTools
                         if (p.GetSkillSlot(baseSlot + i) < 0) { p.SetSkillSlot(baseSlot + i, (int)got); break; }
                     }
                 }
+            }
+            // 转生加成在技能挑选之后套：先套会改变三选一评分，构筑与正常玩家不可比。
+            if (rebirthBattleRank + rebirthGrowthRank + rebirthFortuneRank + rebirthLegacyRank + rebirthAlchemyRank > 0)
+            {
+                p.rebirthCount = 1;
+                p.SetRebirthRank(RebirthTrack.Battle, rebirthBattleRank);
+                p.SetRebirthRank(RebirthTrack.Growth, rebirthGrowthRank);
+                p.SetRebirthRank(RebirthTrack.Fortune, rebirthFortuneRank);
+                p.SetRebirthRank(RebirthTrack.Legacy, rebirthLegacyRank);
+                p.SetRebirthRank(RebirthTrack.Alchemy, rebirthAlchemyRank);
             }
             p.FillHp();
             return p;

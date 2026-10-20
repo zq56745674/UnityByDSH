@@ -10,12 +10,13 @@ namespace AutoBattle
     {
         /// <summary>
         /// 是否掉落装备：基础 30%，每多解锁一个槽位 +5%（4 槽 40%、5 槽 45%）。
-        /// 旧的两槽调用方不传参时仍按 30% 走，行为不变。
+        /// bonusChance 来自转生「财运」（+2% / 级，加算）。旧调用方不传参时行为不变。
         /// </summary>
-        public static bool RollDrop(int unlockedSlots = 2)
+        public static bool RollDrop(int unlockedSlots = 2, float bonusChance = 0f)
         {
             int extra = Mathf.Max(0, unlockedSlots - 2);
-            float chance = GameConfig.DropChance + GameConfig.DropChancePerExtraSlot * extra;
+            float chance = GameConfig.DropChance + GameConfig.DropChancePerExtraSlot * extra
+                + (float.IsNaN(bonusChance) ? 0f : bonusChance);
             return Random.value < Mathf.Clamp01(chance);
         }
 

@@ -134,7 +134,7 @@ namespace AutoBattle
             {
                 string entry = inRun ? "记录" : "无尽";
                 if (!string.Equals(_endlessButtonLabel.text, entry)) _endlessButtonLabel.text = entry;
-                _endlessButtonLabel.color = !inRun && !_game.CanEnterEndless
+                _endlessButtonLabel.color = !inRun && !_game.EndlessUnlocked
                     ? GameConfig.TextDisabled
                     : Color.white;
             }
@@ -149,7 +149,7 @@ namespace AutoBattle
 
             int startFloor = inRun && _game.EndlessRun != null
                 ? _game.EndlessRun.startFloor
-                : EndlessCatalog.StartFloorFor(best);
+                : _game.EndlessSuggestedStartFloor;
 
             _endlessTitle.text = inRun && _game.EndlessRun != null
                 ? $"无尽模式 — 第 {_game.EndlessRun.floor} 层"
@@ -172,9 +172,18 @@ namespace AutoBattle
             }
             else
             {
-                _endlessStartText.text = best > 0
-                    ? $"起始层：第 {startFloor} 层（本档最高 − {GameConfig.EndlessCheckpointOffset}）"
-                    : "起始层：第 1 层（还没有纪录，从底层开始）";
+                if (best <= 0)
+                {
+                    _endlessStartText.text = "起始层：第 1 层（还没有纪录，从底层开始）";
+                }
+                else if (startFloor <= 1)
+                {
+                    _endlessStartText.text = "起始层：第 1 层（本世重通 11-10 后恢复检查点）";
+                }
+                else
+                {
+                    _endlessStartText.text = $"起始层：第 {startFloor} 层（本档最高 − {GameConfig.EndlessCheckpointOffset}）";
+                }
             }
 
             _endlessRulesText.text =
@@ -182,14 +191,15 @@ namespace AutoBattle
                 "· 死亡或撤退结束本局；最高层只记「已清除」的层。\n" +
                 $"· 掉落等级封顶 {Mathf.Max(1, GameConfig.EndlessDropLevelCap)}；层通过给金币，新纪录额外给首通金币。";
 
-            bool unlocked = _game.CanEnterEndless;
+            bool unlocked = _game.EndlessUnlocked;
+            bool canEnter = _game.CanEnterEndless;
             _endlessStartButton.gameObject.SetActive(true);
-            _endlessStartButton.interactable = inRun || unlocked;
+            _endlessStartButton.interactable = inRun || canEnter;
             _endlessStartLabel.text = inRun ? "继续战斗" : "开始挑战";
-            _endlessStartLabel.color = inRun || unlocked ? Color.white : GameConfig.TextDisabled;
+            _endlessStartLabel.color = inRun || canEnter ? Color.white : GameConfig.TextDisabled;
 
-            _endlessFreshButton.gameObject.SetActive(!inRun && unlocked && startFloor > 1);
-            _endlessFreshButton.interactable = unlocked;
+            _endlessFreshButton.gameObject.SetActive(!inRun && canEnter && startFloor > 1);
+            _endlessFreshButton.interactable = canEnter;
 
             _endlessRetreatButton.gameObject.SetActive(inRun);
             float now = Time.unscaledTime;
@@ -207,9 +217,11 @@ namespace AutoBattle
 
             _endlessHintText.text = !unlocked
                 ? "通关第 11 章 11-10 后解锁无尽模式。"
-                : inRun
-                    ? "退出游戏、切档或重置会结束本局；已经清完的层与首通金币会保留。"
-                    : "退出游戏会放弃未完成的一局，但已清层的纪录会保留。";
+                : (!inRun && !canEnter)
+                    ? $"需要等级 {GameConfig.MaxLevel} 才能进入无尽模式（当前 Lv.{_game.Player.level}）。"
+                    : inRun
+                        ? "退出游戏、切档或重置会结束本局；已经清完的层与首通金币会保留。"
+                        : "退出游戏会放弃未完成的一局，但已清层的纪录会保留。";
 
             RefreshEndlessResult();
         }
@@ -273,8 +285,7 @@ namespace AutoBattle
                 return;
             }
 
-            int start = EndlessCatalog.StartFloorFor(_game.EndlessBestFloor);
-            _game.StartEndlessRun(start);
+            _game.StartEndlessRun(_game.EndlessSuggestedStartFloor);
         }
 
         private void OnEndlessFreshClicked()

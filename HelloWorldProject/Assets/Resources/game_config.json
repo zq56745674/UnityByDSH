@@ -140,5 +140,22 @@
   "EndlessFirstClearGoldPerFloor": 150,
   "EndlessFloorClearDelay": 2.0,
   "EndlessCheckpointOffset": 4,
-  "EndlessDropLevelCap": 150
+  "EndlessDropLevelCap": 150,
+
+  "RebirthUnlockParagon": 100,
+  "RebirthBattlePerRank": 0.01,
+  "RebirthExpPerRank": 0.20,
+  "RebirthGoldPerRank": 0.20,
+  "RebirthDropPerRank": 0.02,
+  "RebirthLegacyLevelPerRank": 2,
+  "RebirthAlchemyPotionPerRank": 1,
+  "RebirthAlchemyGoldPerRank": 500,
+  "RebirthBattleCostBase": 3,
+  "RebirthGrowthCostBase": 2,
+  "RebirthFortuneCostBase": 2,
+  "RebirthLegacyCostBase": 4,
+  "RebirthAlchemyCostBase": 1,
+  "RebirthMarkParagonStep": 100,
+  "RebirthMarkFloorStep": 50,
+  "RebirthMarkGoldBase": 100000
 }

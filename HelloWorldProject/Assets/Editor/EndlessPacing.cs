@@ -51,7 +51,9 @@ namespace AutoBattle.EditorTools
         }
 
         public static string Run(int seedCount = 20, int maxFloor = 100, int baseSeed = 20261019,
-            int paragonLevel = 200, int gearLevel = 110, float affixQuality = 0.8f, bool maxGear = false)
+            int paragonLevel = 200, int gearLevel = 110, float affixQuality = 0.8f, bool maxGear = false,
+            int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
+            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0)
         {
             seedCount = Mathf.Max(1, seedCount);
             maxFloor = Mathf.Clamp(maxFloor, 1, EndlessCatalog.MaxFloor);
@@ -62,7 +64,8 @@ namespace AutoBattle.EditorTools
             // 模板必须可复现：装备词条与技能装槽都吃 Random，先用固定种子生成，
             // 否则同一份配置每跑一次探针，玩家面板都会变一个样，没法比较调参结果。
             Random.InitState(baseSeed);
-            PlayerData template = BuildFullPlayer(paragonLevel, gearLevel, affixQuality, maxGear);
+            PlayerData template = BuildFullPlayer(paragonLevel, gearLevel, affixQuality, maxGear,
+                rebirthBattleRank, rebirthGrowthRank, rebirthFortuneRank, rebirthLegacyRank, rebirthAlchemyRank);
             var results = new List<RunResult>(seedCount);
             var floorSamples = new Dictionary<int, List<FloorSample>>();
 
@@ -76,6 +79,8 @@ namespace AutoBattle.EditorTools
             var sb = new StringBuilder();
             sb.AppendLine($"[EndlessPacing] {seedCount} 个种子，最多 {maxFloor} 层；模板 Lv.{template.level} 巅峰 {template.paragonLevel} 技能 {template.OwnedSkillCount}/{SkillCatalog.All.Length}，装备 Lv.{gearLevel} 词条质量 {affixQuality:P0}{(maxGear ? "（满倍率+满主词条）" : "")}");
             sb.AppendLine($"模板：攻 {template.Attack} 防 {template.Defense} 血 {template.MaxHp} 速度 {template.Speed} 暴击 {template.CritChance:P1} 暴伤 {template.CritDamage:P0} 穿甲 {template.ArmorPenetration:P1} 强化 武器+{template.weapon.enhanceLevel}/衣服+{template.armor.enhanceLevel}/头盔+{template.helmet.enhanceLevel}/鞋+{template.boots.enhanceLevel}/饰品+{template.accessory.enhanceLevel} 词条质量 {template.weapon.AffixQuality:P0}/{template.armor.AffixQuality:P0}/{template.helmet.AffixQuality:P0}/{template.boots.AffixQuality:P0}/{template.accessory.AffixQuality:P0}");
+            if (rebirthBattleRank + rebirthGrowthRank + rebirthFortuneRank + rebirthLegacyRank + rebirthAlchemyRank > 0)
+                sb.AppendLine($"转生加成：战斗 {rebirthBattleRank} / 历练 {rebirthGrowthRank} / 财运 {rebirthFortuneRank} / 传承 {rebirthLegacyRank} / 行囊 {rebirthAlchemyRank}（转生 {template.rebirthCount} 世）");
             sb.AppendLine();
 
             // ---- 首死分布 ----
@@ -268,7 +273,7 @@ namespace AutoBattle.EditorTools
 
                 // 层奖励 + 新纪录首通（这一局每一层都是第一次清到，等价于一路刷新纪录）。
                 long reward = (long)EndlessCatalog.FloorGoldOf(floor) + EndlessCatalog.FirstClearGoldOf(floor);
-                p.gold += (int)reward;
+                p.AddGold((int)reward);
                 rr.goldEarned += reward;
             }
 
@@ -304,7 +309,7 @@ namespace AutoBattle.EditorTools
             p.currentHp = Mathf.Min(p.MaxHp, p.currentHp + heal);
 
             int dropCount = GameConfig.MonsterTierGuaranteedDrops[(int)m.tier];
-            if (dropCount == 0 && LootSystem.RollDrop(p.UnlockedEquipmentSlotCount)) dropCount = 1;
+            if (dropCount == 0 && LootSystem.RollDrop(p.UnlockedEquipmentSlotCount, p.RebirthDropBonus)) dropCount = 1;
 
             float[] weights = GameConfig.MonsterTierDropQualityWeights[(int)m.tier];
             int dropLevel = m.tier == MonsterTier.Normal ? p.level : Mathf.Min(m.level, cap);
@@ -315,7 +320,7 @@ namespace AutoBattle.EditorTools
                     : LootSystem.CreateRandomEquipment(dropLevel, 0f, p);
 
                 if (TryAutoEquip(p, dropped)) continue;
-                p.gold += GameConfig.SellPrice(dropped.level, dropped.quality);
+                p.AddGold(GameConfig.SellPrice(dropped.level, dropped.quality));
             }
         }
 
@@ -338,7 +343,9 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>模板：Lv.100 / 可配巅峰 / 传说装备 +15 / 可配词条质量。</summary>
-        static PlayerData BuildFullPlayer(int paragonLevel, int gearLevel, float affixQuality, bool maxGear = false)
+        static PlayerData BuildFullPlayer(int paragonLevel, int gearLevel, float affixQuality, bool maxGear = false,
+            int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
+            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0)
         {
             var p = new PlayerData
             {
@@ -357,6 +364,19 @@ namespace AutoBattle.EditorTools
 
             // 巅峰 200 应得 15 张技能卡；让 ProbePolicy 逐次实打挑选并装槽。
             ProbePolicy.ResolvePendingSkills(p);
+
+            // 转生加成必须在选完技能之后再套：技能推荐分按当前属性算，先套加成会让
+            // max 档选出一套不同的技能槽（实测会丢钢铁之躯），和正常玩家的构筑不可比。
+            if (rebirthBattleRank + rebirthGrowthRank + rebirthFortuneRank + rebirthLegacyRank + rebirthAlchemyRank > 0)
+            {
+                p.rebirthCount = 1;
+                p.SetRebirthRank(RebirthTrack.Battle, rebirthBattleRank);
+                p.SetRebirthRank(RebirthTrack.Growth, rebirthGrowthRank);
+                p.SetRebirthRank(RebirthTrack.Fortune, rebirthFortuneRank);
+                p.SetRebirthRank(RebirthTrack.Legacy, rebirthLegacyRank);
+                p.SetRebirthRank(RebirthTrack.Alchemy, rebirthAlchemyRank);
+            }
+
             p.FillHp();
             return p;
         }

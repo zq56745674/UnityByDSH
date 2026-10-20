@@ -18,10 +18,15 @@ namespace AutoBattle
         /// v5：加入关卡 / 章节进度；
         /// v6：加入首通记录（clearedStages）。
         /// v7：加入无尽模式最高层（endlessBestFloor）；
-        /// v8：加入头盔 / 鞋 / 饰品三个槽位与解锁赠礼掩码（slotStarterMask）。
+        /// v8：加入头盔 / 鞋 / 饰品三个槽位与解锁赠礼掩码（slotStarterMask）；
+        /// v9：加入转生次数 / 印记 / 历史巅峰与五条永久升级等级。
+        /// v10：加入跨世累计统计（stats）与成就状态（achievements）。
         /// 旧档缺 version 字段时读到 0，据此判断需要迁移。
         /// </summary>
-        private const int CurrentSaveVersion = 8;
+        private const int CurrentSaveVersion = 10;
+
+        /// <summary>成就状态结构版本；比它新的档拒绝读取，避免旧版本覆盖新结构。</summary>
+        public const int CurrentAchievementSchema = 1;
 
         /// <summary>装备字段迁移的版本线：低于此值的装备需要反推品质倍率。</summary>
         private const int EquipmentFieldVersion = 2;
@@ -67,6 +72,10 @@ namespace AutoBattle
             public int clearedCount;
             public int endlessBestFloor;
             public bool endlessUnlocked;
+
+            /// <summary>v9 起：转生次数与未花印记（选档界面展示第几世）。</summary>
+            public int rebirthCount;
+            public int rebirthMarks;
             public int version;
         }
 
@@ -121,6 +130,10 @@ namespace AutoBattle
 
             // v7 之前没有无尽模式，最高层按 0 显示（面板会显示「未解锁」）。
             info.endlessBestFloor = data.version >= 7 ? Mathf.Clamp(data.endlessBestFloor, 0, 9999) : 0;
+
+            // v9 之前没有转生，按「第 1 世、0 印记」显示。
+            info.rebirthCount = data.version >= 9 ? Mathf.Max(0, data.rebirthCount) : 0;
+            info.rebirthMarks = data.version >= 9 ? Mathf.Max(0, data.rebirthMarks) : 0;
 
             // 与 Load 一致：旧档没有关卡字段时按 1-1 显示。
             bool hasStage = data.version >= 5;
@@ -208,15 +221,32 @@ namespace AutoBattle
 
             /// <summary>v7 起：无尽模式已清过的最高层（0 = 未打过）。</summary>
             public int endlessBestFloor;
+
+            /// <summary>v9 起：转生次数 / 未花印记 / 历史最高巅峰。</summary>
+            public int rebirthCount;
+            public int rebirthMarks;
+            public int rebirthBestParagon;
+
+            /// <summary>v9 起：五条永久升级等级（0~5）。</summary>
+            public int rebirthBattleRank;
+            public int rebirthGrowthRank;
+            public int rebirthFortuneRank;
+            public int rebirthLegacyRank;
+            public int rebirthAlchemyRank;
+
+            /// <summary>v10 起：跨世累计统计与成就状态。</summary>
+            public PlayerStats stats;
+            public AchievementState achievements;
         }
 
         public static bool HasSave => HasSaveIn(CurrentSlot);
 
-        /// <summary>写入存档。</summary>
-        public static void Save(PlayerData player)
+        /// <summary>写入存档；返回是否成功落盘。失败时成就的待保存标记会保留。</summary>
+        public static bool Save(PlayerData player)
         {
-            if (player == null) return;
+            if (player == null) return false;
 
+            AchievementSystem.EnsureContainers(player);
             var data = new SaveData
             {
                 version = CurrentSaveVersion,
@@ -250,18 +280,32 @@ namespace AutoBattle
                 accessory = player.accessory,
                 slotStarterMask = player.slotStarterMask,
                 endlessBestFloor = Mathf.Clamp(player.endlessBestFloor, 0, 9999),
+                rebirthCount = player.rebirthCount,
+                rebirthMarks = player.rebirthMarks,
+                rebirthBestParagon = player.rebirthBestParagon,
+                rebirthBattleRank = player.rebirthBattleRank,
+                rebirthGrowthRank = player.rebirthGrowthRank,
+                rebirthFortuneRank = player.rebirthFortuneRank,
+                rebirthLegacyRank = player.rebirthLegacyRank,
+                rebirthAlchemyRank = player.rebirthAlchemyRank,
+                stats = player.stats,
+                achievements = player.achievements,
             };
 
             try
             {
                 PlayerPrefs.SetString(KeyOf(CurrentSlot), JsonUtility.ToJson(data));
                 PlayerPrefs.Save();
+                AchievementSystem.NotifySaveResult(true);
+                return true;
             }
             catch (Exception e)
             {
                 // 存档失败（PlayerPrefs 超限、序列化异常）不能把异常抛给 OnApplicationQuit，
-                // 那会打断退出流程。记一条警告即可，游戏本身可以继续跑。
+                // 那会打断退出流程。成就的 HasUnsavedUnlocks 继续保留，下次自动存档再试。
+                AchievementSystem.NotifySaveResult(false);
                 Debug.LogWarning($"[AutoBattle] 存档写入失败：{e.Message}");
+                return false;
             }
         }
 
@@ -303,6 +347,19 @@ namespace AutoBattle
                 PlayerPrefs.Save();
                 Debug.LogWarning($"[AutoBattle] 存档版本 {data.version} 高于当前支持的 {CurrentSaveVersion}，"
                     + $"已备份到 {newerKey} 并忽略该档。");
+                return false;
+            }
+
+            // 成就子结构也有自己的版本：比当前新的 schema 不能按旧结构读，
+            // 否则未知字段会在下次自动存档时被静默丢掉。整档备份后拒绝。
+            if (data.version >= 10 && data.achievements != null
+                && data.achievements.schemaVersion > CurrentAchievementSchema)
+            {
+                string schemaKey = KeyOf(CurrentSlot) + BackupSuffix;
+                PlayerPrefs.SetString(schemaKey, json);
+                PlayerPrefs.Save();
+                Debug.LogWarning($"[AutoBattle] 成就状态版本 {data.achievements.schemaVersion} 高于当前支持的 "
+                    + $"{CurrentAchievementSchema}，已备份到 {schemaKey} 并忽略该档。");
                 return false;
             }
 
@@ -359,7 +416,11 @@ namespace AutoBattle
                     if (seenStages.Add(key)) player.clearedStages.Add(key);
                 }
             }
-            else
+            // v8 空列表修复：JsonUtility 会把 null 的 List<int> 读成空列表，而不是 null。
+            // 老档只要 maxChapterUnlocked/chapterIndex 证明打过，就必须回填；否则首通记录被清空，
+            // 成就面板会把旧玩家的 all_stages / clear_ch* 当成没打过。重生档已把 maxChapterUnlocked
+            // 重置为 1，这里回填结果仍是 0，不会把转生进度还原。
+            if (player.clearedStages.Count == 0)
             {
                 // 判断依据必须是 maxChapterUnlocked（已解锁章 = 通关章末推进来的），
                 // 不能用 chapterIndex：玩家可以回头刷旧章，那时 chapterIndex 会小于已解锁章，
@@ -408,7 +469,118 @@ namespace AutoBattle
             player.endlessBestFloor = endlessBest;
             EndlessRecord.SyncGlobal(endlessBest);
 
+            // v9：转生状态。旧档与坏档全部归零；rank 超出 0..5 夹取。
+            // 「次数为 0 却带着等级/印记」只可能来自手改档，整组清掉，避免凭空获得永久加成。
+            // 次数/印记另给 100 万上限：正常玩法（每世最多 30 枚）远达不到，
+            // 只防手改档写入 int.MaxValue 后在 PerformRebirth 里自增溢出。
+            if (data.version >= 9)
+            {
+                player.rebirthCount = Mathf.Clamp(data.rebirthCount, 0, 1000000);
+                player.rebirthMarks = Mathf.Clamp(data.rebirthMarks, 0, 1000000);
+                player.rebirthBestParagon = Mathf.Clamp(data.rebirthBestParagon, 0, GameConfig.MaxParagonLevel);
+                player.rebirthBattleRank = Mathf.Clamp(data.rebirthBattleRank, 0, RebirthCatalog.MaxRank);
+                player.rebirthGrowthRank = Mathf.Clamp(data.rebirthGrowthRank, 0, RebirthCatalog.MaxRank);
+                player.rebirthFortuneRank = Mathf.Clamp(data.rebirthFortuneRank, 0, RebirthCatalog.MaxRank);
+                player.rebirthLegacyRank = Mathf.Clamp(data.rebirthLegacyRank, 0, RebirthCatalog.MaxRank);
+                player.rebirthAlchemyRank = Mathf.Clamp(data.rebirthAlchemyRank, 0, RebirthCatalog.MaxRank);
+            }
+            else
+            {
+                player.rebirthCount = 0;
+                player.rebirthMarks = 0;
+                player.rebirthBestParagon = 0;
+                player.rebirthBattleRank = 0;
+                player.rebirthGrowthRank = 0;
+                player.rebirthFortuneRank = 0;
+                player.rebirthLegacyRank = 0;
+                player.rebirthAlchemyRank = 0;
+            }
+
+            if (player.rebirthCount <= 0)
+            {
+                player.rebirthMarks = 0;
+                player.rebirthBestParagon = 0;
+                player.rebirthBattleRank = 0;
+                player.rebirthGrowthRank = 0;
+                player.rebirthFortuneRank = 0;
+                player.rebirthLegacyRank = 0;
+                player.rebirthAlchemyRank = 0;
+            }
+
+            // v10：累计统计与成就。旧档只能把「当前五槽还看得见」的部分作为历史下界，
+            // 其它累计量没有证据，保持 0；v9 转生过的档另可证明满级/巅峰/通关 11 章。
+            if (data.version >= 10)
+            {
+                player.stats = data.stats ?? new PlayerStats();
+                player.achievements = data.achievements ?? new AchievementState();
+            }
+            else
+            {
+                player.stats = BuildMigratedStats(player);
+                player.achievements = new AchievementState();
+            }
+
+            AchievementSystem.EnsureContainers(player);
+            SanitizeAchievements(player);
+            if (data.version < 10 && player.rebirthCount > 0)
+            {
+                // 能转生就必须满级、达到转生巅峰门槛并首通 11-10。
+                // 章节成就按 chapter_clear 的「最高章」定义补到 11，但通关允许章内选关，
+                // 所以不补 all_stages / clear_1_1（那两条要求逐关首通，转生已清空记录）。
+                AchievementSystem.GrantSilent(player, "level_100");
+                AchievementSystem.GrantSilent(player, "clear_ch3");
+                AchievementSystem.GrantSilent(player, "clear_ch6");
+                AchievementSystem.GrantSilent(player, "clear_ch9");
+                AchievementSystem.GrantSilent(player, "clear_ch11");
+
+                int historicalParagon = Mathf.Max(player.paragonLevel, player.rebirthBestParagon);
+                if (historicalParagon >= 100) AchievementSystem.GrantSilent(player, "paragon_100");
+                if (historicalParagon >= 1000) AchievementSystem.GrantSilent(player, "paragon_1000");
+            }
+
+            // 加载路径必须显式静默核对：只补「按存档已能证明」的条目，
+            // 不发金币、不弹 toast；新档也只会在 0/42，不会误发。
+            AchievementSystem.LoadReconcile(player);
+
             return true;
+        }
+
+        /// <summary>旧档迁移：只采信当前五槽仍携带的强化/洗练证据，作为历史下界。</summary>
+        private static PlayerStats BuildMigratedStats(PlayerData player)
+        {
+            var stats = new PlayerStats();
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                Equipment e = player.GetEquipment(EquipmentSlots.All[i]);
+                if (e == null) continue;
+                stats.enhances += e.enhanceLevel;
+                stats.reforges += e.reforgeCount;
+                stats.bestEnhanceLevel = Mathf.Max(stats.bestEnhanceLevel, e.enhanceLevel);
+                stats.bestAffixQuality = Mathf.Max(stats.bestAffixQuality, e.AffixQuality);
+            }
+            return stats;
+        }
+
+        /// <summary>
+        /// 成就状态兜底：去空、去重，schema 归一到当前版本。
+        /// 未知 id 有意保留（不静默丢玩家数据）；它们不计分，目录以后补回同 id 就能恢复。
+        /// </summary>
+        private static void SanitizeAchievements(PlayerData player)
+        {
+            if (player.achievements == null) player.achievements = new AchievementState();
+            if (player.achievements.unlocked == null)
+                player.achievements.unlocked = new List<string>();
+            player.achievements.schemaVersion = CurrentAchievementSchema;
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var cleaned = new List<string>();
+            for (int i = 0; i < player.achievements.unlocked.Count; i++)
+            {
+                string id = player.achievements.unlocked[i];
+                if (string.IsNullOrEmpty(id) || !seen.Add(id)) continue;
+                cleaned.Add(id);
+            }
+            player.achievements.unlocked = cleaned;
         }
 
         /// <summary>

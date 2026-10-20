@@ -244,6 +244,25 @@ namespace AutoBattle
             HelmetUnlockChapter = ClampInt(HelmetUnlockChapter, 1, ChapterCount, nameof(HelmetUnlockChapter));
             BootsUnlockChapter = ClampInt(BootsUnlockChapter, HelmetUnlockChapter, ChapterCount, nameof(BootsUnlockChapter));
             AccessoryUnlockChapter = ClampInt(AccessoryUnlockChapter, BootsUnlockChapter, ChapterCount, nameof(AccessoryUnlockChapter));
+
+            // 转生：解锁门槛可以调低但不能越过巅峰上限；乘区与费用必须为正；
+            // 印记步长/基准为 0 会让折算除零或恒定满值，必须挡住。
+            RebirthUnlockParagon = ClampInt(RebirthUnlockParagon, 0, 1000, nameof(RebirthUnlockParagon));
+            RebirthBattlePerRank = ClampFloat(RebirthBattlePerRank, 0f, 0.05f, nameof(RebirthBattlePerRank));
+            RebirthExpPerRank = ClampFloat(RebirthExpPerRank, 0f, 1f, nameof(RebirthExpPerRank));
+            RebirthGoldPerRank = ClampFloat(RebirthGoldPerRank, 0f, 1f, nameof(RebirthGoldPerRank));
+            RebirthDropPerRank = ClampFloat(RebirthDropPerRank, 0f, 0.2f, nameof(RebirthDropPerRank));
+            RebirthLegacyLevelPerRank = ClampInt(RebirthLegacyLevelPerRank, 1, 10, nameof(RebirthLegacyLevelPerRank));
+            RebirthAlchemyPotionPerRank = ClampInt(RebirthAlchemyPotionPerRank, 0, 5, nameof(RebirthAlchemyPotionPerRank));
+            RebirthAlchemyGoldPerRank = ClampInt(RebirthAlchemyGoldPerRank, 0, 5000, nameof(RebirthAlchemyGoldPerRank));
+            RebirthBattleCostBase = ClampInt(RebirthBattleCostBase, 1, 10, nameof(RebirthBattleCostBase));
+            RebirthGrowthCostBase = ClampInt(RebirthGrowthCostBase, 1, 10, nameof(RebirthGrowthCostBase));
+            RebirthFortuneCostBase = ClampInt(RebirthFortuneCostBase, 1, 10, nameof(RebirthFortuneCostBase));
+            RebirthLegacyCostBase = ClampInt(RebirthLegacyCostBase, 1, 10, nameof(RebirthLegacyCostBase));
+            RebirthAlchemyCostBase = ClampInt(RebirthAlchemyCostBase, 1, 10, nameof(RebirthAlchemyCostBase));
+            RebirthMarkParagonStep = ClampInt(RebirthMarkParagonStep, 10, 1000, nameof(RebirthMarkParagonStep));
+            RebirthMarkFloorStep = ClampInt(RebirthMarkFloorStep, 10, 500, nameof(RebirthMarkFloorStep));
+            RebirthMarkGoldBase = ClampInt(RebirthMarkGoldBase, 10000, 1000000, nameof(RebirthMarkGoldBase));
         }
 
         /// <summary>把当前生效的数值序列化成 JSON（用于生成初始配置文件，或导出改过的数值）。</summary>

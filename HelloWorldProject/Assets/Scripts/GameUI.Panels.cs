@@ -189,7 +189,9 @@ namespace AutoBattle
         private void BuildSavePanel(Transform root)
         {
             int slots = SaveSystem.SlotCount;
-            _savePanel = CreatePanel(root, "SavePanel", 300, 196, 680, 304, GameConfig.OverlayBg, true);
+            // 350 高：给底部「轮回」入口留一行。入口刻意放在存档面板里，而不是左栏，
+            // 因为转生是低频且不可逆的操作，不该和「开始/速度」挤在一起。
+            _savePanel = CreatePanel(root, "SavePanel", 300, 168, 680, 360, GameConfig.OverlayBg, true);
 
             _savePanelTitle = CreateText(_savePanel, "SavePanelTitle", "", 20, 12, 640, 30, 19,
                 GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -217,7 +219,8 @@ namespace AutoBattle
 
                 // CreateButton 把 label 拉满并居中；这里改成左上对齐 + 内缩。
                 cardLabel.alignment = TextAnchor.UpperLeft;
-                cardLabel.fontSize = 14;
+                // 13 号：摘要现在有 7 行（含第 N 世/印记），14 号会在卡片底部被裁掉。
+                cardLabel.fontSize = 13;
                 cardLabel.fontStyle = FontStyle.Normal;
                 cardLabel.rectTransform.offsetMin = new Vector2(14f, 32f);
                 cardLabel.rectTransform.offsetMax = new Vector2(-12f, -12f);
@@ -233,7 +236,15 @@ namespace AutoBattle
                 _saveSlotLabels[slot] = cardLabel;
             }
 
-            Button close = CreateButton(_savePanel, "SavePanelClose", "关闭", 586, 250, 74, 34,
+            _rebirthEntryButton = CreateButton(_savePanel, "RebirthEntry", "♾ 轮回", 20, 250, 120, 34,
+                GameConfig.BtnGold, out _rebirthEntryLabel);
+            _rebirthEntryLabel.fontSize = 15;
+            _rebirthEntryButton.onClick.AddListener(OnRebirthEntryClicked);
+
+            _rebirthEntryStatus = CreateText(_savePanel, "RebirthEntryStatus", "", 148, 250, 420, 34,
+                12, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+
+            Button close = CreateButton(_savePanel, "SavePanelClose", "关闭", 586, 306, 74, 34,
                 GameConfig.CardBtn, out _);
             close.onClick.AddListener(() => _game.CloseSavePanel());
 
@@ -259,6 +270,8 @@ namespace AutoBattle
             _savePanelWasOpen = true;
             if (!justOpened && !_savePanelDirty) return;
             _savePanelDirty = false;
+
+            RefreshRebirthEntry();
 
             int current = _game.SaveSlot;
             _savePanelTitle.text = $"存档槽 —— 当前 存档 {current + 1}";
@@ -294,11 +307,16 @@ namespace AutoBattle
                 ? "未解锁"
                 : info.endlessBestFloor > 0 ? $"{info.endlessBestFloor} 层" : "—";
 
+            string rebirth = info.version >= 9
+                ? $"第 {info.rebirthCount + 1} 世 · 印记 {info.rebirthMarks}"
+                : "第 1 世";
+
             return $"\nLv.{info.level}   巅峰 {info.paragonLevel}\n" +
                    $"第 {info.chapter} 章 {info.chapter}-{info.stage}\n" +
                    $"金币 {info.gold:N0}\n" +
                    $"首通 {info.clearedCount}/{totalStages} 关\n" +
-                   $"无尽 最高 {endless}";
+                   $"无尽 最高 {endless}\n" +
+                   rebirth;
         }
 
         private void OnSaveButtonClicked()

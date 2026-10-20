@@ -143,9 +143,13 @@ namespace AutoBattle
 
         public bool EndlessActive => Mode == GameMode.Endless;
 
-        /// <summary>首通 11-10 才解锁；只认首通记录，不看 maxChapterUnlocked。</summary>
+        /// <summary>
+        /// 无尽解锁：首通 11-10，或已经转生过（新一世也能进，但从第 1 层开始）。
+        /// 只认首通记录与转生次数，不看 maxChapterUnlocked。
+        /// </summary>
         public bool EndlessUnlocked =>
-            Player != null && Player.IsStageFirstCleared(GameConfig.ChapterCount, GameConfig.StagesPerChapter);
+            Player != null && (Player.rebirthCount > 0
+                || Player.IsStageFirstCleared(GameConfig.ChapterCount, GameConfig.StagesPerChapter));
 
         /// <summary>本层还剩几只；无尽以外返回 0，UI 用 EndlessActive 判断要不要显示。</summary>
         public int EndlessKillsLeft => EndlessRun != null ? EndlessRun.KillsLeft : 0;
@@ -202,7 +206,8 @@ namespace AutoBattle
             // 任何时刻都能点，战斗中点开就是一整块浮层盖住血条让怪白打，所以一并冻住。
             // 设置 / 引导 / 对比同理：它们都能从常驻按钮点开，必须和别的浮层一样有冻结权。
             if (StagePanelOpen || SavePanelOpen || EnhancePanelOpen || ReforgePanelOpen || SkillPanelOpen
-                || SettingsOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen) return;
+                || SettingsOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen
+                || RebirthPanelOpen || AchievementPanelOpen) return;
 
             // 游戏速度只影响战斗推进，不影响存档节奏（要求 16）。
             float dt = Time.deltaTime * SpeedMultiplier;
@@ -347,6 +352,9 @@ namespace AutoBattle
             // 甚至把下一只怪的首通判定带错。
             _justClearedStage = false;
 
+            // 无阵亡挑战只在「完整从第 1 关开始」时才算；任何有效选关都先作废旧挑战。
+            ResetNoDeathAttemptForSelect(chapter, stage);
+
             StageDef cur = Player.CurrentStage;
             if (cur != null && cur.chapter == chapter && cur.stage == stage)
             {
@@ -400,6 +408,8 @@ namespace AutoBattle
             GuideOpen = false;
             CompareOpen = false;
             EndlessPanelOpen = false;
+            RebirthPanelOpen = false;
+            AchievementPanelOpen = false;
         }
 
         /// <summary>打开 / 关闭选关面板。</summary>
@@ -483,6 +493,8 @@ namespace AutoBattle
             Player.currentHp += Mathf.Max(0, Player.MaxHp - oldMaxHp);
 
             AddLog($"◆ 强化 {e.Title}  →  花费 {cost} 金币", GameConfig.QualityColors[(int)e.quality]);
+            RecordEnhanceStats(e);
+            EvaluateAchievements();
             return EnhanceResult.Success;
         }
 
@@ -593,6 +605,7 @@ namespace AutoBattle
             TotalEquipped++;
             AddLog($"↑ 已换装 {pending.Title}（评分 {EquipmentScore.Of(Player, pending, pending.slot):0}）",
                 GameConfig.LogSuccess);
+            EvaluateAchievements();
             return true;
         }
 
@@ -604,13 +617,14 @@ namespace AutoBattle
             Equipment pending = _pendingDrops[index];
             if (pending == null) return false;
 
-            int gold = GameConfig.SellPrice(pending.level, pending.quality);
-            Player.gold += gold;
+            int gold = Player.AddGold(GameConfig.SellPrice(pending.level, pending.quality));
             TotalSold++;
             TotalGoldEarned += gold;
+            RecordSaleStats();
             _pendingDrops[index] = null;
 
             AddLog($"$ 卖出待选 {pending.Title}  +{gold} 金币（共 {Player.gold}）", GameConfig.LogGold);
+            EvaluateAchievements();
             return true;
         }
 
@@ -670,6 +684,8 @@ namespace AutoBattle
 
             AddLog($"◆ 洗练 {e.Title}  →  花费 {cost:N0} 金币（第 {e.reforgeCount} 次{lockNote}）", e.QualityColor);
             AddLog($"  词条质量 {oldQuality}% → {newQuality}%（{arrow}）    {e.AffixSummary}", GameConfig.LogInfo);
+            RecordReforgeStats(e, locked);
+            EvaluateAchievements();
             return ReforgeResult.Success;
         }
 
@@ -775,6 +791,8 @@ namespace AutoBattle
             EndlessResultOpen = false;
             CloseAllPanels();
             ClearPendingDrops();
+            ClearNoDeathAttempt();
+            AchievementSystem.NotifyContextReset();
             CurrentState = State.WaitingRespawn;
             _respawnTimer = 0f;
             _reviveTimer = 0f;
@@ -840,6 +858,7 @@ namespace AutoBattle
 
             AddLog($"◆ 已装备技能：{def.name}", def.color);
             Debug.Log($"[AutoBattle] 装备技能 {def.name} 到槽位 {slot}");
+            EvaluateAchievements();
             return true;
         }
 
@@ -855,6 +874,7 @@ namespace AutoBattle
             _battle.ResetSkillState();
 
             AddLog($"◆ 已卸下技能：{SkillCatalog.All[id].name}", GameConfig.LogInfo);
+            EvaluateAchievements();
         }
 
         /// <summary>新获得的技能自动放进同类空槽；同类已满则只加入「已获得」，由玩家在面板里替换。</summary>
@@ -922,6 +942,7 @@ namespace AutoBattle
             Debug.Log($"[AutoBattle] 三选一获得技能 {def.name}");
 
             TryAutoEquip(picked);
+            EvaluateAchievements();
             _skillChoices.Clear();
 
             // 还有待选次数就接着抽下一组。
@@ -1210,9 +1231,8 @@ namespace AutoBattle
         private int GrantFirstClearReward(int chapter, int stage)
         {
             bool chapterFinal = StageCatalog.IsChapterFinal(stage);
-            int gold = StageCatalog.FirstClearGold(chapter, stage);
+            int gold = Player.AddGold(StageCatalog.FirstClearGold(chapter, stage));
 
-            Player.gold += gold;
             TotalGoldEarned += gold;
 
             AddLog(chapterFinal
@@ -1267,6 +1287,7 @@ namespace AutoBattle
             // 档次统计：只有真正击杀精英 / Boss 才计数。
             if (Monster.tier == MonsterTier.Elite) EliteKills++;
             else if (Monster.tier == MonsterTier.Boss) BossKills++;
+            RecordKillStats(Monster.tier);
 
             // 关卡推进（步骤 4a）：普通怪和关底都计入本关击杀数，
             // 攒满 killTarget 即通关；下一关从普通怪重新开始。
@@ -1287,6 +1308,9 @@ namespace AutoBattle
 
             // 技能三选一放在状态复位之后，让它覆盖 WaitingRespawn（选完再回到等待重生）。
             if (Player.pendingSkillPicks > 0) OpenSkillChoice();
+
+            // 本只怪引发的击杀/关卡/掉落/升级全部落地后，统一求值一次。
+            EvaluateAchievements();
         }
 
         /// <summary>
@@ -1297,6 +1321,8 @@ namespace AutoBattle
         {
             if (Player.IsStageCleared)
             {
+                // 先记无阵亡挑战，再走结算：终局重复刷关的提前返回不能把这次通关吞掉。
+                AdvanceNoDeathAttempt();
                 ResolveStageClear();
                 return;
             }
@@ -1326,6 +1352,9 @@ namespace AutoBattle
 
             // 终局没有下一关：把本关计数清零，继续刷同一关，不再触发通关结算。
             if (!advanced) Player.stageKillCount = 0;
+
+            // 自然跨章进入第 9/10/11 章第 1 关时，从这一刻起算一次新的无阵亡挑战。
+            if (advanced) TryOpenNoDeathAttempt(Player.chapterIndex, Player.stageIndex);
 
             AddLog(
                 advanced
@@ -1381,7 +1410,8 @@ namespace AutoBattle
                 if (Player.GetEquipment(slot) == null)
                 {
                     Equipment starter = LootSystem.CreateEquipment(slot, Player.level, EquipmentQuality.Rare);
-                    WearEquipment(starter);
+                    // 赠送的起手装不计入「累计穿戴」成就。
+                    WearEquipment(starter, false);
                     AddLog($"✦ 新装备槽解锁：{EquipmentSlots.Name(slot)}（赠送 {starter.Title}）", GameConfig.LogUnlock);
                 }
                 else
@@ -1527,7 +1557,7 @@ namespace AutoBattle
 
             int dropCount = GameConfig.MonsterTierGuaranteedDrops[(int)Monster.tier];
             int unlockedSlots = Player.UnlockedEquipmentSlotCount;
-            if (dropCount == 0 && LootSystem.RollDrop(unlockedSlots)) dropCount = 1;
+            if (dropCount == 0 && LootSystem.RollDrop(unlockedSlots, Player.RebirthDropBonus)) dropCount = 1;
 
             float[] fixedWeights = GameConfig.MonsterTierDropQualityWeights[(int)Monster.tier];
             int dropLevel = Monster.tier == MonsterTier.Normal ? Player.level : Monster.level;
@@ -1543,6 +1573,7 @@ namespace AutoBattle
                     ? LootSystem.CreateEquipmentAtLevel(dropLevel, fixedWeights, Player)
                     : LootSystem.CreateRandomEquipment(dropLevel, 0f, Player);
                 // 副词条必须一起打出来：只打主属性时，玩家会以为「传说武器没有副属性」。
+                RecordDropStats(dropped);
                 string dropLine = $"◆ 掉落 {dropped.Title}  {dropped.StatLine}";
                 if (!string.IsNullOrEmpty(dropped.AffixLine)) dropLine += "\n    " + dropped.AffixLine;
                 AddLog(dropLine, dropped.QualityColor);
@@ -1565,10 +1596,10 @@ namespace AutoBattle
                 {
                     // 卖闲置装备换金币：不再直接丢弃，单价随装备等级与品质提升（GameConfig.SellPrice）。
                     Equipment current = Player.GetEquipment(dropped.slot);
-                    int gold = GameConfig.SellPrice(dropped.level, dropped.quality);
-                    Player.gold += gold;
+                    int gold = Player.AddGold(GameConfig.SellPrice(dropped.level, dropped.quality));
                     TotalSold++;
                     TotalGoldEarned += gold;
+                    RecordSaleStats();
 
                     // current 理论上不会为空（空槽会在 TryAutoEquip 里直接穿戴），
                     // 但卖店分支是异常兜底，不能再让一个空引用把整轮掉落结算打断。
@@ -1629,10 +1660,10 @@ namespace AutoBattle
                 if (queued != null)
                 {
                     // 旧的待选件被顶掉时不能凭空蒸发：按普通卖店价折现，日志里交代清楚。
-                    int gold = GameConfig.SellPrice(queued.level, queued.quality);
-                    Player.gold += gold;
+                    int gold = Player.AddGold(GameConfig.SellPrice(queued.level, queued.quality));
                     TotalSold++;
                     TotalGoldEarned += gold;
+                    RecordSaleStats();
                     AddLog($"  ↻ 待选更新（旧待选评分 {EquipmentScore.Of(Player, queued, queued.slot):0} → {droppedScore:0}，旧件折价 +{gold}）",
                         GameConfig.LogInfo);
                 }
@@ -1649,10 +1680,11 @@ namespace AutoBattle
         /// 穿上装备并把生命上限的增量补给血量：
         /// 衣服换强时上限会涨，不补这一截会出现「换了更好的衣服，血量占比反而掉了」。
         /// </summary>
-        private void WearEquipment(Equipment e)
+        private void WearEquipment(Equipment e, bool countForAchievements = true)
         {
             int oldMaxHp = Player.MaxHp;
             Player.SetEquipment(e);
+            if (countForAchievements) RecordEquipStats();
 
             int delta = Player.MaxHp - oldMaxHp;
             if (delta > 0) Player.currentHp = Mathf.Min(Player.MaxHp, Player.currentHp + delta);
@@ -1666,6 +1698,10 @@ namespace AutoBattle
         private void HandlePlayerDied()
         {
             TotalDeaths++;
+            RecordDeathStats();
+
+            // 阵亡即中断无阵亡挑战；无论战役还是无尽都作废。
+            ClearNoDeathAttempt();
 
             // 无尽没有复活：死了这一局就结束，结果面板让玩家选再次挑战还是回战役。
             if (EndlessActive)
@@ -1673,6 +1709,7 @@ namespace AutoBattle
                 AddLog($"✖ 无尽第 {EndlessRun.floor} 层阵亡（本局清除 {EndlessRun.clearedThisRun} 层）",
                     GameConfig.LogDanger);
                 EndEndlessRun(EndlessEndReason.Death);
+                EvaluateAchievements();
                 return;
             }
 
@@ -1699,6 +1736,7 @@ namespace AutoBattle
 
             // 复活后刷的是本关的普通怪（_pendingTier 已复位），玩家要先把本关小怪刷过去，
             // 才能再见到关底——经验也正是从这些小怪身上来的。
+            EvaluateAchievements();
         }
 
         /// <summary>自动复活：回满生命并立刻投入下一场战斗。</summary>

@@ -75,6 +75,35 @@ namespace AutoBattle
         /// </summary>
         public int endlessBestFloor;
 
+        // ==================== 累计统计 / 成就（存档 v10） ====================
+
+        /// <summary>
+        /// 跨世累计统计：记录玩家实际做过什么，转生重置本世进度时不清。
+        /// 由 GameController 在成功动作的唯一入口写入。
+        /// </summary>
+        public PlayerStats stats = new PlayerStats();
+
+        /// <summary>本存档槽的成就状态（已解锁 id）。跨世保留，不因转生重置。</summary>
+        public AchievementState achievements = new AchievementState();
+
+        // ==================== 转生（存档 v9） ====================
+
+        /// <summary>已经完成的转生次数。0 = 还没转过，第 1 世。</summary>
+        public int rebirthCount;
+
+        /// <summary>当前还没花掉的轮回印记。</summary>
+        public int rebirthMarks;
+
+        /// <summary>历史最高巅峰等级（转生重置后仍保留，用于展示）。</summary>
+        public int rebirthBestParagon;
+
+        /// <summary>五条永久升级的等级，各 0~5。费用与效果见 RebirthCatalog。</summary>
+        public int rebirthBattleRank;
+        public int rebirthGrowthRank;
+        public int rebirthFortuneRank;
+        public int rebirthLegacyRank;
+        public int rebirthAlchemyRank;
+
         /// <summary>把关卡编码成 clearedStages 里的整数。章节 &lt; 100，所以两位关卡号放得下。</summary>
         public static int StageKey(int chapter, int stage) => chapter * 100 + stage;
 
@@ -300,25 +329,75 @@ namespace AutoBattle
         /// <summary>攻击速度总加成 = 装备副词条 + 迅捷被动。</summary>
         public float AttackSpeedBonus => EquipAttackSpeedBonus + SkillAttackSpeedBonus;
 
+        // ==================== 转生永久加成 ====================
+
+        /// <summary>战斗本能：攻击 / 防御 / 最大生命 +1% / 级（乘在最终值最外层）。</summary>
+        public float RebirthBattleMultiplier => 1f + GameConfig.RebirthBattlePerRank * rebirthBattleRank;
+
+        /// <summary>历练：获得的经验 +20% / 级。</summary>
+        public float RebirthExpMultiplier => 1f + GameConfig.RebirthExpPerRank * rebirthGrowthRank;
+
+        /// <summary>财运：正向金币 +20% / 级（扣款不乘）。</summary>
+        public float RebirthGoldMultiplier => 1f + GameConfig.RebirthGoldPerRank * rebirthFortuneRank;
+
+        /// <summary>财运顺带的掉落率加成（+2% / 级，加算）。</summary>
+        public float RebirthDropBonus => GameConfig.RebirthDropPerRank * rebirthFortuneRank;
+
+        /// <summary>传承：下次转生后的起始等级。</summary>
+        public int RebirthStartLevel => 1 + GameConfig.RebirthLegacyLevelPerRank * rebirthLegacyRank;
+
+        /// <summary>行囊：下次转生后的起始金币。</summary>
+        public int RebirthStartGold => GameConfig.RebirthAlchemyGoldPerRank * rebirthAlchemyRank;
+
+        /// <summary>行囊：下次转生后的起始药剂。</summary>
+        public int RebirthStartPotions => GameConfig.RebirthAlchemyPotionPerRank * rebirthAlchemyRank;
+
+        public int GetRebirthRank(RebirthTrack track)
+        {
+            switch (track)
+            {
+                case RebirthTrack.Battle: return rebirthBattleRank;
+                case RebirthTrack.Growth: return rebirthGrowthRank;
+                case RebirthTrack.Fortune: return rebirthFortuneRank;
+                case RebirthTrack.Legacy: return rebirthLegacyRank;
+                case RebirthTrack.Alchemy: return rebirthAlchemyRank;
+                default: return 0;
+            }
+        }
+
+        public void SetRebirthRank(RebirthTrack track, int rank)
+        {
+            rank = Mathf.Clamp(rank, 0, RebirthCatalog.MaxRank);
+            switch (track)
+            {
+                case RebirthTrack.Battle: rebirthBattleRank = rank; break;
+                case RebirthTrack.Growth: rebirthGrowthRank = rank; break;
+                case RebirthTrack.Fortune: rebirthFortuneRank = rank; break;
+                case RebirthTrack.Legacy: rebirthLegacyRank = rank; break;
+                case RebirthTrack.Alchemy: rebirthAlchemyRank = rank; break;
+            }
+        }
+
         // ---- 最终属性 ----
 
         // 全属性作用在「基础 + 装备」之和上；防御再吃一次钢铁之躯；巅峰加成是纯加算。
         // 装备进公式用的是 Enhanced*（强化后主属性），强化等级因此会自动流进
         // 角色属性 → 战斗 → EquipmentScore 评分，自动换装不需要任何额外改动。
-        public int MaxHp => Mathf.RoundToInt((BaseMaxHp
+        // 转生加成乘在最终值最外层：先算完装备 / 巅峰，再整体放大。
+        public int MaxHp => Mathf.RoundToInt((Mathf.RoundToInt((BaseMaxHp
                               + (armor != null ? armor.EnhancedHp : 0)
                               + (helmet != null ? helmet.EnhancedHp : 0)) * (1f + AllStatsBonus))
-                          + ParagonHpBonus;
+                          + ParagonHpBonus) * RebirthBattleMultiplier);
 
-        public int Attack => Mathf.RoundToInt((BaseAttack + (weapon != null ? weapon.EnhancedAttack : 0)) * (1f + AllStatsBonus))
-                           + ParagonAttackBonus;
+        public int Attack => Mathf.RoundToInt((Mathf.RoundToInt((BaseAttack + (weapon != null ? weapon.EnhancedAttack : 0)) * (1f + AllStatsBonus))
+                           + ParagonAttackBonus) * RebirthBattleMultiplier);
 
-        public int Defense => Mathf.RoundToInt(
+        public int Defense => Mathf.RoundToInt((Mathf.RoundToInt(
                                 Mathf.RoundToInt((BaseDefense
                                     + (armor != null ? armor.EnhancedDefense : 0)
                                     + (helmet != null ? helmet.EnhancedDefense : 0)) * (1f + AllStatsBonus))
                                 * (1f + SkillDefenseBonus))
-                            + ParagonDefenseBonus;
+                            + ParagonDefenseBonus) * RebirthBattleMultiplier);
 
         /// <summary>速度本身不受全属性影响；鞋的主属性直接加算，攻速词条走独立的「攻击间隔乘区」。</summary>
         public int Speed => BaseSpeed + (boots != null ? boots.EnhancedSpeed : 0);
@@ -439,6 +518,9 @@ namespace AutoBattle
         {
             if (amount <= 0) return 0;
 
+            // 转生「历练」乘区放在入口，普通经验与巅峰经验都吃到。
+            amount = Mathf.Max(1, Mathf.RoundToInt(amount * RebirthExpMultiplier));
+
             if (IsMaxLevel)
             {
                 // 已满级：全部转成巅峰经验。
@@ -461,6 +543,49 @@ namespace AutoBattle
 
             if (IsMaxLevel) exp = 0; // 满级后清空经验条
             return gained;
+        }
+
+        /// <summary>
+        /// 所有正向金币来源统一走这里：乘转生「财运」并防止 int 溢出，返回实际到账。
+        /// 成就奖励等**固定金币**走 <see cref="AddGoldFixed"/>，不吃财运。
+        /// 扣款不要用这个方法（设计上扣款不吃财运）。
+        /// </summary>
+        public int AddGold(int amount)
+        {
+            if (amount <= 0) return 0;
+            long gained = (long)Mathf.RoundToInt(amount * RebirthGoldMultiplier);
+            return AwardGold(gained);
+        }
+
+        /// <summary>
+        /// 固定金币奖励：不乘转生财运，但仍受 int 余额封顶，返回实际到账。
+        /// 成就系统用这个入口；goldEarned 统计也按实际到账累计。
+        /// </summary>
+        public int AddGoldFixed(int amount)
+        {
+            if (amount <= 0) return 0;
+            return AwardGold(amount);
+        }
+
+        /// <summary>金币入账的唯一底层实现：夹 int 上限并把实际到账记进累计统计。</summary>
+        private int AwardGold(long gained)
+        {
+            if (gained <= 0) return 0;
+
+            long total = (long)gold + gained;
+            if (total > int.MaxValue) total = int.MaxValue;
+            int actual = (int)total - gold;
+            gold = (int)total;
+            if (stats != null) stats.goldEarned = AddStat(stats.goldEarned, actual);
+            return actual;
+        }
+
+        /// <summary>累计统计的溢出保护加法（正常玩法远达不到 long 上限）。</summary>
+        public static long AddStat(long current, long delta)
+        {
+            if (delta <= 0) return Math.Max(0L, current);
+            if (current >= long.MaxValue - delta) return long.MaxValue;
+            return Math.Max(0L, current + delta);
         }
 
         /// <summary>加巅峰经验并处理升级；返回本次升了几级巅峰。</summary>

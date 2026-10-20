@@ -323,10 +323,13 @@ namespace AutoBattle
             BuildSettingsPanel(root);
             BuildComparePanel(root);
             BuildEndlessPanel(root);
+            BuildRebirthPanel(root);
+            BuildAchievements(root);
             // 引导最后建（横幅之下另算）：它的遮罩与高亮框要压住所有浮层。
             BuildGuide(root);
-            // 横幅必须最后建：它要盖在选关 / 技能面板之上。
+            // 横幅必须压住选关 / 技能面板；成就 toast 再建在横幅之后，保证它是最上层提示。
             BuildBanner(root);
+            BuildAchievementToast(root);
         }
 
         // ==================== 左侧：属性 + 装备 ====================
@@ -402,6 +405,12 @@ namespace AutoBattle
                 GameConfig.BtnHeader, out _settingsButtonLabel);
             _settingsButtonLabel.fontSize = 14;
             _settingsButton.onClick.AddListener(OnSettingsClicked);
+
+            // 成就入口：挤在标题与设置之间。标题文字实际只占左边约 100px，140 起不压字。
+            _achievementButton = CreateButton(panel, "AchievementButton", "🏆 成就", 140, 15, 72, 24,
+                GameConfig.BtnHeader, out _achievementButtonLabel);
+            _achievementButtonLabel.fontSize = 13;
+            _achievementButton.onClick.AddListener(OnAchievementButtonClicked);
 
             _levelText = CreateText(panel, "Level", "", colX, 46, colW, 26, 17, Color.white, TextAnchor.MiddleLeft, FontStyle.Bold);
 

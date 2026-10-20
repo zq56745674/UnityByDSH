@@ -14,8 +14,25 @@ namespace AutoBattle
         /// <summary>本档无尽最高清层（未打过 = 0）。</summary>
         public int EndlessBestFloor => Player != null ? Player.endlessBestFloor : 0;
 
-        /// <summary>无尽入口是否可点：首通 11-10 才解锁。</summary>
-        public bool CanEnterEndless => EndlessUnlocked;
+        /// <summary>
+        /// 面板建议的起始层。转生后新一世在重通 11-10 之前只能从第 1 层开始；
+        /// 重通后恢复按最高层计算的检查点。
+        /// </summary>
+        public int EndlessSuggestedStartFloor
+        {
+            get
+            {
+                if (Player == null) return 1;
+                if (!Player.IsStageFirstCleared(GameConfig.ChapterCount, GameConfig.StagesPerChapter)) return 1;
+                return EndlessCatalog.StartFloorFor(Player.endlessBestFloor);
+            }
+        }
+
+        /// <summary>能否真正开始一局无尽：已解锁、等级满级、且没有待处理的技能三选一/结算。</summary>
+        public bool CanEnterEndless =>
+            EndlessUnlocked && Player != null
+            && Player.level >= GameConfig.MaxLevel
+            && !ChoicePending;
 
         /// <summary>打开 / 关闭无尽面板。结果面板开着时禁止，避免两层浮层叠在一起。</summary>
         public void ToggleEndlessPanel()
@@ -40,7 +57,22 @@ namespace AutoBattle
                 return;
             }
 
-            int floor = Mathf.Clamp(startFloor, 1, Mathf.Max(1, Player.endlessBestFloor));
+            if (Player == null) return;
+            if (Player.level < GameConfig.MaxLevel)
+            {
+                AddLog($"🔒 无尽模式需要等级 {GameConfig.MaxLevel}（当前 Lv.{Player.level}）", GameConfig.LogWarn);
+                return;
+            }
+            if (ChoicePending)
+            {
+                AddLog("🔒 先处理完技能三选一或结算面板再进无尽", GameConfig.LogWarn);
+                return;
+            }
+
+            // 新一世还没重通 11-10 时不让从旧纪录层开局，否则转生的重置进度形同虚设。
+            bool canUseBest = Player.IsStageFirstCleared(GameConfig.ChapterCount, GameConfig.StagesPerChapter);
+            int maxStart = canUseBest ? Mathf.Max(1, Player.endlessBestFloor) : 1;
+            int floor = Mathf.Clamp(startFloor, 1, maxStart);
             EndlessRun = new EndlessRunState
             {
                 floor = floor,
@@ -53,6 +85,8 @@ namespace AutoBattle
             };
 
             Mode = GameMode.Endless;
+            // 进入无尽等于离开战役：正在进行的无阵亡挑战作废。
+            ClearNoDeathAttempt();
             _pendingTier = MonsterTier.Normal;
             _finalBossAttempt = 0;
             _justClearedStage = false;
@@ -83,7 +117,7 @@ namespace AutoBattle
         /// <summary>结果面板的「再次挑战」：从检查点起步，重新开一局。</summary>
         public void RetryEndlessRun()
         {
-            StartEndlessRun(EndlessCatalog.StartFloorFor(Player.endlessBestFloor));
+            StartEndlessRun(EndlessSuggestedStartFloor);
         }
 
         /// <summary>主动撤退：不加阵亡数，但这一局同样结束。</summary>
@@ -136,6 +170,7 @@ namespace AutoBattle
             TotalKills++;
             if (Monster.tier == MonsterTier.Elite) EliteKills++;
             else if (Monster.tier == MonsterTier.Boss) BossKills++;
+            RecordKillStats(Monster.tier);
 
             EndlessRun.runKills++;
             EndlessRun.killCount++;
@@ -162,6 +197,9 @@ namespace AutoBattle
             }
 
             if (Player.pendingSkillPicks > 0) OpenSkillChoice();
+
+            // 层结算（endless_best 与金币）已经落地，再统一求值一次。
+            EvaluateAchievements();
         }
 
         /// <summary>清层：记最高层、发金币、横幅，然后进下一层。</summary>
@@ -182,7 +220,7 @@ namespace AutoBattle
                 EndlessRecord.ReportGlobal(cleared);
             }
 
-            Player.gold += totalGold;
+            totalGold = Player.AddGold(totalGold);
             TotalGoldEarned += totalGold;
 
             AddLog($"✦ 无尽第 {cleared} 层通过！+{totalGold:N0} 金币（本档最高 {Player.endlessBestFloor} 层）",

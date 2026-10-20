@@ -602,7 +602,8 @@ namespace AutoBattle
                 bool modalOpen = IsOpen(_skillPanel) || IsOpen(_skillChoicePanel) || IsOpen(_stagePanel)
                     || IsOpen(_savePanel) || IsOpen(_enhancePanel) || IsOpen(_reforgePanel)
                     || IsOpen(_settingsPanel) || IsOpen(_comparePanel) || IsOpen(_endlessPanel)
-                    || IsOpen(_endlessResultPanel) || IsOpen(_guideRoot);
+                    || IsOpen(_endlessResultPanel) || IsOpen(_rebirthPanel) || IsOpen(_achievementPanel)
+                    || IsOpen(_guideRoot);
                 if (_modalDim.gameObject.activeSelf != modalOpen) _modalDim.gameObject.SetActive(modalOpen);
             }
         }
@@ -621,6 +622,8 @@ namespace AutoBattle
             RefreshSettingsPanel();
             RefreshComparePanel();
             RefreshEndlessPanel();
+            RefreshRebirthPanel();
+            RefreshAchievementPanel();
             RefreshGuide();
             RefreshBanner();
         }
