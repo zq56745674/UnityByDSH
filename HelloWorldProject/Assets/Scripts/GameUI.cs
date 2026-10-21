@@ -34,6 +34,7 @@ namespace AutoBattle
         private Text _expText;
         private Image _expFill;
         private Button[] _equipCards;
+        private Image[] _equipIcons;
         private Text[] _equipTitles;
         private Text[] _equipStats;
         private Text[] _equipMetas;
@@ -51,8 +52,10 @@ namespace AutoBattle
         private Text _logText;
         private Button _startButton;
         private Text _startButtonLabel;
+        private Image _startButtonIcon;
         private Button[] _speedButtons;
         private Text[] _speedLabels;
+        private Image[] _speedIcons;
 
         // ---- 商店 ----
         private Text _shopGoldText;
@@ -60,13 +63,17 @@ namespace AutoBattle
         private Text _shopTipText;
         private Button _buyButton;
         private Text _buyButtonLabel;
+        private Image _buyIcon;
         private Text _autoBuyLabel;
+        private Image _autoBuyIcon;
+        private Button _autoBuyButton;
 
         // ---- 技能栏与技能面板 ----
         private Button[] _skillSlotButtons;
         private Text[] _skillSlotLabels;
         private Text[] _skillSlotStates;
         private Image[] _skillSlotFills;
+        private Image[] _skillSlotIcons;
 
         /// <summary>冷却条当前画出来的宽度（px）：用来避免每帧都改 RectTransform。</summary>
         private float[] _skillCdDraw;
@@ -77,6 +84,7 @@ namespace AutoBattle
         private Text _skillPanelTitle;
         private Button[] _skillPoolButtons;
         private Text[] _skillPoolLabels;
+        private Image[] _skillPoolIcons;
 
         // ---- 技能三选一面板 ----
         private RectTransform _skillChoicePanel;
@@ -84,6 +92,7 @@ namespace AutoBattle
         private Button[] _skillChoiceButtons;
         private Text[] _skillChoiceLabels;
         private Image[] _choiceAccents;
+        private Image[] _skillChoiceIcons;
 
         /// <summary>技能面板当前选中的槽位（0~5）。</summary>
         private int _selectedSkillSlot;
@@ -143,6 +152,7 @@ namespace AutoBattle
         private Text _enhanceCardLabel;
         private Button _enhanceActionButton;
         private Text _enhanceActionLabel;
+        private Image _enhanceActionIcon;
         private int _enhanceSlotIndex;
         private bool _enhancePanelWasOpen;
         private bool _enhancePanelDirty = true;
@@ -160,6 +170,7 @@ namespace AutoBattle
         private Text _reforgeCostLabel;
         private Button _reforgeActionButton;
         private Text _reforgeActionLabel;
+        private Image _reforgeActionIcon;
         private int _reforgeSlotIndex;
         // 锁词条：当前选中那件的 5 行词条按钮（实际只显示 AffixCount 行），点击即切换锁定。
         // 锁定状态只活在界面层、不进存档——它是「这次准备怎么洗」的临时意图，
@@ -321,6 +332,7 @@ namespace AutoBattle
             BuildEnhancePanel(root);
             BuildReforgePanel(root);
             BuildSettingsPanel(root);
+            BuildMusicPanel(root);
             BuildComparePanel(root);
             BuildEndlessPanel(root);
             BuildRebirthPanel(root);
@@ -330,6 +342,8 @@ namespace AutoBattle
             // 横幅必须压住选关 / 技能面板；成就 toast 再建在横幅之后，保证它是最上层提示。
             BuildBanner(root);
             BuildAchievementToast(root);
+            // 悬停名称必须最后建：否则会被横幅/成就 toast 压住。
+            BuildTooltip(root);
         }
 
         // ==================== 左侧：属性 + 装备 ====================
@@ -386,31 +400,36 @@ namespace AutoBattle
             const float colX = 168f, colW = 216f;
             BuildHeroPortrait(panel);
 
-            CreateSectionTitle(panel, "角色属性", 16, 10, 260, FontTitle);
+            CreateSectionTitle(panel, "角色属性", 16, 10, 260, FontTitle, "ui_health");
 
             // 装备区与金币区各垫一张卡：左栏文字多，没有底衬就是一整片同色的文字墙。
             _equipCard = CreateCard(panel, "EquipCard", 12, 320, 396, 192, GameConfig.CardBg);
             CreateCard(panel, "WalletCard", 12, 516, 396, 80, GameConfig.CardBg);
 
-            // 存档入口：挤在标题行右侧。CreateText 的 raycastTarget 是关的，
-            // 所以这里不用管两行文字的矩形重叠；标题实际只占左边约 90px。
-            Button saveBtn = CreateButton(panel, "SaveButton", "存档 1", 300, 15, 88, 24,
+            // 顶栏三个入口改成 44×44 的徽章按钮：图标本身就是按钮，
+            // 存档槽与成就只在右下角留一个数字徽章（设置不需要文字）。
+            // 三枚从右往左排（346 / 298 / 250），右边缘与原来的「存档」对齐。
+            Button saveBtn = CreateButton(panel, "SaveButton", "1", 346, 0, 44, 44,
                 GameConfig.BtnHeader, out _saveButtonLabel);
-            _saveButtonLabel.fontSize = 14;
+            StyleIcon(saveBtn, _saveButtonLabel, "frame_oct", "glyph_save", 26f, "存档槽", true);
             saveBtn.onClick.AddListener(OnSaveButtonClicked);
 
-            // 设置入口：标题行左侧。标题「角色属性」右侧到存档按钮之间还有 100 多 px，
-            // 72 宽刚好放得下「⚙ 设置」，并且和存档按钮之间留 8px 缝。
-            _settingsButton = CreateButton(panel, "SettingsButton", "⚙ 设置", 220, 15, 72, 24,
+            _settingsButton = CreateButton(panel, "SettingsButton", "", 298, 0, 44, 44,
                 GameConfig.BtnHeader, out _settingsButtonLabel);
-            _settingsButtonLabel.fontSize = 14;
+            StyleIcon(_settingsButton, _settingsButtonLabel, "frame_oct", "glyph_settings", 26f, "设置");
             _settingsButton.onClick.AddListener(OnSettingsClicked);
 
-            // 成就入口：挤在标题与设置之间。标题文字实际只占左边约 100px，140 起不压字。
-            _achievementButton = CreateButton(panel, "AchievementButton", "🏆 成就", 140, 15, 72, 24,
+            _achievementButton = CreateButton(panel, "AchievementButton", "", 250, 0, 44, 44,
                 GameConfig.BtnHeader, out _achievementButtonLabel);
-            _achievementButtonLabel.fontSize = 13;
+            StyleIcon(_achievementButton, _achievementButtonLabel, "frame_oct", "glyph_achievement", 26f, "成就", true);
             _achievementButton.onClick.AddListener(OnAchievementButtonClicked);
+
+            // 音乐入口排在成就左边：四个徽章按钮等距（202 / 250 / 298 / 346），
+            // 角色属性标题只占到 x≈126，不会和这排按钮打架。
+            _musicButton = CreateButton(panel, "MusicButton", "", 202, 0, 44, 44,
+                GameConfig.BtnHeader, out _musicButtonLabel);
+            StyleIcon(_musicButton, _musicButtonLabel, "frame_oct", "glyph_music", 26f, "背景音乐");
+            _musicButton.onClick.AddListener(OnMusicButtonClicked);
 
             _levelText = CreateText(panel, "Level", "", colX, 46, colW, 26, 17, Color.white, TextAnchor.MiddleLeft, FontStyle.Bold);
 
@@ -418,15 +437,15 @@ namespace AutoBattle
             // 顺便让等级行不至于被「关卡 11-10 · 怪 Lv.110」撑爆。
             _stageButton = CreateButton(panel, "StageButton", "", colX, 76, 150, 24,
                 GameConfig.BtnHeader, out _stageButtonLabel);
-            _stageButtonLabel.fontSize = 13;
+            StyleBar(_stageButton, _stageButtonLabel, "frame_tab", "glyph_swords", 13f, "选择关卡", 12);
             _stageButtonLabel.alignment = TextAnchor.MiddleCenter;
             _stageButton.onClick.AddListener(OnStageButtonClicked);
 
-            // 无尽入口：贴在关卡按钮右边。60 宽只放得下「无尽 / 记录」两个短词。
-            _endlessButton = CreateButton(panel, "EndlessButton", "无尽", 324, 76, 60, 24,
+            // 无尽入口：32×32 的无限徽章，放在关卡按钮右侧原来的位置上。
+            // 未解锁时整枚染灰；局内挑战时染金，用颜色代替「无尽 / 记录」文字。
+            _endlessButton = CreateButton(panel, "EndlessButton", "", 336, 72, 32, 32,
                 GameConfig.BtnHeader, out _endlessButtonLabel);
-            _endlessButtonLabel.fontSize = 13;
-            _endlessButtonLabel.alignment = TextAnchor.MiddleCenter;
+            _endlessButtonIcon = StyleIcon(_endlessButton, _endlessButtonLabel, "frame_hex", "glyph_infinity", 20f, "无尽模式");
             _endlessButton.onClick.AddListener(OnEndlessButtonClicked);
 
             _hpText = CreateText(panel, "HpText", "", colX, 104, colW, 20, 15, GameConfig.TextNormal, TextAnchor.MiddleLeft);
@@ -443,31 +462,37 @@ namespace AutoBattle
 
             CreateImage(panel, "Divider", 16, 292, 388, 2, GameConfig.Divider);
 
-            CreateSectionTitle(panel, "装备", 16, 300, 260, FontSection);
+            CreateSectionTitle(panel, "装备", 16, 300, 260, FontSection, "ui_defense");
 
             // 强化 / 洗练入口。放在装备标题行右侧：标题「装备」只占约 40px，右边整片是空的。
             // 装备区本身已经排满（武器 334~420 / 衣服 424~510），塞不下每件一个按钮，
             // 所以两个操作都走浮层：点这里开面板，在面板里挑武器还是衣服。
             // 两个按钮各 76 宽并排（240 / 322），合起来正好落在原「强化」那 92px 占位的右侧，
             // 与顶部「存档」按钮右对齐（398 ≈ 388 + 10）。
-            // 对比入口放在「装备」标题右侧、强化左边：没有待选掉落时压暗不可点，有待选时亮起。
-            _compareButton = CreateButton(panel, "CompareEntry", "对比", 164, 303, 68, 26,
+            // 装备操作改成三枚 34×34 图标按钮（对比 / 强化 / 洗练），不再带文字。
+            // 右对齐到 x=400（装备卡右边缘 408 内缩 8px），底边停在 y=328 的卡顶上方，
+            // 不再压住分隔线或戳出装备区。三枚之间留 7px，避免金边互相贴住。
+            // 对比没有待选时正常色，有待选时整枚染色（见 GameUI.Compare.cs）。
+            _compareButton = CreateButton(panel, "CompareEntry", "", 272, 294, 34, 34,
                 GameConfig.BtnHeader, out _compareButtonLabel);
-            _compareButtonLabel.fontSize = 13;
+            _compareButtonIcon = StyleIcon(_compareButton, _compareButtonLabel, "frame_square_small", "glyph_scales", 23f, "装备对比");
             _compareButton.onClick.AddListener(OnCompareEntryClicked);
 
-            Button enhanceEntry = CreateButton(panel, "EnhanceEntry", "强化", 240, 303, 76, 26,
-                GameConfig.BtnGold, out _);
+            Button enhanceEntry = CreateButton(panel, "EnhanceEntry", "", 313, 294, 34, 34,
+                GameConfig.BtnGold, out Text enhanceLabel);
+            StyleIcon(enhanceEntry, enhanceLabel, "frame_square_small", "glyph_anvil", 23f, "强化装备");
             enhanceEntry.onClick.AddListener(OnEnhanceEntryClicked);
 
-            Button reforgeEntry = CreateButton(panel, "ReforgeEntry", "洗练", 322, 303, 76, 26,
-                GameConfig.BtnHeader, out _);
+            Button reforgeEntry = CreateButton(panel, "ReforgeEntry", "", 354, 294, 34, 34,
+                GameConfig.BtnHeader, out Text reforgeLabel);
+            StyleIcon(reforgeEntry, reforgeLabel, "frame_square_small", "glyph_flame", 23f, "洗练装备");
             reforgeEntry.onClick.AddListener(OnReforgeEntryClicked);
 
             // 五槽改成 2 列 × 3 行紧凑卡（190×58）。两张大卡（396 宽）放不下头盔/鞋/饰品，
             // 而且大卡里三行属性会把 192 高的装备区撑爆。卡面只留「标题 / 主属性 / 倍率+评分」，
             // 完整词条与逐项差走对比面板（点卡即开）。
             _equipCards = new Button[EquipmentSlots.Count];
+            _equipIcons = new Image[EquipmentSlots.Count];
             _equipTitles = new Text[EquipmentSlots.Count];
             _equipStats = new Text[EquipmentSlots.Count];
             _equipMetas = new Text[EquipmentSlots.Count];
@@ -483,7 +508,8 @@ namespace AutoBattle
                 card.onClick.AddListener(delegate { OnEquipCardClicked(captured); });
                 _equipCards[i] = card;
 
-                _equipTitles[i] = CreateText(card.transform, "Title", "", 8, 4, 118, 16, 12,
+                _equipIcons[i] = CreateIcon(card.transform, SlotIconKey(slot), 7, 3, 16);
+                _equipTitles[i] = CreateText(card.transform, "Title", "", 28, 4, 90, 16, 12,
                     Color.white, TextAnchor.MiddleLeft, FontStyle.Bold);
                 _equipMetas[i] = CreateText(card.transform, "Meta", "", 118, 4, 64, 16, 10,
                     GameConfig.TextMuted, TextAnchor.MiddleRight);
@@ -494,7 +520,8 @@ namespace AutoBattle
             }
 
             CreateImage(panel, "Divider2", 16, 514, 388, 2, GameConfig.Divider);
-            _goldText = CreateText(panel, "Gold", "", 24, 518, 376, 26, 19, GameConfig.TextGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            CreateIcon(panel, "ui_gold", 24, 521, 18);
+            _goldText = CreateText(panel, "Gold", "", 46, 518, 354, 26, 19, GameConfig.TextGold, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             // 统计压到 3 行，给底部技能栏腾位置。
             // 统计只占 2 行，紧跟金币行下方，互不重叠。
@@ -530,6 +557,7 @@ namespace AutoBattle
             _skillSlotStates = new Text[slotCount];
             _skillSlotFills = new Image[slotCount];
             _skillSlotAccents = new Image[slotCount];
+            _skillSlotIcons = new Image[slotCount];
 
             for (int i = 0; i < slotCount; i++)
             {
@@ -545,25 +573,28 @@ namespace AutoBattle
                 // 左侧强调条：有技能时显示技能品质色，空槽时几乎看不见。
                 // 它比「整块染成技能色」克制得多——原来 6 个槽一起变色像调色板。
                 _skillSlotAccents[i] = CreateImage(_skillSlotButtons[i].transform, $"SkillAccent{i}",
-                    0f, 8f, 3f, slotH - 16f, GameConfig.Border);
+                    0f, 4f, 3f, 34f, GameConfig.Border);
 
-                // 类别标签（左上角，9 号灰字）：同类的两个槽上下相邻，扫一眼就知道这列是什么。
+                // 技能图标改成 34×34 的主视觉，占满左侧；类别与状态文字让到右边。
+                _skillSlotIcons[i] = CreateIconSlot(_skillSlotButtons[i].transform, $"SkillIcon{i}", 5f, 3f, 34f);
+
+                // 类别标签（图标右侧，9 号灰字）：同类的两个槽上下相邻，扫一眼就知道这列是什么。
                 CreateText(_skillSlotButtons[i].transform, $"SkillKind{i}", KindShort(kind),
-                    7f, 5f, 48f, 12f, 9, GameConfig.TextMuted, TextAnchor.UpperLeft);
+                    42f, 2f, 44f, 11f, 9, GameConfig.TextMuted, TextAnchor.UpperLeft);
 
-                // 技能名（中间主行）。
+                // 技能名（图标右侧主行）。
                 _skillSlotLabels[i].fontSize = 13;
                 _skillSlotLabels[i].alignment = TextAnchor.MiddleCenter;
-                _skillSlotLabels[i].rectTransform.offsetMin = new Vector2(4f, 18f);
+                _skillSlotLabels[i].rectTransform.offsetMin = new Vector2(42f, 13f);
                 _skillSlotLabels[i].rectTransform.offsetMax = new Vector2(-4f, -5f);
 
                 // 冷却秒数 / 就绪（右上角）。
                 _skillSlotStates[i] = CreateText(_skillSlotButtons[i].transform, $"SkillState{i}", "",
-                    50f, 5f, slotW - 57f, 12f, 10, GameConfig.TextInfo, TextAnchor.UpperRight);
+                    82f, 2f, slotW - 86f, 11f, 10, GameConfig.TextInfo, TextAnchor.UpperRight);
 
                 // 底部冷却进度条。
                 Image barBg = CreateImage(_skillSlotButtons[i].transform, $"SkillCdBar{i}",
-                    10f, 36f, slotW - 20f, 3f, GameConfig.ShadeOverlay);
+                    5f, 38f, slotW - 10f, 3f, GameConfig.ShadeOverlay);
                 _skillSlotFills[i] = CreateImage(barBg.rectTransform, "Fill", 0, 0, 0, 3,
                     GameConfig.AccentSlotReady);
 
@@ -615,7 +646,7 @@ namespace AutoBattle
             _buffText = CreateText(panel, "BuffText", "", 20, 116, 784, 32, 15, Color.white, TextAnchor.MiddleLeft);
 
             _logCard = CreateCard(panel, "LogCard", 8, 154, 808, 332, GameConfig.InsetBg, RadiusCard, GameConfig.BorderSoft);
-            CreateSectionTitle(panel, "战斗日志", 20, 160, 300, FontSection);
+            CreateSectionTitle(panel, "战斗日志", 20, 160, 300, FontSection, "ui_time");
 
             // ---- 实时 DPS（步骤 8）：做成右侧的小胶囊，和左侧标题同一行 ----
             _dpsPill = CreateCard(panel, "DpsPill", 592, 163, 216, 26, GameConfig.RowBg, 13, GameConfig.BorderSoft);
@@ -644,23 +675,32 @@ namespace AutoBattle
 
             // ---- 按钮区 ----
             _startButton = CreateButton(panel, "StartButton", "开始", 16, 612, 200, 56, GameConfig.BtnPrimary, out _startButtonLabel);
+            _startButtonIcon = StyleBar(_startButton, _startButtonLabel, "frame_bar_round", "glyph_play", 30f, "开始 / 暂停");
+            // 开始/暂停是整屏唯一的主按钮，图标+文字整体居中；StyleBar 默认靠左，200 宽会显得右半边空。
+            if (_startButtonIcon != null) _startButtonIcon.rectTransform.anchoredPosition = new Vector2(60f, -13f);
+            _startButtonLabel.rectTransform.offsetMin = new Vector2(96f, 2f);
             _startButton.onClick.AddListener(OnStartClicked);
 
             var speedLabels = new string[GameConfig.SpeedOptions.Length];
             for (int i = 0; i < GameConfig.SpeedOptions.Length; i++)
-                speedLabels[i] = $"x{GameConfig.SpeedOptions[i]:0}";
+                speedLabels[i] = $"×{GameConfig.SpeedOptions[i]:0}";
 
             _speedButtons = new Button[GameConfig.SpeedOptions.Length];
             _speedLabels = new Text[GameConfig.SpeedOptions.Length];
+            _speedIcons = new Image[GameConfig.SpeedOptions.Length];
             for (int i = 0; i < GameConfig.SpeedOptions.Length; i++)
             {
                 int captured = i; // 闭包捕获
                 _speedButtons[i] = CreateButton(panel, $"Speed{i}", speedLabels[i], 232 + i * 88, 612, 84, 56,
                     GameConfig.BtnNeutral, out _speedLabels[i]);
+                _speedIcons[i] = StyleStack(_speedButtons[i], _speedLabels[i], "frame_hex", "glyph_speed", 23f,
+                    $"战斗速度 {speedLabels[i]}");
                 _speedButtons[i].onClick.AddListener(() => _game.SetSpeedIndex(captured));
             }
 
-            Button reset = CreateButton(panel, "ResetButton", "重置", 700, 612, 108, 56, GameConfig.RowBg, out _resetLabel);
+            // 148 宽是为了「确认重置？」五个字在 15 号下能一行放下；右边缘仍对齐 808。
+            Button reset = CreateButton(panel, "ResetButton", "重置", 660, 612, 148, 56, GameConfig.RowBg, out _resetLabel);
+            StyleBar(reset, _resetLabel, "frame_bar_notched", "glyph_reset", 28f, "重置游戏", 15);
             _resetLabel.color = new Color(0.95f, 0.55f, 0.55f);
             reset.onClick.AddListener(OnResetClicked);
         }
@@ -670,21 +710,27 @@ namespace AutoBattle
         {
             _shopCard = CreateCard(panel, "ShopCard", 8, 492, 808, 116, GameConfig.InsetBg);
 
-            CreateText(panel, "ShopTitle", "商店", 28, 498, 70, 28, 18,
+            CreateIcon(panel, "ui_shop", 28, 502, 20);
+            CreateText(panel, "ShopTitle", "商店", 52, 498, 46, 28, 18,
                 GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
 
-            _shopGoldText = CreateText(panel, "ShopGold", "", 100, 498, 170, 28, 16,
+            CreateIcon(panel, "ui_gold", 100, 503, 18);
+            _shopGoldText = CreateText(panel, "ShopGold", "", 122, 498, 148, 28, 16,
                 GameConfig.TextGold, TextAnchor.MiddleLeft, FontStyle.Bold);
 
-            _shopPotionText = CreateText(panel, "ShopPotion", "", 274, 498, 280, 28, 15,
+            CreateIcon(panel, "ui_potion", 274, 503, 18);
+            _shopPotionText = CreateText(panel, "ShopPotion", "", 296, 498, 258, 28, 15,
                 Color.white, TextAnchor.MiddleLeft);
 
             _buyButton = CreateButton(panel, "BuyPotion", "购买", 556, 496, 88, 32,
                 GameConfig.BtnPrimary, out _buyButtonLabel);
+            _buyIcon = StyleBar(_buyButton, _buyButtonLabel, "frame_pill", "glyph_buy", 18f, "购买生命药剂");
             _buyButton.onClick.AddListener(OnBuyClicked);
 
-            Button autoBuy = CreateButton(panel, "AutoBuy", "", 652, 496, 144, 32,
+            Button autoBuy = CreateButton(panel, "AutoBuy", "自动购买 开", 652, 496, 144, 32,
                 GameConfig.BtnNeutral, out _autoBuyLabel);
+            _autoBuyButton = autoBuy;
+            _autoBuyIcon = StyleBar(autoBuy, _autoBuyLabel, "frame_bar_notched", "glyph_auto_buy", 18f, "自动购买生命药剂");
             autoBuy.onClick.AddListener(OnAutoBuyClicked);
 
             _shopTipText = CreateText(panel, "ShopTip", "", 28, 532, 500, 26, 15,

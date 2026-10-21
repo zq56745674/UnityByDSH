@@ -14,6 +14,11 @@ namespace AutoBattle
         private RectTransform _settingsPanel;
         private readonly Button[] _settingsButtons = new Button[5];
         private readonly Text[] _settingsValueLabels = new Text[5];
+        private readonly Image[] _settingsIcons = new Image[5];
+        private readonly Image[] _masterVolumeCells = new Image[10];
+        private readonly Image[] _sfxVolumeCells = new Image[10];
+        private Text _masterVolumeValue;
+        private Text _sfxVolumeValue;
         private Text _settingsGuideLabel;
         private bool _settingsPanelWasOpen;
         private bool _settingsPanelDirty;
@@ -23,6 +28,7 @@ namespace AutoBattle
         private Text _settingsButtonLabel;
         private Button _compareButton;
         private Text _compareButtonLabel;
+        private Image _compareButtonIcon;
         private RectTransform _leftPanel;
         private Image _equipCard;
         private Image _logCard;
@@ -59,15 +65,16 @@ namespace AutoBattle
 
         private void BuildSettingsPanel(Transform root)
         {
-            _settingsPanel = CreatePanel(root, "SettingsPanel", 300, 130, 680, 452, GameConfig.OverlayBg, true);
+            _settingsPanel = CreatePanel(root, "SettingsPanel", 300, 90, 680, 560, GameConfig.OverlayBg, true);
 
-            CreateSectionTitle(_settingsPanel, "设置", 24, 14, 240, FontTitle);
+            CreateSectionTitle(_settingsPanel, "设置", 24, 14, 240, FontTitle, "ui_settings");
             CreateText(_settingsPanel, "SettingsHint",
                 "只影响显示与自动化，不改战斗数值。改动立即生效，并按本机保存（与存档槽无关）。",
                 24, 44, 520, 44, FontSmall, GameConfig.TextMuted, TextAnchor.UpperLeft);
 
             Button close = CreateButton(_settingsPanel, "SettingsClose", "关闭", 566, 16, 90, 32,
-                GameConfig.BtnNeutral, out _);
+                GameConfig.BtnNeutral, out Text closeLabel);
+            StyleBar(close, closeLabel, "frame_pill", "glyph_close", 14f, "关闭设置");
             close.onClick.AddListener(OnSettingsCloseClicked);
 
             for (int i = 0; i < 5; i++)
@@ -86,29 +93,108 @@ namespace AutoBattle
 
                 _settingsButtons[i] = CreateButton(_settingsPanel, "SettingToggle" + i, "开", 548, y + 6, 92, 32,
                     GameConfig.BtnPrimary, out _settingsValueLabels[i]);
+                _settingsIcons[i] = StyleBar(_settingsButtons[i], _settingsValueLabels[i], "frame_pill", "glyph_confirm", 14f,
+                    "切换" + GameSettings.Label(id), 12);
                 _settingsButtons[i].onClick.AddListener(() => OnSettingToggleClicked(captured));
             }
 
+            // 音量不是开关：用十段格 + 百分比 + 加减按钮，改完立刻生效。
+            CreateSectionTitle(_settingsPanel, "音量", 24, 326, 180, FontBody);
+            _masterVolumeValue = BuildVolumeRow("主音量", "总音量；实际音量 = 主音量 × 音效音量",
+                352, _masterVolumeCells, 0);
+            _sfxVolumeValue = BuildVolumeRow("音效", "按钮、命中、拾取、升级等提示音",
+                402, _sfxVolumeCells, 1);
+
             // 引导行：它不是开关，而是「重看」入口，所以单独一行、单独排版。
-            CreateCard(_settingsPanel, "GuideRow", 20, 332, 640, 44, GameConfig.CardBg,
+            CreateCard(_settingsPanel, "GuideRow", 20, 454, 640, 44, GameConfig.CardBg,
                 RadiusButton, GameConfig.BorderSoft);
-            CreateText(_settingsPanel, "GuideName", "新手引导", 34, 335, 240, 20, FontBody,
+            CreateText(_settingsPanel, "GuideName", "新手引导", 34, 457, 240, 20, FontBody,
                 GameConfig.TextNormal, TextAnchor.MiddleLeft);
-            _settingsGuideLabel = CreateText(_settingsPanel, "GuideState", "", 34, 355, 300, 18, FontTiny,
+            _settingsGuideLabel = CreateText(_settingsPanel, "GuideState", "", 34, 477, 300, 18, FontTiny,
                 GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
-            Button replay = CreateButton(_settingsPanel, "GuideReplay", "重看引导", 520, 338, 120, 32,
-                GameConfig.BtnNeutral, out _);
+            Button replay = CreateButton(_settingsPanel, "GuideReplay", "重看引导", 520, 460, 120, 32,
+                GameConfig.BtnNeutral, out Text replayLabel);
+            StyleBar(replay, replayLabel, "frame_bar_notched", "glyph_book", 16f, "重新观看新手引导");
             replay.onClick.AddListener(OnReplayGuideClicked);
 
-            Button reset = CreateButton(_settingsPanel, "SettingsReset", "恢复默认", 20, 396, 120, 34,
-                GameConfig.RowBg, out _);
+            Button reset = CreateButton(_settingsPanel, "SettingsReset", "恢复默认", 20, 510, 120, 34,
+                GameConfig.RowBg, out Text resetLabel);
+            StyleBar(reset, resetLabel, "frame_pill", "glyph_reset", 16f, "恢复默认设置");
             reset.onClick.AddListener(OnResetSettingsClicked);
 
             CreateText(_settingsPanel, "SettingsFoot", "提示：锁定装备与「自动换装」在对比面板里配合使用。",
-                156, 402, 500, 22, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+                156, 516, 500, 22, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
             _settingsPanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>一行音量：十段格 + 百分比 + 加减按钮。返回百分比文本，刷新时统一改颜色。</summary>
+        private Text BuildVolumeRow(string name, string hint, float y, Image[] cells, int channel)
+        {
+            CreateCard(_settingsPanel, "VolumeRow" + channel, 20, y, 640, 44, GameConfig.CardBg,
+                RadiusButton, GameConfig.BorderSoft);
+            CreateText(_settingsPanel, "VolumeName" + channel, name, 34, y + 3, 120, 20, FontBody,
+                GameConfig.TextNormal, TextAnchor.MiddleLeft);
+            CreateText(_settingsPanel, "VolumeHint" + channel, hint, 34, y + 23, 190, 16, FontTiny,
+                GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            Text value = CreateText(_settingsPanel, "VolumeValue" + channel, "80%",
+                474, y + 13, 70, 18, FontSmall, GameConfig.TextNormal, TextAnchor.MiddleLeft);
+
+            for (int i = 0; i < cells.Length; i++)
+            {
+                int captured = i;
+                Image cell = CreateImage(_settingsPanel, "VolumeCell" + channel + "_" + i,
+                    236 + i * 23, y + 15, 20, 14, GameConfig.RowBg, true);
+                Round(cell, 3);
+                Button button = cell.gameObject.AddComponent<Button>();
+                button.targetGraphic = cell;
+                button.onClick.AddListener(GameAudio.PlayUiClick);
+                button.onClick.AddListener(() => OnVolumeCellClicked(channel, captured));
+                cells[i] = cell;
+            }
+
+            // 用 U+2212 减号而不是 ASCII 连字符：连字符在 36px 的按钮里缩成一小横。
+            Button down = CreateButton(_settingsPanel, "VolumeDown" + channel, "−", 548, y + 10, 36, 24,
+                GameConfig.BtnNeutral, out Text downLabel);
+            StyleTab(down, downLabel, "frame_pill", 20);
+            down.onClick.AddListener(() => OnVolumeStepClicked(channel, -1));
+
+            Button up = CreateButton(_settingsPanel, "VolumeUp" + channel, "+", 590, y + 10, 36, 24,
+                GameConfig.BtnNeutral, out Text upLabel);
+            StyleTab(up, upLabel, "frame_pill", 20);
+            up.onClick.AddListener(() => OnVolumeStepClicked(channel, 1));
+
+            return value;
+        }
+
+        private void OnVolumeCellClicked(int channel, int index)
+        {
+            ApplyVolume(channel, (index + 1) / 10f);
+        }
+
+        private void OnVolumeStepClicked(int channel, int step)
+        {
+            float current = channel == 0 ? GameSettings.MasterVolume : GameSettings.SfxVolume;
+            float next = Mathf.Round((current + step * 0.1f) * 10f) / 10f;
+            ApplyVolume(channel, Mathf.Clamp01(next));
+        }
+
+        private void ApplyVolume(int channel, float value)
+        {
+            if (channel == 0) GameSettings.MasterVolume = value;
+            else GameSettings.SfxVolume = value;
+            GameAudio.RefreshVolumes();
+            _settingsPanelDirty = true;
+        }
+
+        private static void RefreshVolumeRow(Image[] cells, Text value, float volume)
+        {
+            int filled = Mathf.RoundToInt(volume * 10f);
+            for (int i = 0; i < cells.Length; i++)
+                cells[i].color = i < filled ? GameConfig.LogGold : GameConfig.RowBg;
+            if (value != null) value.text = Mathf.RoundToInt(volume * 100f) + "%";
         }
 
         private void RefreshSettingsPanel()
@@ -133,8 +219,16 @@ namespace AutoBattle
                 bool on = GameSettings.Get((GameSettingId)i);
                 _settingsValueLabels[i].text = on ? "开" : "关";
                 _settingsValueLabels[i].color = on ? GameConfig.LogHeal : GameConfig.TextMuted;
-                _settingsButtons[i].image.color = on ? GameConfig.BtnPrimary : GameConfig.CardBtn;
+                _settingsButtons[i].image.color = on
+                    ? Color.white
+                    : new Color(0.62f, 0.66f, 0.74f, 1f);
+                SetIcon(_settingsIcons[i], on ? "glyph_confirm" : "glyph_close");
+                if (_settingsIcons[i] != null)
+                    _settingsIcons[i].color = on ? Color.white : new Color(1f, 1f, 1f, 0.55f);
             }
+
+            RefreshVolumeRow(_masterVolumeCells, _masterVolumeValue, GameSettings.MasterVolume);
+            RefreshVolumeRow(_sfxVolumeCells, _sfxVolumeValue, GameSettings.SfxVolume);
 
             _settingsGuideLabel.text = GameSettings.GuideDone
                 ? "已完成。可以重看，不会重置任何进度。"
@@ -144,13 +238,17 @@ namespace AutoBattle
         private void OnSettingsClicked()
         {
             _settingsPanelDirty = true;
+            bool open = _game.SettingsOpen;
             _game.ToggleSettingsPanel();
+            if (open) GameAudio.PlayUiClose();
+            else GameAudio.PlayUiOpen();
         }
 
         private void OnSettingsCloseClicked()
         {
             _settingsPanelDirty = true;
             _game.CloseSettingsPanel();
+            GameAudio.PlayUiClose();
         }
 
         private void OnSettingToggleClicked(int index)
@@ -162,8 +260,9 @@ namespace AutoBattle
         private void OnResetSettingsClicked()
         {
             GameSettings.ResetToDefaults();
+            GameAudio.RefreshVolumes();
             _settingsPanelDirty = true;
-            _game.AddLog("↺ 显示与自动化设置已恢复默认。", GameConfig.LogInfo);
+            _game.AddLog("↺ 显示、自动化与音量设置已恢复默认。", GameConfig.LogInfo);
         }
 
         private void OnReplayGuideClicked()
@@ -207,11 +306,13 @@ namespace AutoBattle
             _guideBody.lineSpacing = 1.24f;
 
             Button skip = CreateButton(_guideCard, "GuideSkip", "跳过", 372, 146, 96, 32,
-                GameConfig.RowBg, out _);
+                GameConfig.RowBg, out Text skipLabel);
+            StyleBar(skip, skipLabel, "frame_pill", "glyph_skip", 14f, "跳过新手引导", 12);
             skip.onClick.AddListener(OnGuideSkipClicked);
 
             Button next = CreateButton(_guideCard, "GuideNext", "下一步", 478, 146, 100, 32,
                 GameConfig.BtnPrimary, out _guideNextLabel);
+            StyleBar(next, _guideNextLabel, "frame_bar_round", "glyph_next", 16f, "下一步", 12);
             next.onClick.AddListener(OnGuideNextClicked);
 
             _guideSteps = new[]
@@ -254,8 +355,9 @@ namespace AutoBattle
                 new GuideStep
                 {
                     title = "设置与对比",
-                    body = "左上角的「设置」可以关掉飘字 / DPS / 评分 / 推荐分，切换自动换装，或重看引导。"
-                         + "\n装备行的「对比」在有待选掉落时会亮起，用来比较当前装备与更强掉落。",
+                    body = "左上角的齿轮按钮打开设置，可以关掉飘字 / DPS / 评分 / 推荐分，切换自动换装，调音量，或重看引导。"
+                         + "\n齿轮左边的音符按钮是背景音乐，四首可自选、列表循环或单曲循环。"
+                         + "\n装备标题右边的天平按钮在有待选掉落时会亮起，用来比较当前装备与更强掉落。",
                     target = _settingsButton != null ? _settingsButton.GetComponent<RectTransform>() : _leftPanel,
                 },
             };

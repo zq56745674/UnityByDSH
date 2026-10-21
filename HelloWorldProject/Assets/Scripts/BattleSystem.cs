@@ -239,6 +239,7 @@ namespace AutoBattle
                 log.AddCombat(
                     $"主角 → 怪物  {(crit ? "暴击 " : "")}{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp}{shieldLeft})",
                     crit ? GameConfig.LogGold : GameConfig.LogInfo);
+                GameAudio.PlayHit(crit);
 
                 // 吸血鬼：按实际造成的伤害（含护盾吸收部分）回血。
                 int healed = ApplyLifesteal(player, dmg);
@@ -317,6 +318,7 @@ namespace AutoBattle
                 log.AddCombat(
                     $"怪物 → 主角  {(crit ? "暴击 " : "")}{dmg} 伤害{notes}   (主角 {player.currentHp}/{player.MaxHp})",
                     crit ? GameConfig.LogDanger : GameConfig.LogWarn);
+                GameAudio.PlayHit(crit);
 
                 // 反击：受击时按概率反弹伤害。
                 if (player.HasSkill(SkillId.Counter) && !monster.IsDead && player.currentHp > 0)

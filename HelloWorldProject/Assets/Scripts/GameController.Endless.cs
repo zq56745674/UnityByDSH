@@ -225,6 +225,7 @@ namespace AutoBattle
 
             AddLog($"✦ 无尽第 {cleared} 层通过！+{totalGold:N0} 金币（本档最高 {Player.endlessBestFloor} 层）",
                 newBest ? GameConfig.LogGold : GameConfig.LogSuccess);
+            GameAudio.PlayCoin();
             Debug.Log($"[AutoBattle] 无尽第 {cleared} 层通过，金币 +{totalGold}，最高 {Player.endlessBestFloor}");
 
             ShowBanner(
@@ -282,6 +283,7 @@ namespace AutoBattle
                 : "";
             AddLog($"⚔ 第 {def.floor} 层 · {Monster.Title} 出现   HP {Monster.maxHp:N0}{affixNote}",
                 tier == MonsterTier.Boss ? GameConfig.LogDanger : GameConfig.LogInfo);
+            if (tier == MonsterTier.Boss) GameAudio.PlayBossSpawn();
         }
 
         /// <summary>

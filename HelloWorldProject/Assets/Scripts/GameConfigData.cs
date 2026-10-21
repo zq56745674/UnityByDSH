@@ -63,7 +63,7 @@ namespace AutoBattle
         public int EnhanceCostPerLevel = 300;
         public int ReforgeBaseCost = 200;
         public int ReforgeCostPerLevel = 14;
-        public float ReforgeCostGrowth = 0.6f;
+        public float ReforgeCostGrowth = 0.9f;
 
         /// <summary>锁词条的单价倍率（见 GameConfig.ReforgeLockFactor）。</summary>
         public float ReforgeLockFactor = 3f;
@@ -95,14 +95,6 @@ namespace AutoBattle
         public int AccessoryUnlockChapter = 11;
         public float EquipAffixLevelScale = 0.005f;
         public int ScoreStandardLevel = 100;
-        public float ScoreWeightAttack = 2f;
-        public float ScoreWeightDefense = 2f;
-        public float ScoreWeightHp = 0.2f;
-        public float ScoreWeightCritChance = 1000f;
-        public float ScoreWeightCritDamage = 100f;
-        public float ScoreWeightAttackSpeed = 600f;
-        public float ScoreWeightAllStats = 300f;
-        public float ScoreWeightArmorPen = 800f;
         public bool HealBeforeFight = false;
         public int PotionMaxCount = 5;
         public float PotionHealPercent = 0.30f;

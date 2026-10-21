@@ -67,13 +67,14 @@ namespace AutoBattle
             _achievementPanel = CreatePanel(root, "AchievementPanel", 236, 80, 808, 560,
                 GameConfig.OverlayBg, true);
 
-            CreateSectionTitle(_achievementPanel, "成就", 20, 12, 260, FontTitle);
+            CreateSectionTitle(_achievementPanel, "成就", 20, 12, 260, FontTitle, "ui_achievement");
 
-            _achSummaryText = CreateText(_achievementPanel, "AchSummary", "", 100, 14, 570, 24,
+            _achSummaryText = CreateText(_achievementPanel, "AchSummary", "", 116, 14, 550, 24,
                 FontSmall + 1, GameConfig.TextInfo, TextAnchor.MiddleLeft);
 
             Button close = CreateButton(_achievementPanel, "AchClose", "关闭", 698, 12, 90, 30,
-                GameConfig.CardBtn, out _);
+                GameConfig.CardBtn, out Text closeLabel);
+            StyleBar(close, closeLabel, "frame_pill", "glyph_close", 14f, "关闭成就");
             close.onClick.AddListener(OnAchievementCloseClicked);
 
             // 7 个页签：全部 + 六个类别。
@@ -85,7 +86,7 @@ namespace AutoBattle
                 _achTabButtons[i] = CreateButton(_achievementPanel, "AchTab" + i,
                     AchievementCatalog.CategoryLabel(AchievementCatalog.CategoryKeys[i]),
                     20 + i * 104, 78, 96, 28, GameConfig.BtnHeader, out _achTabLabels[i]);
-                _achTabLabels[i].fontSize = FontSmall;
+                StyleTab(_achTabButtons[i], _achTabLabels[i], "frame_tab", 12);
                 _achTabButtons[i].onClick.AddListener(() => OnAchievementTabClicked(index));
             }
 
@@ -125,12 +126,12 @@ namespace AutoBattle
 
             _achFilterButton = CreateButton(_achievementPanel, "AchFilter", "只看未完成",
                 20, 508, 120, 28, GameConfig.BtnHeader, out _achFilterLabel);
-            _achFilterLabel.fontSize = FontTiny + 1;
+            StyleBar(_achFilterButton, _achFilterLabel, "frame_pill", "glyph_filter", 13f, "只看未完成", 12);
             _achFilterButton.onClick.AddListener(OnAchievementFilterClicked);
 
             _achPrevButton = CreateButton(_achievementPanel, "AchPrev", "上一页", 496, 508, 80, 28,
                 GameConfig.BtnHeader, out _achPrevLabel);
-            _achPrevLabel.fontSize = FontTiny + 1;
+            StyleIcon(_achPrevButton, _achPrevLabel, "frame_tab", "glyph_prev", 18f, "上一页");
             _achPrevButton.onClick.AddListener(OnAchievementPrevClicked);
 
             _achPageText = CreateText(_achievementPanel, "AchPage", "1 / 1", 584, 508, 80, 28,
@@ -138,7 +139,7 @@ namespace AutoBattle
 
             _achNextButton = CreateButton(_achievementPanel, "AchNext", "下一页", 672, 508, 80, 28,
                 GameConfig.BtnHeader, out _achNextLabel);
-            _achNextLabel.fontSize = FontTiny + 1;
+            StyleIcon(_achNextButton, _achNextLabel, "frame_tab", "glyph_next", 18f, "下一页");
             _achNextButton.onClick.AddListener(OnAchievementNextClicked);
 
             CreateText(_achievementPanel, "AchFootNote", "成就点只用于展示，不提供战斗属性。",
@@ -200,12 +201,16 @@ namespace AutoBattle
 
         private void OnAchievementButtonClicked()
         {
+            bool open = _game.AchievementPanelOpen;
             _game.ToggleAchievementPanel();
+            if (open) GameAudio.PlayUiClose();
+            else GameAudio.PlayUiOpen();
         }
 
         private void OnAchievementCloseClicked()
         {
             _game.CloseAchievementPanel();
+            GameAudio.PlayUiClose();
         }
 
         private void OnAchievementTabClicked(int index)
@@ -248,7 +253,7 @@ namespace AutoBattle
             if (_achievementButtonLabel != null)
             {
                 int unlocked = CountUnlocked(p);
-                string entry = unlocked > 0 ? $"成就 {unlocked}" : "成就";
+                string entry = unlocked > 0 ? unlocked.ToString() : "";
                 if (!string.Equals(_achievementButtonLabel.text, entry))
                     _achievementButtonLabel.text = entry;
             }
@@ -335,13 +340,16 @@ namespace AutoBattle
             for (int i = 0; i < _achTabButtons.Length; i++)
             {
                 bool active = i == _achTabIndex;
-                _achTabButtons[i].image.color = active ? GameConfig.BtnPrimary : GameConfig.BtnHeader;
+                // 生图页签底框不染品牌色；选中页签保持原色，未选中压暗。
+                _achTabButtons[i].image.color = active
+                    ? Color.white
+                    : new Color(0.60f, 0.64f, 0.72f, 1f);
                 _achTabLabels[i].color = active ? Color.white : GameConfig.TextMuted;
             }
 
             _achFilterButton.image.color = _achOnlyUnfinished
-                ? GameConfig.BtnPrimary
-                : GameConfig.BtnHeader;
+                ? Color.white
+                : new Color(0.60f, 0.64f, 0.72f, 1f);
             _achFilterLabel.text = _achOnlyUnfinished ? "只看未完成 ✓" : "只看未完成";
             _achFilterLabel.color = _achOnlyUnfinished ? Color.white : GameConfig.TextMuted;
 

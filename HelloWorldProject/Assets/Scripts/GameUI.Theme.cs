@@ -143,12 +143,24 @@ namespace AutoBattle
             return img;
         }
 
-        /// <summary>分区标题：左侧一道竖向强调条 + 标题文字。</summary>
+        /// <summary>
+        /// 分区标题：左侧一道竖向强调条 + 可选图标 + 标题文字。
+        /// iconKey 为空时保持原来的纯文字排版（其他面板不受影响）。
+        /// </summary>
         private Text CreateSectionTitle(Transform parent, string title, float x, float y, float w,
-            int fontSize = FontSection)
+            int fontSize = FontSection, string iconKey = null)
         {
             CreateImage(parent, "AccentBar_" + title, x, y + 4, 3, fontSize - 3, GameConfig.AccentSoft);
-            return CreateText(parent, "Title_" + title, title, x + 10, y, w - 10, fontSize + 8,
+
+            float textX = x + 10f;
+            if (!string.IsNullOrEmpty(iconKey))
+            {
+                float iconSize = fontSize + 2f;
+                Image icon = CreateIcon(parent, iconKey, x + 10f, y + (fontSize + 8f - iconSize) * 0.5f, iconSize);
+                if (icon != null && icon.sprite != null) textX = x + 10f + iconSize + 6f;
+            }
+
+            return CreateText(parent, "Title_" + title, title, textX, y, w - (textX - x), fontSize + 8,
                 fontSize, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
         }
 

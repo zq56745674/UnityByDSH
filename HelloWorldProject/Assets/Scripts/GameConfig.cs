@@ -407,11 +407,14 @@ namespace AutoBattle
         // 条数保持不变是硬约束：优秀品质的条数是 1~2 随机，如果连条数一起重抽，
         // 一件 2 条的优秀装备会被洗成 1 条，花金币反而掉一条词条，没人会接受。
         //
-        // 费用随「同一件洗过几次」线性上涨（1 + 0.6n），不是指数。
+        // 费用随「同一件洗过几次」线性上涨（1 + 0.9n），不是指数。
         // 指数的效果等于给系统设一个隐形次数上限；而这个系统的价值恰恰在
         // 「接近上限的最后几口最贵、但确实吃得到」，线性上涨让玩家自己决定停在哪。
         // 首次费用刻意低于「强化 +1 级」，让人愿意试一次；
-        // 31 次累计约 86 万（Lv.110 传说），正好吃掉终局那笔没处花的金币。
+        // 31 次累计约 124 万（Lv.110 传说），把终局那笔没处花的金币吃掉一截。
+        // 递增系数 2026-10-21 由 0.6 提到 0.9：只压「反复洗同一件」这条路，首洗价不变。
+        // 依据见 docs/equipment-reforge.md §5.6（五槽复测：新档洗练已吃掉过半金币收入，
+        // 端局一套洗到 86% 平均 96.3 万 → 133.7 万）。
 
         /// <summary>洗练费用的基础值（Lv.1 的基准价，未乘品质系数）。</summary>
         public static int ReforgeBaseCost = 200;
@@ -419,8 +422,8 @@ namespace AutoBattle
         /// <summary>洗练费用的等级成长：装备等级每高 1 级，本次基价多这么多。</summary>
         public static int ReforgeCostPerLevel = 14;
 
-        /// <summary>同一件装备每洗一次，本次费用在基价上多这么多比例（0.6 表示 +60%）。</summary>
-        public static float ReforgeCostGrowth = 0.6f;
+        /// <summary>同一件装备每洗一次，本次费用在基价上多这么多比例（0.9 表示 +90%）。</summary>
+        public static float ReforgeCostGrowth = 0.9f;
 
         /// <summary>
         /// 锁词条的单价倍率：每多锁一条，本次费用乘一次它（默认 3 → ×3 / ×9 / ×27）。
@@ -433,7 +436,7 @@ namespace AutoBattle
         /// <summary>
         /// 洗练一次的费用（不锁词条）：
         /// (ReforgeBaseCost + ReforgeCostPerLevel × (level - 1)) × 品质系数 × (1 + 递增 × 已洗次数)。
-        /// 例：传说 Lv.110 第 1 次 = 1,726 × 1.6 = 2,784；第 11 次 = 2,784 × (1 + 0.6×10) = 17,818。
+        /// 例：传说 Lv.110 第 1 次 = 1,726 × 1.6 = 2,762；第 11 次 = 2,762 × (1 + 0.9×10) = 27,616。
         /// 品质系数直接复用 EnhanceQualityFactors，不再造第二套表。
         /// </summary>
         public static int ReforgeCost(int level, EquipmentQuality quality, int reforgeCount) =>
@@ -530,31 +533,13 @@ namespace AutoBattle
         // 线性权重表达不了乘积；也表达不了「装备属性必须和角色当前属性一起算」——
         // 角色暴伤 717% 时 +50% 暴击率很值钱，角色暴伤掉回 ~200% 时就廉价。
         // 实测 40 把随机传说武器：旧线性权重与木桩实测伤害排序的 Spearman 相关 0.27，
-        // 期望 DPS 口径 0.91。复现见 Assets/Editor/LateGameProbe.cs。
-        //
-        // 下面这组 ScoreWeight* 只作审计对比保留（LateGameProbe 的 ScoreAudit /
-        // ScoreWeightSearch 读它们），已不参与游戏内评分、显示与自动换装。
+        // 期望 DPS 口径 0.91。这组数是 2026-10-17 的审计实验测出来的；当时读的那批
+        // ScoreWeight* 权重常量（以及 LateGameProbe 里的 ScoreAudit / ScoreRankAudit /
+        // ScoreDummyAudit / ScoreWeightSearch）已在 2026-10-21 一并删除，结论留在
+        // Scripts/EquipmentScore.cs 的类注释里。
 
         /// <summary>评分用的标准对手等级：固定 Lv.100 普通近战怪，保证不同装备的分数可比。</summary>
         public static int ScoreStandardLevel = 100;
-
-        public static float ScoreWeightAttack = 2f;
-        public static float ScoreWeightDefense = 2f;
-        public static float ScoreWeightHp = 0.2f;
-        public static float ScoreWeightCritChance = 1000f;
-
-        /// <summary>
-        /// 暴击伤害权重由 500 下调到 100。
-        /// 暴击率的数值上限约 52%、暴击伤害约 523%，两者相差 10 倍；
-        /// 权重按 10:1 配，出「暴击率」和出「暴击伤害」的武器评分才可比，
-        /// 否则自动换装会无脑偏好暴伤武器。
-        /// </summary>
-        public static float ScoreWeightCritDamage = 100f;
-        public static float ScoreWeightAttackSpeed = 600f;
-        public static float ScoreWeightAllStats = 300f;
-
-        /// <summary>护甲穿透权重（需求里给的 800；数值范围与攻速同档，量级匹配）。</summary>
-        public static float ScoreWeightArmorPen = 800f;
 
         // ==================== 商店：生命药剂 ====================
 

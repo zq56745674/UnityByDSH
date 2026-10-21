@@ -10,8 +10,8 @@ namespace AutoBattle
     /// 「装备属性要和角色当前属性一起算」——角色暴击伤害 717% 时 +50% 暴击率很值钱，
     /// 角色暴击伤害掉回 ~200% 时就廉价。实测 40 把随机传说武器：
     /// 旧权重与「木桩实测伤害」排序的 Spearman 相关 0.27（权重再怎么搜也只到 0.40），
-    /// 换成期望 DPS 口径后 0.91。复现脚本见 Assets/Editor/LateGameProbe.cs 的
-    /// ScoreAudit / ScoreRankAudit / ScoreDummyAudit / ScoreWeightSearch。
+    /// 换成期望 DPS 口径后 0.91。当时的复现入口（LateGameProbe 的 ScoreAudit /
+    /// ScoreRankAudit / ScoreDummyAudit / ScoreWeightSearch）已于 2026-10-21 删除。
     /// </summary>
     public static class EquipmentScore
     {

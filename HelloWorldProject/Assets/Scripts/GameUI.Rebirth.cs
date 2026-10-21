@@ -45,11 +45,13 @@ namespace AutoBattle
             _rebirthPanel = CreatePanel(root, "RebirthPanel", 300, 90, 680, 540,
                 GameConfig.OverlayBg, true);
 
-            _rebirthTitle = CreateText(_rebirthPanel, "RebirthTitle", "轮回", 20, 12, 400, 30,
+            CreateIcon(_rebirthPanel, "ui_rebirth", 20, 14, 24);
+            _rebirthTitle = CreateText(_rebirthPanel, "RebirthTitle", "轮回", 50, 12, 370, 30,
                 FontTitle, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             Button close = CreateButton(_rebirthPanel, "RebirthClose", "关闭", 566, 12, 90, 30,
-                GameConfig.CardBtn, out _);
+                GameConfig.CardBtn, out Text closeLabel);
+            StyleBar(close, closeLabel, "frame_pill", "glyph_close", 14f, "关闭轮回");
             close.onClick.AddListener(OnRebirthCloseClicked);
 
             _rebirthIntro = CreateText(_rebirthPanel, "RebirthIntro",
@@ -88,7 +90,8 @@ namespace AutoBattle
                 int index = i;
                 _rebirthBuyButtons[i] = CreateButton(_rebirthPanel, "RebirthBuy" + i, "",
                     512, y + 9, 112, 30, GameConfig.BtnGold, out _rebirthBuyLabels[i]);
-                _rebirthBuyLabels[i].fontSize = 13;
+                StyleBar(_rebirthBuyButtons[i], _rebirthBuyLabels[i], "frame_pill", "glyph_rebirth", 14f,
+                    "购买 " + RebirthCatalog.NameOf(track), 13);
                 _rebirthBuyButtons[i].onClick.AddListener(() => OnRebirthBuyClicked(index));
             }
 
@@ -101,7 +104,7 @@ namespace AutoBattle
 
             _rebirthConfirmButton = CreateButton(_rebirthPanel, "RebirthConfirm", "轮回", 20, 502, 190, 34,
                 GameConfig.BtnGold, out _rebirthConfirmLabel);
-            _rebirthConfirmLabel.fontSize = 14;
+            StyleBar(_rebirthConfirmButton, _rebirthConfirmLabel, "frame_banner", "glyph_confirm", 22f, "确认轮回", 14);
             _rebirthConfirmButton.onClick.AddListener(OnRebirthConfirmClicked);
 
             _rebirthReasonText = CreateText(_rebirthPanel, "RebirthReason", "", 220, 502, 440, 34,
@@ -229,13 +232,17 @@ namespace AutoBattle
         {
             if (_game == null) return;
             _savePanelDirty = true;
+            bool open = _game.RebirthPanelOpen;
             _game.ToggleRebirthPanel();
+            if (open) GameAudio.PlayUiClose();
+            else GameAudio.PlayUiOpen();
         }
 
         private void OnRebirthCloseClicked()
         {
             _rebirthConfirmUntil = 0f;
             if (_game != null) _game.CloseRebirthPanel();
+            GameAudio.PlayUiClose();
         }
 
         private void OnRebirthBuyClicked(int index)

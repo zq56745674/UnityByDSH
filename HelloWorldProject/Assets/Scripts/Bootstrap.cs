@@ -11,7 +11,10 @@ namespace AutoBattle
     {
         private void Awake()
         {
-            // AddComponent 会立即触发新组件的 Awake，所以控制器先建、UI 后建。
+            // AddComponent 会立即触发新组件的 Awake：音频先就绪，控制器与 UI 才有得用。
+            gameObject.AddComponent<GameAudio>();
+            // 背景音乐独立于短音效，但要早于 UI 建立，音乐入口才能立刻工作。
+            gameObject.AddComponent<GameMusic>();
             var controller = gameObject.AddComponent<GameController>();
             var ui = gameObject.AddComponent<GameUI>();
             ui.Initialize(controller);

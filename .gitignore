@@ -36,6 +36,15 @@ HelloWorldProject/Assets/_Recovery.meta
 crashlytics-build.properties
 sysinfo.txt
 
+# 本地背景音乐：四首曲子由本项目用 AI 音频工具生成，无第三方权利人；
+# 仍不入库——仓库体积考虑，克隆后需自备文件（见 docs/audio-credits.md）
+HelloWorldProject/Assets/Resources/Music/
+HelloWorldProject/Assets/Resources/Music.meta
+
+# capture_game_view 会把截图写进 Assets/Screenshots，那是一次性验证产物
+HelloWorldProject/Assets/Screenshots/
+HelloWorldProject/Assets/Screenshots.meta
+
 # DSH 插件的工作目录：里面是生成结果，不是项目资产
 dsh-image-gen/
 
@@ -46,6 +55,9 @@ _art/fish/
 _art/whale_girl_v3*
 _art/hero_v2*
 _art/*.bak
+_art/tooltip-crop.png
+_art/tooltip-a-crop.png
+_art/tooltip-b-crop.png
 _balance/*.bak
 
 # 归档区：拆分前的备份、早期截图，保留在本地但不入库

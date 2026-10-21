@@ -24,6 +24,9 @@ namespace AutoBattle
         private Text _compareLockLabel;
         private Text _compareEquipLabel;
         private Text _compareSellLabel;
+        private Image _compareEquipIcon;
+        private Image _compareSellIcon;
+        private Image _compareLockIcon;
         private int _compareSlot;
         private bool _comparePanelWasOpen;
         private bool _compareDirty;
@@ -33,12 +36,13 @@ namespace AutoBattle
         {
             _comparePanel = CreatePanel(root, "ComparePanel", 300, 140, 680, 440, GameConfig.OverlayBg, true);
 
-            CreateSectionTitle(_comparePanel, "装备对比", 20, 12, 220, FontTitle);
+            CreateSectionTitle(_comparePanel, "装备对比", 20, 12, 220, FontTitle, "ui_compare");
             CreateText(_comparePanel, "CompareHint", "锁定当前装备（或关闭自动换装）后，更高分的掉落会留在这里等你决定。",
                 20, 40, 600, 24, FontSmall, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
             Button close = CreateButton(_comparePanel, "CompareClose", "关闭", 570, 14, 90, 30,
-                GameConfig.BtnNeutral, out _);
+                GameConfig.BtnNeutral, out Text closeLabel);
+            StyleBar(close, closeLabel, "frame_pill", "glyph_close", 14f, "关闭装备对比");
             close.onClick.AddListener(OnCompareCloseClicked);
 
             // 五个槽位横排：680 宽里 5×110 + 4×6 = 574，正好留出右侧空白。
@@ -48,6 +52,7 @@ namespace AutoBattle
                 _compareSlotButtons[i] = CreateButton(_comparePanel, "CompareSlot" + i,
                     EquipmentSlots.Name(EquipmentSlots.All[i]), 20 + i * 116, 72, 110, 30,
                     GameConfig.BtnHeader, out _compareSlotLabels[i]);
+                StyleTab(_compareSlotButtons[i], _compareSlotLabels[i], "frame_tab", 12);
                 _compareSlotButtons[i].onClick.AddListener(() => OnCompareSlotClicked(captured));
             }
 
@@ -73,14 +78,17 @@ namespace AutoBattle
 
             _compareEquipButton = CreateButton(_comparePanel, "CompareEquip", "换装", 20, 396, 100, 34,
                 GameConfig.BtnPrimary, out _compareEquipLabel);
+            _compareEquipIcon = StyleBar(_compareEquipButton, _compareEquipLabel, "frame_ribbon", "glyph_equip", 18f, "换上待选装备");
             _compareEquipButton.onClick.AddListener(OnCompareEquipClicked);
 
             _compareSellButton = CreateButton(_comparePanel, "CompareSell", "卖出", 128, 396, 100, 34,
                 GameConfig.BtnGold, out _compareSellLabel);
+            _compareSellIcon = StyleBar(_compareSellButton, _compareSellLabel, "frame_pill", "glyph_sell", 18f, "卖出待选装备");
             _compareSellButton.onClick.AddListener(OnCompareSellClicked);
 
             _compareLockButton = CreateButton(_comparePanel, "CompareLock", "锁定当前", 236, 396, 120, 34,
                 GameConfig.BtnNeutral, out _compareLockLabel);
+            _compareLockIcon = StyleBar(_compareLockButton, _compareLockLabel, "frame_pill", "glyph_confirm", 18f, "锁定 / 解除锁定当前装备");
             _compareLockButton.onClick.AddListener(OnCompareLockClicked);
 
             _comparePanel.gameObject.SetActive(false);
@@ -94,8 +102,9 @@ namespace AutoBattle
             if (badge != _compareBadgeOn)
             {
                 _compareBadgeOn = badge;
-                _compareButtonLabel.text = badge ? "对比 ●" : "对比";
-                _compareButton.image.color = badge ? GameConfig.BtnGold : GameConfig.BtnHeader;
+                // 入口已经是大图标按钮，不再改文字/底衬：有待选时把整枚图标染金。
+                if (_compareButtonIcon != null)
+                    _compareButtonIcon.color = badge ? GameConfig.LogGold : Color.white;
             }
 
             bool open = _game.CompareOpen;
@@ -121,7 +130,10 @@ namespace AutoBattle
                 bool selected = i == _compareSlot;
                 EquipmentSlot s = EquipmentSlots.All[i];
                 bool unlocked = p.IsEquipmentSlotUnlocked(s);
-                _compareSlotButtons[i].image.color = selected ? GameConfig.BtnPrimary : GameConfig.BtnHeader;
+                // 生图底框不染品牌色，只区分选中/未选中亮度。
+                _compareSlotButtons[i].image.color = selected
+                    ? Color.white
+                    : new Color(0.62f, 0.66f, 0.74f, 1f);
                 _compareSlotLabels[i].color = unlocked ? (selected ? Color.white : GameConfig.TextMuted) : GameConfig.BtnDisabledText;
                 bool has = _game.HasPendingDrop(s);
                 _compareSlotLabels[i].text = EquipmentSlots.Name(s)
@@ -191,12 +203,14 @@ namespace AutoBattle
                 _compareLockButton.interactable = false;
                 _compareLockLabel.color = GameConfig.BtnDisabledText;
                 _compareLockLabel.text = "锁定当前";
+                if (_compareLockIcon != null) _compareLockIcon.color = new Color(1f, 1f, 1f, 0.40f);
             }
             else
             {
                 _compareLockButton.interactable = true;
                 _compareLockLabel.color = Color.white;
                 _compareLockLabel.text = current.locked ? "解除锁定" : "锁定当前";
+                SetIcon(_compareLockIcon, current.locked ? "glyph_unlock" : "glyph_confirm");
             }
         }
 
@@ -256,7 +270,10 @@ namespace AutoBattle
                 if (_game.HasPendingDrop(EquipmentSlots.All[i])) { _compareSlot = i; break; }
             }
             _compareDirty = true;
+            bool open = _game.CompareOpen;
             _game.ToggleComparePanel();
+            if (open) GameAudio.PlayUiClose();
+            else GameAudio.PlayUiOpen();
         }
 
         /// <summary>点左栏装备卡：直接打开对比面板并切到该槽位。</summary>
@@ -264,13 +281,18 @@ namespace AutoBattle
         {
             _compareSlot = Mathf.Clamp(index, 0, EquipmentSlots.Count - 1);
             _compareDirty = true;
-            if (!_game.CompareOpen) _game.ToggleComparePanel();
+            if (!_game.CompareOpen)
+            {
+                _game.ToggleComparePanel();
+                GameAudio.PlayUiOpen();
+            }
         }
 
         private void OnCompareCloseClicked()
         {
             _compareDirty = true;
             _game.CloseComparePanel();
+            GameAudio.PlayUiClose();
         }
 
         private void OnCompareSlotClicked(int side)

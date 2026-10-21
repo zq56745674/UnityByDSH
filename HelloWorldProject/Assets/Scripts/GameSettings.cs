@@ -34,17 +34,63 @@ namespace AutoBattle
     {
         private const string Prefix = "autobattle.setting.";
         private const string GuideKey = "autobattle.guide.done";
+        private const string MasterVolumeKey = "autobattle.volume.master";
+        private const string SfxVolumeKey = "autobattle.volume.sfx";
+        private const string MusicVolumeKey = "autobattle.volume.music";
+        private const float DefaultVolume = 0.8f;
 
         private static readonly bool[] Defaults = { true, true, true, true, true };
         private static readonly bool[] Values = new bool[5];
         private static bool _loaded;
         private static bool _guideDone;
+        private static float _masterVolume = DefaultVolume;
+        private static float _sfxVolume = DefaultVolume;
+        private static float _musicVolume = DefaultVolume;
 
         public static bool DamageFloat => Get(GameSettingId.DamageFloat);
         public static bool ShowDps => Get(GameSettingId.ShowDps);
         public static bool ShowScore => Get(GameSettingId.ShowScore);
         public static bool ShowSkillAdvice => Get(GameSettingId.ShowSkillAdvice);
         public static bool AutoEquip => Get(GameSettingId.AutoEquip);
+
+        /// <summary>主音量 0~1：同时作用在音效与背景音乐上。</summary>
+        public static float MasterVolume
+        {
+            get { EnsureLoaded(); return _masterVolume; }
+            set
+            {
+                EnsureLoaded();
+                _masterVolume = Mathf.Clamp01(value);
+                PlayerPrefs.SetFloat(MasterVolumeKey, _masterVolume);
+                PlayerPrefs.Save();
+            }
+        }
+
+        /// <summary>音效音量 0~1：与主音量相乘后才是实际播放音量。</summary>
+        public static float SfxVolume
+        {
+            get { EnsureLoaded(); return _sfxVolume; }
+            set
+            {
+                EnsureLoaded();
+                _sfxVolume = Mathf.Clamp01(value);
+                PlayerPrefs.SetFloat(SfxVolumeKey, _sfxVolume);
+                PlayerPrefs.Save();
+            }
+        }
+
+        /// <summary>背景音乐音量 0~1：与主音量相乘后才是实际音乐音量。</summary>
+        public static float MusicVolume
+        {
+            get { EnsureLoaded(); return _musicVolume; }
+            set
+            {
+                EnsureLoaded();
+                _musicVolume = Mathf.Clamp01(value);
+                PlayerPrefs.SetFloat(MusicVolumeKey, _musicVolume);
+                PlayerPrefs.Save();
+            }
+        }
 
         /// <summary>新手引导是否已走完/跳过。首次启动为 false，自动弹一次。</summary>
         public static bool GuideDone
@@ -117,6 +163,12 @@ namespace AutoBattle
                 Values[i] = Defaults[i];
                 PlayerPrefs.SetInt(Prefix + i, Defaults[i] ? 1 : 0);
             }
+            _masterVolume = DefaultVolume;
+            _sfxVolume = DefaultVolume;
+            _musicVolume = DefaultVolume;
+            PlayerPrefs.SetFloat(MasterVolumeKey, _masterVolume);
+            PlayerPrefs.SetFloat(SfxVolumeKey, _sfxVolume);
+            PlayerPrefs.SetFloat(MusicVolumeKey, _musicVolume);
             PlayerPrefs.Save();
         }
 
@@ -128,6 +180,9 @@ namespace AutoBattle
                 Values[i] = PlayerPrefs.GetInt(Prefix + i, Defaults[i] ? 1 : 0) != 0;
             }
             _guideDone = PlayerPrefs.GetInt(GuideKey, 0) != 0;
+            _masterVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(MasterVolumeKey, DefaultVolume));
+            _sfxVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(SfxVolumeKey, DefaultVolume));
+            _musicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(MusicVolumeKey, DefaultVolume));
             _loaded = true;
         }
     }

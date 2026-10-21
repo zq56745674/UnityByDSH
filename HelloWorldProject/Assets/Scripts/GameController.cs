@@ -206,7 +206,7 @@ namespace AutoBattle
             // 任何时刻都能点，战斗中点开就是一整块浮层盖住血条让怪白打，所以一并冻住。
             // 设置 / 引导 / 对比同理：它们都能从常驻按钮点开，必须和别的浮层一样有冻结权。
             if (StagePanelOpen || SavePanelOpen || EnhancePanelOpen || ReforgePanelOpen || SkillPanelOpen
-                || SettingsOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen
+                || SettingsOpen || MusicPanelOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen
                 || RebirthPanelOpen || AchievementPanelOpen) return;
 
             // 游戏速度只影响战斗推进，不影响存档节奏（要求 16）。
@@ -405,6 +405,7 @@ namespace AutoBattle
             EnhancePanelOpen = false;
             ReforgePanelOpen = false;
             SettingsOpen = false;
+            MusicPanelOpen = false;
             GuideOpen = false;
             CompareOpen = false;
             EndlessPanelOpen = false;
@@ -493,6 +494,7 @@ namespace AutoBattle
             Player.currentHp += Mathf.Max(0, Player.MaxHp - oldMaxHp);
 
             AddLog($"◆ 强化 {e.Title}  →  花费 {cost} 金币", GameConfig.QualityColors[(int)e.quality]);
+            GameAudio.PlayEnhance();
             RecordEnhanceStats(e);
             EvaluateAchievements();
             return EnhanceResult.Success;
@@ -517,6 +519,9 @@ namespace AutoBattle
         /// <summary>设置浮层是否展开（UI 用）。和强化/洗练一样冻结战斗。</summary>
         public bool SettingsOpen { get; set; }
 
+        /// <summary>背景音乐浮层是否展开（UI 用）。和设置一样冻结战斗。</summary>
+        public bool MusicPanelOpen { get; set; }
+
         /// <summary>新手引导浮层是否展开（UI 用）。引导期间整局冻结，玩家不会在教程里被打死。</summary>
         public bool GuideOpen { get; set; }
 
@@ -534,6 +539,18 @@ namespace AutoBattle
 
         /// <summary>关闭设置面板。</summary>
         public void CloseSettingsPanel() => SettingsOpen = false;
+
+        /// <summary>打开 / 关闭背景音乐面板。</summary>
+        public void ToggleMusicPanel()
+        {
+            if (ChoicePending) return;
+            bool open = !MusicPanelOpen;
+            CloseAllPanels();
+            MusicPanelOpen = open;
+        }
+
+        /// <summary>关闭背景音乐面板。</summary>
+        public void CloseMusicPanel() => MusicPanelOpen = false;
 
         /// <summary>打开新手引导（首次启动自动调用，设置里也能重看）。</summary>
         public void OpenGuide()
@@ -624,6 +641,7 @@ namespace AutoBattle
             _pendingDrops[index] = null;
 
             AddLog($"$ 卖出待选 {pending.Title}  +{gold} 金币（共 {Player.gold}）", GameConfig.LogGold);
+            GameAudio.PlayCoin();
             EvaluateAchievements();
             return true;
         }
@@ -684,6 +702,7 @@ namespace AutoBattle
 
             AddLog($"◆ 洗练 {e.Title}  →  花费 {cost:N0} 金币（第 {e.reforgeCount} 次{lockNote}）", e.QualityColor);
             AddLog($"  词条质量 {oldQuality}% → {newQuality}%（{arrow}）    {e.AffixSummary}", GameConfig.LogInfo);
+            GameAudio.PlayReforge();
             RecordReforgeStats(e, locked);
             EvaluateAchievements();
             return ReforgeResult.Success;
@@ -1034,6 +1053,7 @@ namespace AutoBattle
             ShopMessage = string.Empty;
             AddLog($"◆ 购买生命药剂（-{price} 金币，持有 {Player.potionCount}/{GameConfig.PotionMaxCount}）",
                 GameConfig.LogInfo);
+            GameAudio.PlayBuy();
             Debug.Log($"[AutoBattle] 购买生命药剂 -{price} 金币");
         }
 
@@ -1092,6 +1112,7 @@ namespace AutoBattle
             _potionCooldownTimer = GameConfig.PotionCooldown;
 
             AddLog($"♥ 使用生命药剂，恢复 {healed} 生命", GameConfig.LogHeal);
+            GameAudio.PlayPotion();
             Debug.Log($"[AutoBattle] 使用生命药剂 +{healed}（剩余 {Player.potionCount} 瓶）");
         }
 
@@ -1195,6 +1216,7 @@ namespace AutoBattle
             string affixText = Monster.HasAffix ? $"   词缀：{Monster.AffixName}" : "";
             AddLog($"⚔ {Monster.Title} 出现   HP {Monster.maxHp}{shieldText}{affixText}",
                 MonsterSpawnColor(tier, type));
+            if (tier == MonsterTier.Boss) GameAudio.PlayBossSpawn();
         }
 
         /// <summary>
@@ -1239,6 +1261,7 @@ namespace AutoBattle
                     ? $"  ★ 首通奖励：+{gold} 金币（含章节通关奖励 +{GameConfig.ChapterClearGoldBonus}）"
                     : $"  ★ 首通奖励：+{gold} 金币",
                 GameConfig.LogGold);
+            GameAudio.PlayCoin();
 
             return gold;
         }
@@ -1507,6 +1530,7 @@ namespace AutoBattle
             bool wasMax = Player.IsMaxLevel;
             int levelsGained = Player.AddExp(reward);
             if (levelsGained <= 0) return;
+            GameAudio.PlayLevelUp();
 
             if (wasMax)
             {
@@ -1566,6 +1590,7 @@ namespace AutoBattle
             // 把战役与无尽两条成长线一起冲垮。
             if (EndlessActive) dropLevel = Mathf.Min(dropLevel, GameConfig.EndlessDropLevelCap);
 
+            if (dropCount > 0) GameAudio.PlayCoin();
             for (int i = 0; i < dropCount; i++)
             {
                 TotalDrops++;
@@ -1698,6 +1723,7 @@ namespace AutoBattle
         private void HandlePlayerDied()
         {
             TotalDeaths++;
+            GameAudio.PlayDeath();
             RecordDeathStats();
 
             // 阵亡即中断无阵亡挑战；无论战役还是无尽都作废。

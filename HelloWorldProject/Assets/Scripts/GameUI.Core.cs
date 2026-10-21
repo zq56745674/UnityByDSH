@@ -574,13 +574,14 @@ namespace AutoBattle
             if (_game.SaveSlot != _cSaveSlot)
             {
                 _cSaveSlot = _game.SaveSlot;
-                if (_saveButtonLabel != null) _saveButtonLabel.text = $"存档 {_game.SaveSlot + 1}";
+                if (_saveButtonLabel != null) _saveButtonLabel.text = (_game.SaveSlot + 1).ToString();
             }
 
             if (_game.IsRunning != _cStartLabel)
             {
                 _cStartLabel = _game.IsRunning;
                 _startButtonLabel.text = _game.IsRunning ? "暂停" : "开始";
+                SetIcon(_startButtonIcon, _game.IsRunning ? "glyph_pause" : "glyph_play");
             }
 
             if (_game.SpeedIndex != _cSpeedIndex)
@@ -589,10 +590,13 @@ namespace AutoBattle
                 for (int i = 0; i < _speedButtons.Length; i++)
                 {
                     bool active = i == _game.SpeedIndex;
+                    // 底框是生图资源，不能整块染成绿色；用亮度区分当前速度。
                     _speedButtons[i].image.color = active
-                        ? GameConfig.BtnSpeedActive
-                        : GameConfig.BtnNeutral;
-                    _speedLabels[i].color = active ? Color.white : GameConfig.TextMuted;
+                        ? Color.white
+                        : new Color(0.58f, 0.62f, 0.70f, 1f);
+                    _speedLabels[i].color = active ? GameConfig.TextGold : GameConfig.TextMuted;
+                    if (_speedIcons != null && _speedIcons[i] != null)
+                        _speedIcons[i].color = active ? Color.white : new Color(1f, 1f, 1f, 0.55f);
                 }
             }
 
@@ -601,7 +605,7 @@ namespace AutoBattle
             {
                 bool modalOpen = IsOpen(_skillPanel) || IsOpen(_skillChoicePanel) || IsOpen(_stagePanel)
                     || IsOpen(_savePanel) || IsOpen(_enhancePanel) || IsOpen(_reforgePanel)
-                    || IsOpen(_settingsPanel) || IsOpen(_comparePanel) || IsOpen(_endlessPanel)
+                    || IsOpen(_settingsPanel) || IsOpen(_musicPanel) || IsOpen(_comparePanel) || IsOpen(_endlessPanel)
                     || IsOpen(_endlessResultPanel) || IsOpen(_rebirthPanel) || IsOpen(_achievementPanel)
                     || IsOpen(_guideRoot);
                 if (_modalDim.gameObject.activeSelf != modalOpen) _modalDim.gameObject.SetActive(modalOpen);
@@ -620,6 +624,7 @@ namespace AutoBattle
             RefreshEnhancePanel();
             RefreshReforgePanel();
             RefreshSettingsPanel();
+            RefreshMusicPanel();
             RefreshComparePanel();
             RefreshEndlessPanel();
             RefreshRebirthPanel();
@@ -853,6 +858,11 @@ namespace AutoBattle
             AddBorder(img, RadiusButton, new Color(1f, 1f, 1f, 0.10f));
             var btn = img.gameObject.AddComponent<Button>();
             btn.targetGraphic = img;
+            // 点完按钮就把悬停名称收掉：否则点开设置时，指针还停在齿轮上，
+            // tooltip 会一直浮在新面板上面。
+            btn.onClick.AddListener(HideTooltip);
+            // 所有 CreateButton 共用点击音；面板入口的开关音另外挂（避免关闭时重复）。
+            btn.onClick.AddListener(GameAudio.PlayUiClick);
 
             // 注意：这几个颜色是**乘数**，乘在 Image.color（也就是 bgColor）上。
             // 原来写成 1.18f * bgColor，对深色按钮等于又乘一遍暗色，

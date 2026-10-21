@@ -30,6 +30,7 @@ namespace AutoBattle
             _skillChoiceButtons = new Button[count];
             _skillChoiceLabels = new Text[count];
             _choiceAccents = new Image[count];
+            _skillChoiceIcons = new Image[count];
 
             const float cardW = 236f;
             const float cardH = 150f;
@@ -43,11 +44,14 @@ namespace AutoBattle
                 _skillChoiceButtons[i] = CreateButton(_skillChoicePanel, $"SkillChoice{i}", "", x, 72f, cardW, cardH,
                     GameConfig.RowBg, out _skillChoiceLabels[i]);
 
+                // 左上角技能图标：54px 圆形徽章，文字从图标右侧开始。
+                _skillChoiceIcons[i] = CreateIconSlot(_skillChoiceButtons[i].transform, $"ChoiceIcon{i}", 14f, 10f, 54f);
+
                 // 三行文案只占卡片上方一半，UpperLeft 会留一大片空底；垂直居中读起来才对得上「卡片」。
                 _skillChoiceLabels[i].fontSize = 15;
                 _skillChoiceLabels[i].alignment = TextAnchor.MiddleLeft;
-                _skillChoiceLabels[i].rectTransform.offsetMin = new Vector2(18f, 10f);
-                _skillChoiceLabels[i].rectTransform.offsetMax = new Vector2(-16f, -10f);
+                _skillChoiceLabels[i].rectTransform.offsetMin = new Vector2(80f, 10f);
+                _skillChoiceLabels[i].rectTransform.offsetMax = new Vector2(-14f, -10f);
 
                 _choiceAccents[i] = CreateImage(_skillChoiceButtons[i].transform, $"ChoiceAccent{i}",
                     0f, 10f, 3f, cardH - 20f, GameConfig.Border);
@@ -87,6 +91,7 @@ namespace AutoBattle
                 if (!valid) continue;
 
                 SkillDef def = SkillCatalog.Get(choices[i]);
+                SetIcon(_skillChoiceIcons[i], SkillIconKey((int)def.id));
                 int score = advice ? SkillAdvice.Score(_game.Player, choices[i]) : 0;
                 string kindLine = advice
                     ? $"{KindShort((int)def.kind)} · <color=#{ColorUtility.ToHtmlStringRGB(SkillAdvice.TierColor(score))}>推荐 {score} {SkillAdvice.TierLabel(score)}</color>"
@@ -144,6 +149,7 @@ namespace AutoBattle
             int total = SkillCatalog.All.Length;
             _skillPoolButtons = new Button[total];
             _skillPoolLabels = new Text[total];
+            _skillPoolIcons = new Image[total];
 
             for (int i = 0; i < total; i++)
             {
@@ -158,17 +164,20 @@ namespace AutoBattle
                 _skillPoolButtons[i] = CreateButton(_skillPanel, $"SkillPool{i}", "", x, y, 248, 88,
                     GameConfig.RowBg, out _skillPoolLabels[i]);
 
+                _skillPoolIcons[i] = CreateIconSlot(_skillPoolButtons[i].transform, $"PoolIcon{i}", 8f, 8f, 40f);
+
                 _skillPoolLabels[i].fontSize = 13;
                 _skillPoolLabels[i].verticalOverflow = VerticalWrapMode.Truncate;
                 _skillPoolLabels[i].alignment = TextAnchor.MiddleLeft;
-                _skillPoolLabels[i].rectTransform.offsetMin = new Vector2(10f, 6f);
+                _skillPoolLabels[i].rectTransform.offsetMin = new Vector2(56f, 6f);
                 _skillPoolLabels[i].rectTransform.offsetMax = new Vector2(-8f, -6f);
 
                 _skillPoolButtons[i].onClick.AddListener(() => OnSkillPoolClicked(captured));
             }
 
             Button close = CreateButton(_skillPanel, "SkillPanelClose", "关闭", 698, 12, 90, 30,
-                GameConfig.CardDanger, out _);
+                GameConfig.CardDanger, out Text skillCloseLabel);
+            StyleBar(close, skillCloseLabel, "frame_pill", "glyph_close", 14f, "关闭技能面板");
             close.onClick.AddListener(OnSkillPanelCloseClicked);
 
             _skillPanel.gameObject.SetActive(false);
@@ -193,7 +202,8 @@ namespace AutoBattle
             // 因为转生是低频且不可逆的操作，不该和「开始/速度」挤在一起。
             _savePanel = CreatePanel(root, "SavePanel", 300, 168, 680, 360, GameConfig.OverlayBg, true);
 
-            _savePanelTitle = CreateText(_savePanel, "SavePanelTitle", "", 20, 12, 640, 30, 19,
+            CreateIcon(_savePanel, "ui_save", 20, 16, 20);
+            _savePanelTitle = CreateText(_savePanel, "SavePanelTitle", "", 48, 12, 612, 30, 19,
                 GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             CreateText(_savePanel, "SavePanelHint",
@@ -229,24 +239,30 @@ namespace AutoBattle
 
                 Button del = CreateButton(_savePanel, "SaveSlotDel" + slot, "删除", x + 112f, y0 + cardH - 34f, 76f, 26f,
                     GameConfig.BtnDanger, out _saveSlotDeleteLabels[slot]);
-                _saveSlotDeleteLabels[slot].fontSize = 13;
+                StyleBar(del, _saveSlotDeleteLabels[slot], "frame_pill", "glyph_delete", 12f,
+                    "删除存档 " + (slot + 1), 10);
                 del.onClick.AddListener(() => OnSaveSlotDeleteClicked(slot));
 
                 _saveSlotButtons[slot] = card;
                 _saveSlotLabels[slot] = cardLabel;
             }
 
-            _rebirthEntryButton = CreateButton(_savePanel, "RebirthEntry", "♾ 轮回", 20, 250, 120, 34,
+            _rebirthEntryButton = CreateButton(_savePanel, "RebirthEntry", "轮回", 20, 250, 120, 34,
                 GameConfig.BtnGold, out _rebirthEntryLabel);
-            _rebirthEntryLabel.fontSize = 15;
+            StyleBar(_rebirthEntryButton, _rebirthEntryLabel, "frame_pill", "glyph_rebirth", 16f, "进入轮回", 13);
             _rebirthEntryButton.onClick.AddListener(OnRebirthEntryClicked);
 
             _rebirthEntryStatus = CreateText(_savePanel, "RebirthEntryStatus", "", 148, 250, 420, 34,
                 12, GameConfig.TextInfo, TextAnchor.MiddleLeft);
 
             Button close = CreateButton(_savePanel, "SavePanelClose", "关闭", 586, 306, 74, 34,
-                GameConfig.CardBtn, out _);
-            close.onClick.AddListener(() => _game.CloseSavePanel());
+                GameConfig.CardBtn, out Text saveCloseLabel);
+            StyleBar(close, saveCloseLabel, "frame_pill", "glyph_close", 14f, "关闭存档槽");
+            close.onClick.AddListener(() =>
+            {
+                _game.CloseSavePanel();
+                GameAudio.PlayUiClose();
+            });
 
             _savePanel.gameObject.SetActive(false);
         }
@@ -322,7 +338,10 @@ namespace AutoBattle
         private void OnSaveButtonClicked()
         {
             _savePanelDirty = true;
+            bool open = _game.SavePanelOpen;
             _game.ToggleSavePanel();
+            if (open) GameAudio.PlayUiClose();
+            else GameAudio.PlayUiOpen();
         }
 
         private void OnSaveSlotClicked(int slot)
@@ -396,7 +415,7 @@ namespace AutoBattle
                 _enhanceSlotButtons[i] = CreateButton(_enhancePanel, "EnhanceTab" + i,
                     EquipmentSlots.Name(EquipmentSlots.All[i]), 20 + i * 116, 72, 110, 30,
                     GameConfig.BtnHeader, out _enhanceSlotLabels[i]);
-                _enhanceSlotLabels[i].fontSize = 14;
+                StyleTab(_enhanceSlotButtons[i], _enhanceSlotLabels[i], "frame_tab", 12);
                 _enhanceSlotButtons[i].onClick.AddListener(() => OnEnhanceTabClicked(captured));
             }
 
@@ -407,12 +426,17 @@ namespace AutoBattle
 
             _enhanceActionButton = CreateButton(_enhancePanel, "EnhanceAction", "强化", 520, 216, 126, 30,
                 GameConfig.BtnGold, out _enhanceActionLabel);
-            _enhanceActionLabel.fontSize = 15;
+            _enhanceActionIcon = StyleBar(_enhanceActionButton, _enhanceActionLabel, "frame_bar_round", "glyph_anvil", 16f, "强化选中装备", 12);
             _enhanceActionButton.onClick.AddListener(() => OnEnhanceSlotClicked(EquipmentSlots.All[_enhanceSlotIndex]));
 
             Button close = CreateButton(_enhancePanel, "EnhancePanelClose", "关闭", 586, 282, 74, 34,
-                GameConfig.CardBtn, out _);
-            close.onClick.AddListener(() => _game.CloseEnhancePanel());
+                GameConfig.CardBtn, out Text enhanceCloseLabel);
+            StyleBar(close, enhanceCloseLabel, "frame_pill", "glyph_close", 14f, "关闭强化");
+            close.onClick.AddListener(() =>
+            {
+                _game.CloseEnhancePanel();
+                GameAudio.PlayUiClose();
+            });
 
             _enhancePanel.gameObject.SetActive(false);
         }
@@ -444,7 +468,9 @@ namespace AutoBattle
                 EquipmentSlot s = EquipmentSlots.All[i];
                 bool selected = i == _enhanceSlotIndex;
                 bool unlocked = p.IsEquipmentSlotUnlocked(s);
-                _enhanceSlotButtons[i].image.color = selected ? GameConfig.BtnPrimary : GameConfig.BtnHeader;
+                _enhanceSlotButtons[i].image.color = selected
+                    ? Color.white
+                    : new Color(0.60f, 0.64f, 0.72f, 1f);
                 _enhanceSlotLabels[i].color = selected ? Color.white
                     : unlocked ? GameConfig.TextMuted : GameConfig.BtnDisabledText;
                 _enhanceSlotLabels[i].text = EquipmentSlots.Name(s) + (unlocked ? string.Empty : " · 未解锁");
@@ -459,8 +485,9 @@ namespace AutoBattle
                 : !e.CanEnhance ? "已满级"
                 : $"强化 {e.EnhanceCost:N0}";
 
-            var bg = _enhanceActionButton.targetGraphic as Image;
-            if (bg != null) bg.color = canPay ? GameConfig.BtnGold : GameConfig.BtnDisabled;
+            _enhanceActionButton.image.color = canPay ? Color.white : new Color(0.62f, 0.66f, 0.74f, 1f);
+            if (_enhanceActionIcon != null)
+                _enhanceActionIcon.color = canPay ? Color.white : new Color(1f, 1f, 1f, 0.45f);
             _enhanceActionLabel.color = canPay ? Color.white : GameConfig.BtnDisabledText;
         }
 
@@ -479,7 +506,10 @@ namespace AutoBattle
         private void OnEnhanceEntryClicked()
         {
             _enhancePanelDirty = true;
+            bool open = _game.EnhancePanelOpen;
             _game.ToggleEnhancePanel();
+            if (open) GameAudio.PlayUiClose();
+            else GameAudio.PlayUiOpen();
         }
 
         private void OnEnhanceTabClicked(int index)
@@ -529,7 +559,7 @@ namespace AutoBattle
                 _reforgeSlotButtons[i] = CreateButton(_reforgePanel, "ReforgeTab" + i,
                     EquipmentSlots.Name(EquipmentSlots.All[i]), 20 + i * 116, 72, 110, 30,
                     GameConfig.BtnHeader, out _reforgeSlotLabels[i]);
-                _reforgeSlotLabels[i].fontSize = 14;
+                StyleTab(_reforgeSlotButtons[i], _reforgeSlotLabels[i], "frame_tab", 12);
                 _reforgeSlotButtons[i].onClick.AddListener(() => OnReforgeTabClicked(captured));
             }
 
@@ -565,12 +595,17 @@ namespace AutoBattle
 
             _reforgeActionButton = CreateButton(_reforgePanel, "ReforgeAction", "洗练", 34, 344, 200, 30,
                 GameConfig.BtnGold, out _reforgeActionLabel);
-            _reforgeActionLabel.fontSize = 15;
+            _reforgeActionIcon = StyleBar(_reforgeActionButton, _reforgeActionLabel, "frame_bar_round", "glyph_flame", 17f, "洗练选中装备", 13);
             _reforgeActionButton.onClick.AddListener(() => OnReforgeSlotClicked(EquipmentSlots.All[_reforgeSlotIndex]));
 
             Button close = CreateButton(_reforgePanel, "ReforgePanelClose", "关闭", 586, 392, 74, 34,
-                GameConfig.CardBtn, out _);
-            close.onClick.AddListener(() => _game.CloseReforgePanel());
+                GameConfig.CardBtn, out Text reforgeCloseLabel);
+            StyleBar(close, reforgeCloseLabel, "frame_pill", "glyph_close", 14f, "关闭洗练");
+            close.onClick.AddListener(() =>
+            {
+                _game.CloseReforgePanel();
+                GameAudio.PlayUiClose();
+            });
 
             _reforgePanel.gameObject.SetActive(false);
         }
@@ -605,7 +640,9 @@ namespace AutoBattle
                 EquipmentSlot s = EquipmentSlots.All[i];
                 bool selected = i == _reforgeSlotIndex;
                 bool unlocked = p.IsEquipmentSlotUnlocked(s);
-                _reforgeSlotButtons[i].image.color = selected ? GameConfig.BtnPrimary : GameConfig.BtnHeader;
+                _reforgeSlotButtons[i].image.color = selected
+                    ? Color.white
+                    : new Color(0.60f, 0.64f, 0.72f, 1f);
                 _reforgeSlotLabels[i].color = selected ? Color.white
                     : unlocked ? GameConfig.TextMuted : GameConfig.BtnDisabledText;
                 _reforgeSlotLabels[i].text = EquipmentSlots.Name(s) + (unlocked ? string.Empty : " · 未解锁");
@@ -697,8 +734,9 @@ namespace AutoBattle
                 : free <= 0 ? "已全锁"
                 : $"洗练 {cost:N0}";
 
-            var bg = _reforgeActionButton.targetGraphic as Image;
-            if (bg != null) bg.color = canPay ? GameConfig.BtnGold : GameConfig.BtnDisabled;
+            _reforgeActionButton.image.color = canPay ? Color.white : new Color(0.62f, 0.66f, 0.74f, 1f);
+            if (_reforgeActionIcon != null)
+                _reforgeActionIcon.color = canPay ? Color.white : new Color(1f, 1f, 1f, 0.45f);
             _reforgeActionLabel.color = canPay ? Color.white : GameConfig.BtnDisabledText;
         }
 
@@ -864,17 +902,25 @@ namespace AutoBattle
                 GameConfig.TextMuted, TextAnchor.UpperLeft);
 
             Button close = CreateButton(_stagePanel, "StagePanelClose", "关闭", 698, 458, 90, 36,
-                GameConfig.CardDanger, out _);
+                GameConfig.CardDanger, out Text stageCloseLabel);
+            StyleBar(close, stageCloseLabel, "frame_pill", "glyph_close", 14f, "关闭选关");
             close.onClick.AddListener(OnStagePanelCloseClicked);
 
             _stagePanel.gameObject.SetActive(false);
         }
 
-        private void OnStageButtonClicked() => _game.ToggleStagePanel();
+        private void OnStageButtonClicked()
+        {
+            bool open = _game.StagePanelOpen;
+            _game.ToggleStagePanel();
+            if (open) GameAudio.PlayUiClose();
+            else GameAudio.PlayUiOpen();
+        }
 
         private void OnStagePanelCloseClicked()
         {
             if (_game != null) _game.CloseStagePanel();
+            GameAudio.PlayUiClose();
         }
 
         private void OnStageChapterClicked(int index)
@@ -907,14 +953,11 @@ namespace AutoBattle
                 if (endless)
                 {
                     int floor = _game.EndlessRun.floor;
-                    _stageButtonLabel.text =
-                        $"第 {floor} 层 · 怪 Lv.{EndlessCatalog.MonsterLevelOf(floor)}";
+                    _stageButtonLabel.text = $"第 {floor} 层";
                 }
                 else
                 {
-                    _stageButtonLabel.text = current != null
-                        ? $"关卡 {current.Code} · 怪 Lv.{current.monsterLevel}"
-                        : "关卡 —";
+                    _stageButtonLabel.text = current != null ? $"关卡 {current.Code}" : "关卡 —";
                 }
             }
 
@@ -1044,8 +1087,10 @@ namespace AutoBattle
         private void OnSkillSlotClicked(int slot)
         {
             _selectedSkillSlot = slot;
+            bool wasOpen = _game.SkillPanelOpen;
             // 开技能面板要关掉选关面板，这条互斥规则归控制器一份。
             _game.OpenSkillPanel();
+            if (!wasOpen) GameAudio.PlayUiOpen();
             RefreshSkillPanel();
             RefreshSkillChoice();
         }
@@ -1053,6 +1098,7 @@ namespace AutoBattle
         private void OnSkillPanelCloseClicked()
         {
             _game.CloseSkillPanel();
+            GameAudio.PlayUiClose();
             RefreshSkillPanel();
             RefreshSkillChoice();
         }
@@ -1126,6 +1172,7 @@ namespace AutoBattle
                         _skillSlotStates[i].text = "";
                         _skillSlotButtons[i].image.color = GameConfig.CardBgDim;
                         _skillSlotAccents[i].color = new Color(1f, 1f, 1f, 0.04f);
+                        if (_skillSlotIcons[i] != null) _skillSlotIcons[i].enabled = false;
                         _skillCdDraw[i] = 0f;
                         _skillSlotFills[i].rectTransform.sizeDelta = new Vector2(0f, 3f);
                         continue;
@@ -1140,6 +1187,7 @@ namespace AutoBattle
                     _skillSlotButtons[i].image.color = Color.Lerp(GameConfig.CardBg, def.color, 0.05f);
                     _skillSlotAccents[i].color = def.color;
                     _skillSlotFills[i].color = def.color;
+                    SetIcon(_skillSlotIcons[i], SkillIconKey(id));
 
                     if (!def.IsActive)
                     {
@@ -1156,7 +1204,7 @@ namespace AutoBattle
 
                 float cd = _game.SkillCooldown(i);
                 float total = def.cooldown;
-                float width = 106f * (total > 0f ? Mathf.Clamp01(1f - cd / total) : 1f);
+                float width = 116f * (total > 0f ? Mathf.Clamp01(1f - cd / total) : 1f);
 
                 if (Mathf.Abs(_skillCdDraw[i] - width) > 0.05f)
                 {
@@ -1209,6 +1257,10 @@ namespace AutoBattle
                 else if (equipped) _skillPoolLabels[i].color = GameConfig.LogSuccess;
                 else _skillPoolLabels[i].color = Color.white;
 
+                SetIcon(_skillPoolIcons[i], SkillIconKey((int)def.id));
+                if (_skillPoolIcons[i] != null)
+                    _skillPoolIcons[i].color = unlocked ? Color.white : new Color(1f, 1f, 1f, 0.35f);
+
                 _skillPoolButtons[i].image.color = unlocked
                     ? GameConfig.RowBg
                     : GameConfig.CardBgDim;
@@ -1243,19 +1295,24 @@ namespace AutoBattle
                 _shopGoldText.text = $"金币 {p.gold}";
                 _shopPotionText.text = $"生命药剂    价格 {price}    持有 {p.potionCount}/{GameConfig.PotionMaxCount}";
 
-                _buyButton.image.color = canBuy
-                    ? GameConfig.BtnPrimary
-                    : GameConfig.CardBtn;
+                // 底框是生图资源，不染成绿色；只做亮/暗区分。
+                _buyButton.image.color = canBuy ? Color.white : new Color(0.55f, 0.58f, 0.65f, 1f);
+                if (_buyIcon != null) _buyIcon.color = canBuy ? Color.white : new Color(1f, 1f, 1f, 0.45f);
                 // 灰按钮上写「购买」会让人以为是没做好：把按不动的原因直接写在按钮上。
                 _buyButtonLabel.text = canBuy
                     ? "购买"
                     : (!open ? "未开放"
                         : (p.potionCount >= GameConfig.PotionMaxCount ? "已满" : "金币不足"));
+                _buyButtonLabel.color = canBuy ? Color.white : GameConfig.BtnDisabledText;
 
-                _autoBuyLabel.text = _game.AutoBuyPotion ? "[✓] 自动购买" : "[  ] 自动购买";
-                _autoBuyLabel.color = _game.AutoBuyPotion
-                    ? GameConfig.LogHeal
-                    : GameConfig.TextMuted;
+                _autoBuyLabel.text = _game.AutoBuyPotion ? "自动购买 开" : "自动购买 关";
+                _autoBuyLabel.color = _game.AutoBuyPotion ? GameConfig.LogHeal : GameConfig.TextMuted;
+                if (_autoBuyButton != null)
+                    _autoBuyButton.image.color = _game.AutoBuyPotion
+                        ? Color.white
+                        : new Color(0.70f, 0.73f, 0.80f, 1f);
+                if (_autoBuyIcon != null)
+                    _autoBuyIcon.color = _game.AutoBuyPotion ? Color.white : new Color(1f, 1f, 1f, 0.55f);
             }
 
             if (!textTick) return;

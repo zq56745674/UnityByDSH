@@ -12,6 +12,7 @@ namespace AutoBattle
         // ---- 左栏入口 ----
         private Button _endlessButton;
         private Text _endlessButtonLabel;
+        private Image _endlessButtonIcon;
 
         // ---- 无尽面板 ----
         private RectTransform _endlessPanel;
@@ -48,11 +49,13 @@ namespace AutoBattle
             _endlessPanel = CreatePanel(root, "EndlessPanel", 300, 142, 680, 436,
                 GameConfig.OverlayBg, true);
 
-            _endlessTitle = CreateText(_endlessPanel, "EndlessTitle", "无尽模式", 20, 12, 480, 30,
+            CreateIcon(_endlessPanel, "ui_endless", 20, 14, 24);
+            _endlessTitle = CreateText(_endlessPanel, "EndlessTitle", "无尽模式", 50, 12, 450, 30,
                 FontTitle, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             Button close = CreateButton(_endlessPanel, "EndlessClose", "关闭", 570, 12, 90, 30,
-                GameConfig.CardBtn, out _);
+                GameConfig.CardBtn, out Text closeLabel);
+            StyleBar(close, closeLabel, "frame_pill", "glyph_close", 14f, "关闭无尽模式");
             close.onClick.AddListener(OnEndlessCloseClicked);
 
             _endlessBestText = CreateText(_endlessPanel, "EndlessBest", "", 20, 52, 310, 26,
@@ -74,21 +77,25 @@ namespace AutoBattle
             // 开始 / 继续按钮：未开局开始挑战，局内变成继续战斗。
             _endlessStartButton = CreateButton(_endlessPanel, "EndlessStart", "开始挑战", 20, 328, 200, 40,
                 GameConfig.BtnGold, out _endlessStartLabel);
+            StyleBar(_endlessStartButton, _endlessStartLabel, "frame_bar_round", "glyph_play", 21f, "开始 / 继续无尽挑战");
             _endlessStartButton.onClick.AddListener(OnEndlessStartClicked);
 
             // 从第 1 层开始：只在起始层 > 1 时显示。
             _endlessFreshButton = CreateButton(_endlessPanel, "EndlessFresh", "从第 1 层开始", 232, 328, 200, 40,
                 GameConfig.BtnHeader, out _endlessFreshLabel);
+            StyleBar(_endlessFreshButton, _endlessFreshLabel, "frame_bar_notched", "glyph_reset", 20f, "从第 1 层重新开始");
             _endlessFreshButton.onClick.AddListener(OnEndlessFreshClicked);
 
             // 撤退：局内才显示；第一次点击进入 3 秒确认。
             _endlessRetreatButton = CreateButton(_endlessPanel, "EndlessRetreat", "撤退", 232, 328, 140, 40,
                 GameConfig.BtnDanger, out _endlessRetreatLabel);
+            StyleBar(_endlessRetreatButton, _endlessRetreatLabel, "frame_pill", "glyph_back", 19f, "撤退并结束本局");
             _endlessRetreatButton.onClick.AddListener(OnEndlessRetreatClicked);
 
             // 返回战役：只在未开局的可浏览状态显示；局内要先撤退。
             _endlessReturnButton = CreateButton(_endlessPanel, "EndlessReturn", "返回战役", 444, 328, 120, 40,
-                GameConfig.BtnHeader, out _);
+                GameConfig.BtnHeader, out Text returnLabel);
+            StyleBar(_endlessReturnButton, returnLabel, "frame_pill", "glyph_back", 19f, "返回战役");
             _endlessReturnButton.onClick.AddListener(OnEndlessReturnClicked);
 
             _endlessHintText = CreateText(_endlessPanel, "EndlessHint", "", 20, 382, 640, 38,
@@ -112,10 +119,12 @@ namespace AutoBattle
 
             Button retry = CreateButton(_endlessResultPanel, "EndlessRetry", "再次挑战", 20, 238, 260, 42,
                 GameConfig.BtnGold, out _endlessRetryLabel);
+            StyleBar(retry, _endlessRetryLabel, "frame_bar_round", "glyph_reset", 22f, "再次挑战");
             retry.onClick.AddListener(OnEndlessRetryClicked);
 
             Button back = CreateButton(_endlessResultPanel, "EndlessResultReturn", "返回战役", 296, 238, 180, 42,
                 GameConfig.BtnHeader, out _endlessResultReturnLabel);
+            StyleBar(back, _endlessResultReturnLabel, "frame_pill", "glyph_back", 22f, "返回战役");
             back.onClick.AddListener(OnEndlessResultReturnClicked);
 
             _endlessResultPanel.gameObject.SetActive(false);
@@ -130,13 +139,12 @@ namespace AutoBattle
             int best = _game.EndlessBestFloor;
             int globalBest = EndlessRecord.GlobalBest;
 
-            if (_endlessButtonLabel != null)
+            if (_endlessButtonIcon != null)
             {
-                string entry = inRun ? "记录" : "无尽";
-                if (!string.Equals(_endlessButtonLabel.text, entry)) _endlessButtonLabel.text = entry;
-                _endlessButtonLabel.color = !inRun && !_game.EndlessUnlocked
+                // 图标即按钮：未解锁染灰，局内挑战染金，其余保持原色。
+                _endlessButtonIcon.color = !inRun && !_game.EndlessUnlocked
                     ? GameConfig.TextDisabled
-                    : Color.white;
+                    : (inRun ? GameConfig.LogGold : Color.white);
             }
 
             bool open = _game.EndlessPanelOpen;
@@ -262,7 +270,10 @@ namespace AutoBattle
             if (_game == null) return;
             // 撤退确认只属于「当前打开的这一轮面板」：关掉再打开不该还带着倒计时。
             _endlessRetreatConfirmUntil = 0f;
+            bool open = _game.EndlessPanelOpen;
             _game.ToggleEndlessPanel();
+            if (open) GameAudio.PlayUiClose();
+            else GameAudio.PlayUiOpen();
             if (_game.EndlessPanelOpen && !_game.CanEnterEndless)
             {
                 _game.AddLog("🔒 通关第 11 章 11-10 后解锁无尽模式", GameConfig.LogWarn);
@@ -273,6 +284,7 @@ namespace AutoBattle
         {
             _endlessRetreatConfirmUntil = 0f;
             if (_game != null) _game.CloseEndlessPanel();
+            GameAudio.PlayUiClose();
         }
 
         private void OnEndlessStartClicked()
