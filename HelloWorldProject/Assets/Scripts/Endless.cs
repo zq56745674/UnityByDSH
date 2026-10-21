@@ -145,7 +145,30 @@ namespace AutoBattle
         public int reachedFloor;
         public EndlessEndReason endReason;
 
+        /// <summary>开局时的 UTC ticks（0 = 未知）。历史榜用它算本局用时。</summary>
+        public long startedUtc;
+
+        /// <summary>本局在历史榜上的名次（1 起）；0 = 没上榜。只在结束那一帧写一次。</summary>
+        public int historyRank;
+
+        /// <summary>结束那一刻锁定的用时（秒）。结果面板开着的期间 Seconds 还会涨，不能用它显示。</summary>
+        public int finishSeconds;
+
         public int KillsLeft => Mathf.Max(0, EndlessCatalog.KillTargetOf(floor) - killCount);
+
+        /// <summary>本局用时（秒）。中途改系统时间会得到离谱值，所以夹在 0..30 天。</summary>
+        public int Seconds
+        {
+            get
+            {
+                if (startedUtc <= 0) return 0;
+                long delta = DateTime.UtcNow.Ticks - startedUtc;
+                if (delta <= 0) return 0;
+                return (int)Mathf.Clamp(delta / TimeSpan.TicksPerSecond, 0, MaxSeconds);
+            }
+        }
+
+        public const int MaxSeconds = 86400 * 30;
     }
 
     /// <summary>
@@ -175,6 +198,158 @@ namespace AutoBattle
         {
             int local = Mathf.Clamp(floor, 0, MaxRecord);
             return local > GlobalBest ? ReportGlobal(local) : GlobalBest;
+        }
+    }
+
+    /// <summary>
+    /// 一局无尽的成绩单（存档 v11 起的历史榜条目）。只记展示需要的量，
+    /// 层数以「本局到达的最高层」为准：检查点开局本来就允许从高层起步，
+    /// 榜单比的是这一局把记录推到了哪，而不是从第 1 层爬了多少层。
+    /// </summary>
+    [Serializable]
+    public sealed class EndlessScoreEntry
+    {
+        /// <summary>本局到达过的最高层（阵亡/撤退时站的那一层）。</summary>
+        public int floor;
+
+        /// <summary>本局真正清完的层数。</summary>
+        public int cleared;
+
+        /// <summary>本局击杀总数。</summary>
+        public int kills;
+
+        /// <summary>结束时巅峰等级。</summary>
+        public int paragon;
+
+        /// <summary>结束时是第几世（转生次数，0 = 第 1 世）。</summary>
+        public int rebirth;
+
+        /// <summary>本局用时（秒）。</summary>
+        public int seconds;
+
+        /// <summary>结束时间（UTC ticks，0 = 未知）。</summary>
+        public long endedUtc;
+
+        /// <summary>结束原因，存 <see cref="EndlessEndReason"/> 的整数值。</summary>
+        public int reason;
+
+        /// <summary>是不是玩家自己按的撤退（而不是阵亡）。</summary>
+        public bool IsRetreat => reason == (int)EndlessEndReason.Retreat;
+    }
+
+    /// <summary>
+    /// Top-N 历史榜：存每档最好的一小串局，榜首规则是
+    /// 「到达层数高 → 本局清除层数多 → 更早做到（老纪录先站住）」。
+    /// 纯数据操作，不碰 UI 也不碰存档，方便在编辑器的探针里直接跑。
+    /// </summary>
+    public static class EndlessHistory
+    {
+        /// <summary>留几局。榜单只用于展示，留多了面板放不下。</summary>
+        public const int Capacity = 5;
+
+        /// <summary>排序：层数降序 → 清除层数降序 → 结束时间升序（先做到的在前）。</summary>
+        public static int Compare(EndlessScoreEntry a, EndlessScoreEntry b)
+        {
+            if (a == null && b == null) return 0;
+            if (a == null) return 1;
+            if (b == null) return -1;
+
+            int c = b.floor.CompareTo(a.floor);
+            if (c != 0) return c;
+            c = b.cleared.CompareTo(a.cleared);
+            if (c != 0) return c;
+            c = a.endedUtc.CompareTo(b.endedUtc);
+            if (c != 0) return c;
+            return b.seconds.CompareTo(a.seconds);
+        }
+
+        /// <summary>
+        /// 插一局进榜，返回名次（1 起）；掉出前 <see cref="Capacity"/> 名时返回 0。
+        /// 会就地排序并裁掉多出来的尾部，调用方不需要再整理。
+        /// </summary>
+        public static int Insert(System.Collections.Generic.List<EndlessScoreEntry> list, EndlessScoreEntry entry)
+        {
+            if (list == null || entry == null) return 0;
+
+            Clamp(entry);
+            list.Add(entry);
+            list.Sort(Compare);
+
+            int rank = list.IndexOf(entry) + 1;
+            if (list.Count > Capacity) list.RemoveRange(Capacity, list.Count - Capacity);
+            return rank <= Capacity ? rank : 0;
+        }
+
+        /// <summary>存档用：拷一份干净的 Top-N（不改动源列表）。</summary>
+        public static System.Collections.Generic.List<EndlessScoreEntry> CopyTop(
+            System.Collections.Generic.List<EndlessScoreEntry> source)
+        {
+            var result = new System.Collections.Generic.List<EndlessScoreEntry>();
+            if (source == null) return result;
+            for (int i = 0; i < source.Count && result.Count < Capacity; i++)
+            {
+                EndlessScoreEntry entry = source[i];
+                if (entry == null) continue;
+                var copy = new EndlessScoreEntry
+                {
+                    floor = entry.floor,
+                    cleared = entry.cleared,
+                    kills = entry.kills,
+                    paragon = entry.paragon,
+                    rebirth = entry.rebirth,
+                    seconds = entry.seconds,
+                    endedUtc = entry.endedUtc,
+                    reason = entry.reason,
+                };
+                Clamp(copy);
+                result.Add(copy);
+            }
+            return result;
+        }
+
+        /// <summary>读档用：丢掉 null、夹住越界值，重新按同一规则排序并裁到 Capacity。</summary>
+        public static System.Collections.Generic.List<EndlessScoreEntry> FromSave(
+            System.Collections.Generic.List<EndlessScoreEntry> source)
+        {
+            var result = new System.Collections.Generic.List<EndlessScoreEntry>();
+            if (source == null) return result;
+            for (int i = 0; i < source.Count; i++)
+            {
+                EndlessScoreEntry entry = source[i];
+                if (entry == null) continue;
+                var copy = new EndlessScoreEntry
+                {
+                    floor = entry.floor,
+                    cleared = entry.cleared,
+                    kills = entry.kills,
+                    paragon = entry.paragon,
+                    rebirth = entry.rebirth,
+                    seconds = entry.seconds,
+                    endedUtc = entry.endedUtc,
+                    reason = entry.reason,
+                };
+                Clamp(copy);
+                result.Add(copy);
+            }
+            result.Sort(Compare);
+            if (result.Count > Capacity) result.RemoveRange(Capacity, result.Count - Capacity);
+            return result;
+        }
+
+        /// <summary>手改档/异常值兜底：每一项都夹回合法区间。</summary>
+        public static void Clamp(EndlessScoreEntry entry)
+        {
+            if (entry == null) return;
+            entry.floor = Mathf.Clamp(entry.floor, 0, EndlessCatalog.MaxFloor);
+            entry.cleared = Mathf.Clamp(entry.cleared, 0, EndlessCatalog.MaxFloor);
+            entry.kills = Mathf.Clamp(entry.kills, 0, 100000000);
+            entry.paragon = Mathf.Clamp(entry.paragon, 0, GameConfig.MaxParagonLevel);
+            entry.rebirth = Mathf.Clamp(entry.rebirth, 0, 1000000);
+            entry.seconds = Mathf.Clamp(entry.seconds, 0, EndlessRunState.MaxSeconds);
+            if (entry.reason < (int)EndlessEndReason.None || entry.reason > (int)EndlessEndReason.Reset)
+                entry.reason = (int)EndlessEndReason.None;
+            // 时间戳异常（0 / 未来）统一当「未知」，UI 显示成 —。
+            if (entry.endedUtc < 0) entry.endedUtc = 0;
         }
     }
 }

@@ -589,16 +589,16 @@ _achievementsButton.onClick.AddListener(OnAchievementsClicked);
 - [x] v10反复读档不重复种数或发钱；缺结构、重复/空/未知ID、负计数、非法mask、非有限质量可修复；点数仅派生，未知ID保留不计分。
 - [x] 成就 schema>1 或存档 version>10 不自动降级覆盖；可提示并保持原数据。
 - [ ] 锁定同一批金币/stats/unlocked 快照：模拟保存失败能观察 dirty与提示，重试不重复结算；未成功保存时切档/重载被阻止；初始化/转生无中途半快照写入。
-- [ ] 槽A/B切换独立，删非当前槽不影响当前（已验证）；删当前/ResetGame显式重建、来源槽toast和挑战隔离尚未重跑。
+- [x] 槽A/B切换独立，删非当前槽不影响当前（已验证）；删当前槽/ResetGame 显式重建、来源槽 toast 与挑战隔离已重跑（2026-10-22，见 §16.2）。
 - [x] 实测 v10 主档 JSON 3,635 字节；目标平台上限未测，不把“<8KB”当兼容承诺。
 
 ### 11.3 UI与回归
 
 - [x] 1280×720入口/页签/16条分页/过滤/关闭无溢出；空筛选不出现1/0；字体能显示图标，否则回退文字「成就」。
 - [x] 打开成就时血量、攻击、恢复与商店计时冻结；自动保存/UI计时正常；关闭恢复；与技能选择、设置、引导、对比、无尽结果和转生全部互斥。
-- [ ] 模态/横幅暂缓显示已验证；五条连续toast、点击穿透与遮挡尚未全测。
+- [x] 模态/横幅暂缓显示已验证；五条连续 toast、点击穿透与遮挡已全测（2026-10-22，见 §16.1）。
 - [x] 编译无新增错误/警告；NewGameProgression.RunAssert、BalanceRegression.RunStaticOnly、转生/无尽相关现有回归通过。
-- [ ] 同状态同种子的纯战斗结果尚未逐帧比对；自然养成经济变化已单独记录。合法五槽/明确转生状态的无尽探针已验证 250 层（4/10），但不稳定。
+- [x] 同状态同种子的纯战斗结果已逐帧比对：262 帧逐帧一致、首处差异 -1，换种子即分叉（2026-10-22，见 §16.3）；注意**同一进程里第一次开打必须先热身**，冷启动首战会多消耗一个随机数。自然养成经济变化已单独记录。合法五槽/明确转生状态的无尽探针 250 层 4/10、260 层 1/10（§15.2），属数值口径，不随本次比对改变。
 
 ## 12. 分阶段实现
 
@@ -672,7 +672,34 @@ _achievementsButton.onClick.AddListener(OnAchievementsClicked);
 
 - 未模拟 PlayerPrefs 写入失败/中途崩溃的原子性；PlayerPrefs 仍不提供强一致保证。
 - 42 条成就的完整视觉遍历（每条长文案、所有筛选/分页组合）未逐条截图；已抽检分类、分页、完成行、称号与 toast。
-- 来源槽 toast/无阵亡挑战隔离，以及删除当前槽/ResetGame 的完整 Play 回归未单独重跑；本次只验证了槽 1/2 数据独立与删非当前槽。
+- ~~来源槽 toast/无阵亡挑战隔离，以及删除当前槽/ResetGame 的完整 Play 回归未单独重跑~~：2026-10-22 已补测，见 §16.2。
 - 指标边界使用合成数据；没有真实长跑 10,000/100,000 击杀的性能样本。
 - 经济探针为模板注入（+43,400 是上界），不代表真人手动换装/犹豫。
 - 真实 v10 存档约 3,635 字节；未测目标平台 PlayerPrefs 上限，不作 <8KB 兼容承诺。
+
+## 16. 补验记录（2026-10-22，Play 模式 1280×720）
+
+> 补的是 §11.2「槽A/B切换独立…」、§11.3「五条连续toast…」与「同状态同种子的纯战斗结果」三处遗留。全部在 Play 模式、当前槽为「存档 1」时执行，没有改任何玩法数值。
+
+### 16.1 Toast：连续播放、点击穿透、遮挡
+
+- 反射 `OnAchievementUnlocked` 连推 5 条（`first_kill` / `first_drop` / `first_equip` / `first_death` / `first_enhance`，gold=100）。每秒 15 次采样：队列 4→3→2→1→0，标题顺序「初出茅庐 → 第一件战利品 → 换上新装 → 交学费 → 第一次强化」与调用顺序一致；最后一条播完 `activeSelf=False`、`_achToastActive=False`，无重叠、无跳播。
+- 穿透：toast 面板实测 (600,430,500,56)、`CanvasGroup.blocksRaycasts=False`；取样点 `RectangleContainsScreenPoint` 为 True（确实落在面板内），同点 `EventSystem.RaycastAll` 只命中背后的 `LogTickerHit`（战斗日志 ticker 的透明按钮）→ **toast 不拦点击**。
+- 遮挡：面板底边 y=486，商店顶边 492，留 6px；不压血条、属性、技能栏与底部按钮。唯一遮到的是舞台底部 ticker 的右侧（x 600..758）。判定**可接受并保持原位**：ticker 只是最近两条摘要，完整日志可展开，toast 2.8s 自动消失，设计稿 §10.4 本来就允许短暂覆盖日志。
+
+### 16.2 删除当前槽 / ResetGame
+
+1. 反射 `TryOpenNoDeathAttempt(9,1)` 置 `_noDeathActive=True`，再推 3 条 toast → 队列 3。
+2. 删除前采样 `q=2 toast=True`（确认播放中）。
+3. `game.DeleteSlot(1)`（删当前槽）→ PlayerData 重建：`slot=1 lv=1 exp=0 gold=0 hasSave=False`。
+4. 删除后采样：`q=0 toast=False noDeath=False ach=0 kills=0 deaths=0 endlessRunNull=True running=False`。
+5. 槽隔离：`SwitchSlot(0)` 回到 `lv=100 / gold 2,304,177 / 成就 21 条 / 历史榜 2 条`，与删槽前一致。
+
+→ 显式重建、`NotifyContextReset()` 清空并隐藏 toast 队列、无阵亡挑战清零、统计清零、无尽局置空、磁盘槽已清。测试用的槽 1 原本就是 Lv.1 空档（备份文件因目录不存在未写成），**现在仍是空档**，没有数据损失。
+
+### 16.3 同状态同种子逐帧比对
+
+- 方法：`JsonUtility.ToJson(game.Player)` 快照，在 eval 里克隆独立 `PlayerData`，手工构造同一只怪物（近战 / 精英 / Lv110 / 40000HP / 护盾 312 / 攻 3000 / 防 5100 / 速 95 / 暴击 5% / 1.5×），`UnityEngine.Random.InitState(seed)` 后以 1/60 秒固定步长 `Tick`，逐帧记录 `主角HP|怪物HP|主角护盾|怪物护盾|日志条数`。
+- 结果：同种子两次 **262 帧逐帧完全一致**（`firstDiff=-1`、63 条日志、结束于 `MonsterKilled`）；换 `seed=777` 立即分叉（`sameAC=False`），证明比对不是恒等。
+- ⚠️ 冷启动例外：同一 eval 内第 1 次跑与之后不同（第 1 次 277 帧、首帧伤害 1,795 vs 1,933，正好差一个随机数）。加一次「哑巴 Tick 热身」（`new PlayerData()` + 1HP 小怪打一帧）后立刻一致；先热身再建 `MonsterData` 也复现，说明不是 `JsonUtility` 的问题，而是 Tick 调用链里的一次性静态初始化会消耗 `UnityEngine.Random`。**以后写战斗探针：进程内第一次 Tick 之前先热身，否则首战不可复现。**
+- 250 层无尽探针的不稳定与这条无关（同一进程里跑多次，早已热身），4/10、260 层 1/10 的分布是数值方差，口径见 §15.2 与 `_balance/README.md`。

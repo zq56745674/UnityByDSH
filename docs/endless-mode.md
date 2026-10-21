@@ -1,7 +1,7 @@
 # 无尽模式与最高层记录设计
 
 状态：2026-10-19 已实现并通过首轮平衡（README 路线图第 11 项「无尽模式 + 最高层记录」）
-涉及存档：v8（SaveData 在 v7 的 endlessBestFloor 之上新增五槽装备与 slotStarterMask；v6 旧档按 0 迁移）
+涉及存档：v11（v7 加 endlessBestFloor、v8 加五槽装备与 slotStarterMask、v9 转生、v10 成就、v11 加 Top-5 历史榜 endlessTop；旧档按版本分支迁移）
 已新增：Assets/Scripts/Endless.cs、Assets/Scripts/GameController.Endless.cs、Assets/Scripts/GameUI.Endless.cs、Assets/Editor/EndlessPacing.cs
 已修改：GameConfig.cs / GameConfigData.cs / game_config.json / GameConfig.Loader.cs / Models.PlayerData.cs / Models.cs / GameController.cs / SaveSystem.cs / GameUI.cs / GameUI.Core.cs / GameUI.Panels.cs / README.md
 实测基线（2026-10-19，20 种子）：P200 满装模板首死中位 45 层，P10 30 / P90 50 / max 60；50 层累计金币约 37.2 万。见 §12.4。
@@ -50,7 +50,7 @@
 - 不做联网排行榜、赛季、赛季重置或服务器校验。
 - 不做无尽专属角色、专属货币、专属装备槽。
 - 不做「保留未完成的一局、下次继续」——退出即放弃本局，纪录已即时保存。
-- 不做 Top-N 历史榜（首版只存一条最高层；需要时再加）。
+- 不做联网排行榜；本档 Top-5 历史榜已于 2026-10-22 落地（v11，§6.5），只存在本机存档里。
 - 不与成就系统联动（以后可以在成就里引用「最高层 ≥ N」，但本设计不新增成就）。
 - 不重画怪物/立绘，不新增音效；表现层沿用现有卡牌与横幅。
 - 不改变战役的 11 章 × 10 关结构，不把无尽层塞进 StageCatalog。
@@ -419,6 +419,7 @@ FloorGoldOf / FirstClearGoldOf 内部用 long 计算，最后夹到 0..int.MaxVa
 | 全局最高层 | 本机三个存档中已清除的最高层 | PlayerPrefs |
 | 本局清除层数 | 本局实际清完的层数；从检查点开始时从 0 计 | 运行时 EndlessRunState，不存档 |
 | 本局到达层 | 死亡/撤退时所在的层（可能没清完） | 运行时，仅结果面板显示 |
+| 本档历史榜 endlessTop | 最近 5 局「打完」的成绩（层数/清除/巅峰/用时/结局） | PlayerData → SaveData（v11，§6.5） |
 
 规则：
 
@@ -476,7 +477,62 @@ EndlessRecord 静态类：
 4. 横幅：新纪录时「★ 新纪录 · 无尽第 N 层」，副标题「本档最高 N 层 · +X 金币」；非新纪录只显示「第 N 层通过」。
 5. 日志：「◆ 无尽第 N 层开始」「★ 第 N 层通过」「★ 新纪录：无尽第 N 层」「第 N 层阵亡，本局结束」「已撤退（第 N 层）」。
 
-## 7. 存档 v7（历史，当前 v8）
+### 6.5 Top-5 历史榜（v11，2026-10-22）
+
+`endlessBestFloor` 只回答「这档最强到哪」，回答不了「哪一局打得最好、什么时候、花了多久」。v11 起每档额外保存最近 5 局**打完的**成绩。
+
+数据结构（Assets/Scripts/Endless.cs）：
+
+```csharp
+[Serializable] public sealed class EndlessScoreEntry
+{
+    public int floor;      // 到达层（可能没清完，等于结束时的 run.floor）
+    public int cleared;    // 本局清完的层数（检查点开局从 0 计）
+    public int kills;      // 本局击杀数
+    public int paragon;    // 结束时巅峰等级
+    public int rebirth;    // 结束时转生次数（界面显示为「第 rebirth+1 世」）
+    public int seconds;    // 用时，结束那一刻锁定（EndlessRunState.finishSeconds）
+    public long endedUtc;  // 结束时刻，DateTime.UtcNow.Ticks（本地显示为 MM-dd HH:mm）
+    public int reason;     // EndlessEndReason 的整型值：1=Death 2=Retreat
+}
+```
+
+`PlayerData.endlessTop` 是 `List<EndlessScoreEntry>`，最多 5 条（`EndlessHistory.Capacity`）。存档 v11；v10 及更旧档读入时得到空列表。
+
+排序（`EndlessHistory.Compare`）：
+
+1. `floor` 降序——比的是这一局把纪录推到哪；
+2. `cleared` 降序——同层时清得多的更好（检查点开局的层数差异）；
+3. `endedUtc` 升序——**先达成的站住**，后来者同成绩排后面；
+4. `seconds` 降序——同层同清同刻（理论上不会发生）时给用时长的。
+
+写入时机：只在 `EndEndlessRun` 收到 `Death` / `Retreat` 时调用 `RecordEndlessHistory`。
+
+| 结束原因 | 进榜 | 理由 |
+|---|---|---|
+| Death（阵亡） | 是 | 一局真的打完了 |
+| Retreat（撤退） | 是 | 主动收手，同样是一局的完整成绩 |
+| SlotChanged（换档）/ Reset（重置） | 否 | 与 §4.1 第 4 条「退出游戏放弃本局」同义，中途掐掉不给成绩，也避免切档刷榜 |
+
+细节：
+
+- 上榜才 `SaveSystem.Save(Player)`；排到第 6 名的不写盘，避免无意义 IO。
+- 名次写回 `EndlessRunState.historyRank`（1..5，0 = 没上榜），结果面板第三行据此显示「历史榜第 N 名 / 未进历史榜前 5」。
+- 「◀ 本次」标记：`GameController.LastEndlessRecordUtc` 记住刚记录那一局的 `endedUtc`，历史榜行比对时间戳。**不能**用 `historyRank` 比对——点「返回战役」时 `EndlessRun` 已被置空。
+- 用时必须在结束那一刻锁定（`finishSeconds`），否则结果面板开着时 `Seconds` 还会继续涨。
+- `EndlessHistory.Clamp` 对读档/写入的每条做夹取：floor/cleared ∈ 0..9999、kills ∈ 0..1e8、paragon ∈ 0..1000、rebirth ∈ 0..1e6、seconds ∈ 0..30 天、reason 越界归 None、endedUtc < 0 归 0。坏档不会让面板崩。
+- 删档/重置会重建 PlayerData，历史榜随档清空（与 endlessBestFloor 一致）；全局最高层仍在 PlayerPrefs 里保留。
+- 老档不补历史：一条 bestFloor 无法反推单局成绩，宁可空着。
+
+实测（2026-10-22，Play 模式）：两次真实无尽局（第 15 层 / 1m10s / 撤退、第 5 层 / 17s / 撤退）正确入榜并按 floor 排序；存档 JSON 出现 `version:11` 与 `endlessTop:[{floor:15,cleared:14,kills:59,paragon:177,rebirth:0,seconds:70,...}]`；v10 档（手工把版本改回 10 并删掉 endlessTop）读入后 `endlessTop.Count == 0`、等级与 bestFloor 不变。
+
+### 6.6 Top-5 不上榜的边界
+
+- 局内退出游戏：本局直接消失，连「未完成」都不记（与 §4.1 一致）。
+- 换档/重置：`EndEndlessRun(SlotChanged|Reset)` 不记录，因此不能用「切档再切回」制造成绩。
+- 同一局的重复结束：`EndEndlessRun` 开头有 `if (Mode != GameMode.Endless) return;`，第二次调用不会重复入榜。
+
+## 7. 存档 v7（历史，当前 v11）
 
 ### 7.1 字段
 
@@ -555,9 +611,10 @@ ResetSessionState() 需要追加：
     │ 本档最高  第 12 层          全局最高  第 18 层          │
     │ 起始层    第 8 层（本档最高 − 偏移）                      │
     │                                                          │
-    │ 规则                                                     │
+    │ [规则] [历史榜]                                          │
     │ · 每层清完立刻进入下一层；每 5 层一个 BOSS。              │
     │ · 死亡或撤退结束本局；最高层只记「已清除」的层。          │
+    │ · 每局结束会记进本档历史榜（最多 5 局）；中途退出/换档/重置不算。│
     │ · 掉落等级封顶 150；层通过给金币，新纪录额外给首通金币。  │
     │                                                          │
     │ [开始挑战] [从第 1 层开始] [返回战役]                    │
@@ -584,6 +641,31 @@ ResetSessionState() 需要追加：
     Text _endlessRetryLabel, _endlessResultReturnLabel;
     float _endlessRetreatConfirmUntil;
 
+    // v11 历史榜页签（规则/历史榜共用同一块内容区）
+    Button _endlessRulesTab, _endlessHistoryTab;
+    Text _endlessRulesTabLabel, _endlessHistoryTabLabel;
+    Text _endlessHistoryHint, _endlessHistoryEmpty;
+    Image[] _endlessHistoryRows;        // 5 行卡片
+    Text[] _endlessHistoryRowTexts;
+    bool _endlessHistoryOpen;
+
+历史榜态（§6.5）：
+
+    ┌ 无尽模式 ──────────────────────────────────────── [关闭] ┐
+    │ 本档最高  第 14 层          全局最高  第 250 层         │
+    │ 起始层    第 10 层（本档最高 − 4）                        │
+    │ [规则] [历史榜]                                          │
+    │ 本档历史最好 5 局 · 按到达层数 → 本局清除 → 先达成排序    │
+    │ 1  第 15 层   清 14 层 · P177 · 1m10s · 10-22 01:16 · 撤退│
+    │ 2  第 5 层    清 4 层 · P177 · 17s · 10-22 01:17 · 撤退 ◀ 本次│
+    │                                                          │
+    │ [开始挑战] [从第 1 层开始] [返回战役]                    │
+    └──────────────────────────────────────────────────────────┘
+
+- 页签常驻显示，不因无数据隐藏；空态（「还没有完成的无尽局。阵亡或撤退结束一局后，这里会记下成绩（中途退出/换档不算）」）才是没有数据的唯一表达。
+- 页签状态 `_endlessHistoryOpen` 跨开合保留：本次会话看过历史榜，下次打开还是历史榜。
+- 「◀ 本次」只在本次会话刚打完的那一局上出现（比对 `LastEndlessRecordUtc`）。
+
 ### 8.3 结果面板
 
 560×300，居中 (360,210)；模态，背景压暗。
@@ -591,6 +673,7 @@ ResetSessionState() 需要追加：
     ┌ 本局结束 ─────────────────────────────────────┐
     │ 第 13 层阵亡                                   │
     │ 本局清除 12 层 · 本档最高 12 层 · 全局最高 18 层 │
+    │ 用时 1m10s · 历史榜第 1 名                     │
     │                                                │
     │ [再次挑战（第 8 层）] [返回战役]               │
     └────────────────────────────────────────────────┘
@@ -1127,6 +1210,6 @@ Play 模式验收顺序建议：
 | 本档/全局记录 | 两者都显示 | 只做本档（少了跨档目标） |
 | 首通金币 | 新纪录才发 | 每层都发（金币通胀） |
 | 未完成局是否存档 | 不存，退出即放弃 | 存当前层/击杀数（增加存档复杂度与 SL 空间） |
-| Top-N 历史 | 首版不做 | 以后加 5 条（层数/日期/构筑） |
+| Top-N 历史 | 已实现（v11，§6.5）：本档保存最近 5 局 | 只留一条最高层（无法回看单局成绩） |
 
 以上默认均已按推荐实现（2026-10-19）；后续若调整无尽平衡，按 §12.2 的顺序改配置并重跑 EndlessPacing 探针。

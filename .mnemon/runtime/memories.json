@@ -98,6 +98,13 @@
       "updated_at": "2026-10-21T07:29:16.585Z",
       "target": "memory",
       "importance": "normal"
+    },
+    {
+      "content": "HelloWorldProject 战斗可复现性：BattleSystem.Tick 只用 UnityEngine.Random（无 Time/DateTime），同状态同种子逐帧完全一致（实测 262 帧 firstDiff=-1），但**同一进程内第一次 Tick 会多消耗一个随机数**（冷启动首战 277 帧、与热态分叉）；写战斗探针前先做一次哑巴 Tick 热身即可复现。存档 2026-10-22 起为 v11，新增 PlayerData.endlessTop（本档 Top-5 历史榜，只记阵亡/撤退结束的局）。",
+      "created_at": "2026-10-21T17:28:29.382Z",
+      "updated_at": "2026-10-21T17:28:29.382Z",
+      "target": "memory",
+      "importance": "normal"
     }
   ]
 }

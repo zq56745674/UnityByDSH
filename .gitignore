@@ -58,6 +58,13 @@ _art/*.bak
 _art/tooltip-crop.png
 _art/tooltip-a-crop.png
 _art/tooltip-b-crop.png
+
+# 精灵/特效概念图、切图中间产物、实机验证截图（P4 表现层，见 docs/sprites-and-fx.md）
+_art/sprites/
+_art/stage/
+
+# 无尽 Top-5 历史榜的实机验收截图（见 docs/endless-mode.md §6.5）
+_art/topn/
 _balance/*.bak
 
 # 归档区：拆分前的备份、早期截图，保留在本地但不入库

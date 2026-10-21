@@ -31,6 +31,8 @@ namespace AutoBattle
             RefreshDps(dt, textTick);
             ParseNewLogs();
             TickConfirms();
+            // 舞台用真实时间：呼吸和抖动不能跟着 x4 一起抽搐。
+            TickBattleStage(Time.deltaTime);
 
             Refresh(textTick);
         }
@@ -187,7 +189,8 @@ namespace AutoBattle
             }
 
             // DPS 胶囊整个隐藏：只清文本不够，胶囊底与边框还留在日志标题行上。
-            if (!GameSettings.ShowDps)
+            // 日志展开时也一起藏起来——展开面板会盖住舞台顶栏，胶囊留在上面会压住标题。
+            if (!GameSettings.ShowDps || _battleLogOpen)
             {
                 if (_dpsPill != null && _dpsPill.gameObject.activeSelf) _dpsPill.gameObject.SetActive(false);
                 return;
@@ -277,11 +280,12 @@ namespace AutoBattle
                     // 普通命中按 1/3 概率丢弃——飘字是节奏感，不是逐条回执，日志里有全量。
                     if (crit || UnityEngine.Random.value > 0.5f)
                     {
+                        // 落点跟着怪物走：飘字层压在舞台上方，怪物躯干在层内的 y 约 250~290。
                         SpawnFloat(crit ? dmg + "!" : dmg.ToString(),
                             crit ? GameConfig.FloatCrit : GameConfig.TextNormal,
                             crit ? 19 : 14,
-                            470f + UnityEngine.Random.Range(0f, 190f),
-                            20f + UnityEngine.Random.Range(0f, 44f));
+                            522f + UnityEngine.Random.Range(0f, 140f),
+                            250f + UnityEngine.Random.Range(0f, 34f));
                     }
                     _dpsDamageAccum += dmg;
                     continue;
@@ -292,8 +296,8 @@ namespace AutoBattle
                 {
                     int dmg = int.Parse(mSkill.Groups[1].Value);
                     SpawnFloat(dmg.ToString(), GameConfig.FloatDamage, 17,
-                        660f + UnityEngine.Random.Range(0f, 70f),
-                        20f + UnityEngine.Random.Range(0f, 44f));
+                        548f + UnityEngine.Random.Range(0f, 104f),
+                        246f + UnityEngine.Random.Range(0f, 40f));
                     _dpsDamageAccum += dmg;
                     continue;
                 }
@@ -633,28 +637,80 @@ namespace AutoBattle
             RefreshBanner();
         }
 
-        /// <summary>只有日志确实变化时才重建文本，避免每帧拼接大字符串。</summary>
+        /// <summary>
+        /// 日志双写：底部 ticker 只留最新两行（旧在上、新在下，和聊天一样从下往上读），
+        /// 展开面板写最近 180 条。只有 LogVersion 变了才重建，避免每帧拼大字符串。
+        /// </summary>
         private void RefreshLog()
         {
             if (_game.LogVersion == _lastLogVersion) return;
             _lastLogVersion = _game.LogVersion;
 
-            var sb = new System.Text.StringBuilder(4096);
             int count = _game.Log.Count;
-            int from = Mathf.Max(0, count - MaxVisibleLogLines);
 
-            // 倒序：最新的一条在最上面。
-            for (int i = count - 1; i >= from; i--)
+            // ---- ticker：两行 ----
+            var ticker = new System.Text.StringBuilder(256);
+            int tickerFrom = Mathf.Max(0, count - 2);
+            for (int i = tickerFrom; i < count; i++)
             {
-                LogEntry e = _game.Log[i];
-                sb.Append("<color=#");
-                sb.Append(ColorUtility.ToHtmlStringRGB(e.color));
-                sb.Append('>');
-                sb.Append(e.message);
-                sb.Append("</color>\n");
+                if (i > tickerFrom) ticker.Append('\n');
+                AppendTickerLine(ticker, _game.Log[i]);
+            }
+            if (_logText != null) _logText.text = ticker.ToString();
+
+            // ---- 展开面板：旧在上、新在下，读完自动跟到底 ----
+            var detail = new System.Text.StringBuilder(16384);
+            int detailFrom = Mathf.Max(0, count - MaxDetailLogLines);
+            for (int i = detailFrom; i < count; i++)
+            {
+                AppendLogLine(detail, _game.Log[i]);
+                detail.Append('\n');
+            }
+            FillBattleLogDetail(detail.ToString(), count);
+        }
+
+        /// <summary>
+        /// ticker 单行：压掉日志自带的换行（掉落类会写第二行「◆ 词条」），过长截断。
+        /// 不压就该占两行，ticker 只留两行时后一条会被挤掉。
+        /// </summary>
+        private static void AppendTickerLine(System.Text.StringBuilder sb, LogEntry entry)
+        {
+            const int MaxChars = 78;
+            sb.Append("<color=#");
+            sb.Append(ColorUtility.ToHtmlStringRGB(entry.color));
+            sb.Append('>');
+
+            string msg = entry.message;
+            int shown = 0;
+            for (int i = 0; i < msg.Length; i++)
+            {
+                char c = msg[i];
+                if (c == '\n' || c == '\r')
+                {
+                    sb.Append("  ");
+                    continue;
+                }
+                if (c == '\t') continue;
+                if (shown >= MaxChars)
+                {
+                    sb.Append('…');
+                    break;
+                }
+                sb.Append(c);
+                shown++;
             }
 
-            _logText.text = sb.ToString();
+            sb.Append("</color>");
+        }
+
+        /// <summary>日志一行（按条目的颜色包裹）。ticker 与展开面板共用，颜色口径不会走岔。</summary>
+        private static void AppendLogLine(System.Text.StringBuilder sb, LogEntry entry)
+        {
+            sb.Append("<color=#");
+            sb.Append(ColorUtility.ToHtmlStringRGB(entry.color));
+            sb.Append('>');
+            sb.Append(entry.message);
+            sb.Append("</color>");
         }
 
         /// <summary>

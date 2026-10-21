@@ -21,3 +21,5 @@ Unity 工程 HelloWorldProject（E:\pytest\unitydsh1）：装备评分口径已�
 HelloWorldProject 的 game_config.json 必须与 GameConfigData 的 97 个字段一一对应（当前 97 键）；GameConfig.Loader 加载后会用 ReportMissingKeys 对缺键打警告，缺字段不再静默回退默认值。历史备份、拆分前旧代码与一次性开发截图统一放工作区根的 _archive/（已 gitignore，内含 README 说明），不要留在仓库根或 Assets 里。
 §
 HelloWorldProject 的 BGM 是四首本地 MP3（let_me_go / big_fish_cat / embrace / sadness_water），放在 HelloWorldProject/Assets/Resources/Music/，源自 D:\QQMusic 的星落落oi；该目录已 .gitignore，换机/克隆需自备文件。GameMusic.cs 管自动播放、自选、列表/单曲循环与音量（主音量×MusicVolume），GameUI.Music.cs 是顶部音符面板，曲目表在 MusicCatalog；第四首是《我的悲伤是水做的（大肥鱼版）》，224.8s。
+§
+HelloWorldProject 战斗可复现性：BattleSystem.Tick 只用 UnityEngine.Random（无 Time/DateTime），同状态同种子逐帧完全一致（实测 262 帧 firstDiff=-1），但**同一进程内第一次 Tick 会多消耗一个随机数**（冷启动首战 277 帧、与热态分叉）；写战斗探针前先做一次哑巴 Tick 热身即可复现。存档 2026-10-22 起为 v11，新增 PlayerData.endlessTop（本档 Top-5 历史榜，只记阵亡/撤退结束的局）。

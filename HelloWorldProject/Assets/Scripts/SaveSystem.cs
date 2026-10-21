@@ -21,9 +21,10 @@ namespace AutoBattle
         /// v8：加入头盔 / 鞋 / 饰品三个槽位与解锁赠礼掩码（slotStarterMask）；
         /// v9：加入转生次数 / 印记 / 历史巅峰与五条永久升级等级。
         /// v10：加入跨世累计统计（stats）与成就状态（achievements）。
+        /// v11：加入无尽 Top-N 历史榜（endlessTop，最多 5 局）。
         /// 旧档缺 version 字段时读到 0，据此判断需要迁移。
         /// </summary>
-        private const int CurrentSaveVersion = 10;
+        private const int CurrentSaveVersion = 11;
 
         /// <summary>成就状态结构版本；比它新的档拒绝读取，避免旧版本覆盖新结构。</summary>
         public const int CurrentAchievementSchema = 1;
@@ -222,6 +223,9 @@ namespace AutoBattle
             /// <summary>v7 起：无尽模式已清过的最高层（0 = 未打过）。</summary>
             public int endlessBestFloor;
 
+            /// <summary>v11 起：无尽 Top-N 历史榜（最多 5 局）。</summary>
+            public List<EndlessScoreEntry> endlessTop;
+
             /// <summary>v9 起：转生次数 / 未花印记 / 历史最高巅峰。</summary>
             public int rebirthCount;
             public int rebirthMarks;
@@ -280,6 +284,7 @@ namespace AutoBattle
                 accessory = player.accessory,
                 slotStarterMask = player.slotStarterMask,
                 endlessBestFloor = Mathf.Clamp(player.endlessBestFloor, 0, 9999),
+                endlessTop = EndlessHistory.CopyTop(player.endlessTop),
                 rebirthCount = player.rebirthCount,
                 rebirthMarks = player.rebirthMarks,
                 rebirthBestParagon = player.rebirthBestParagon,
@@ -468,6 +473,12 @@ namespace AutoBattle
             int endlessBest = data.version >= 7 ? Mathf.Clamp(data.endlessBestFloor, 0, 9999) : 0;
             player.endlessBestFloor = endlessBest;
             EndlessRecord.SyncGlobal(endlessBest);
+
+            // v11：历史榜。旧档没有这份名单，空榜即可（最高层仍在 *BestFloor 里，
+            // 面板会显示「还没有历史记录」）；读进来一律按同一规则重排并裁到 5 条。
+            player.endlessTop = data.version >= 11
+                ? EndlessHistory.FromSave(data.endlessTop)
+                : new System.Collections.Generic.List<EndlessScoreEntry>();
 
             // v9：转生状态。旧档与坏档全部归零；rank 超出 0..5 夹取。
             // 「次数为 0 却带着等级/印记」只可能来自手改档，整组清掉，避免凭空获得永久加成。

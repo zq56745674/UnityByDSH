@@ -175,6 +175,8 @@ namespace AutoBattle
         {
             AchievementSystem.Unlocked -= OnAchievementUnlocked;
             AchievementSystem.ContextReset -= OnAchievementContextReset;
+            // 战斗舞台订阅了 BattleSystem.Visual；BattleSystem 活得比界面久，不退订会后患。
+            UnhookBattleVisual();
         }
 
         // ==================== 事件 ====================

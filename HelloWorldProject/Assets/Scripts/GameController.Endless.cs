@@ -35,6 +35,9 @@ namespace AutoBattle
             && !ChoicePending;
 
         /// <summary>打开 / 关闭无尽面板。结果面板开着时禁止，避免两层浮层叠在一起。</summary>
+        /// <summary>刚记进历史榜的那一局的时间戳（0 = 本次会话还没打完过）；UI 用来标「本次」。</summary>
+        public long LastEndlessRecordUtc { get; private set; }
+
         public void ToggleEndlessPanel()
         {
             if (ChoicePending || EndlessResultOpen) return;
@@ -82,6 +85,8 @@ namespace AutoBattle
                 runKills = 0,
                 clearedThisRun = 0,
                 endReason = EndlessEndReason.None,
+                startedUtc = System.DateTime.UtcNow.Ticks,
+                historyRank = 0,
             };
 
             Mode = GameMode.Endless;
@@ -296,6 +301,12 @@ namespace AutoBattle
 
             EndlessRun.endReason = reason;
             EndlessRun.reachedFloor = EndlessRun.floor;
+            EndlessRun.finishSeconds = EndlessRun.Seconds;
+
+            // 只有「真的打完一局」（阵亡/撤退）才进历史榜。换档/重置是把这一局掐掉，
+            // 与「退出游戏放弃本局」同一语义，不占榜单，也不落盘。
+            if (reason == EndlessEndReason.Death || reason == EndlessEndReason.Retreat)
+                RecordEndlessHistory(reason);
 
             Mode = GameMode.Campaign;
             IsRunning = false;
@@ -305,6 +316,37 @@ namespace AutoBattle
             _justClearedStage = false;
             EndlessPanelOpen = false;
             EndlessResultOpen = reason == EndlessEndReason.Death || reason == EndlessEndReason.Retreat;
+        }
+
+        /// <summary>
+        /// 把这一局记进本档 Top-5 历史榜，名次写回 <see cref="EndlessRunState.historyRank"/>（0 = 没上榜）。
+        /// 上榜才落盘：没上榜的局不改变存档内容，没必要多写一次 PlayerPrefs。
+        /// </summary>
+        private int RecordEndlessHistory(EndlessEndReason reason)
+        {
+            if (Player == null || EndlessRun == null) return 0;
+
+            var entry = new EndlessScoreEntry
+            {
+                floor = Mathf.Clamp(EndlessRun.reachedFloor, 0, EndlessCatalog.MaxFloor),
+                cleared = Mathf.Max(0, EndlessRun.clearedThisRun),
+                kills = Mathf.Max(0, EndlessRun.runKills),
+                paragon = Mathf.Clamp(Player.paragonLevel, 0, GameConfig.MaxParagonLevel),
+                rebirth = Mathf.Max(0, Player.rebirthCount),
+                seconds = EndlessRun.finishSeconds,
+                endedUtc = System.DateTime.UtcNow.Ticks,
+                reason = (int)reason,
+            };
+
+            int rank = EndlessHistory.Insert(Player.endlessTop, entry);
+            EndlessRun.historyRank = rank;
+            LastEndlessRecordUtc = entry.endedUtc;
+            if (rank > 0)
+            {
+                SaveSystem.Save(Player);
+                AddLog($"🏆 第 {entry.floor} 层 · 本档历史榜第 {rank} 名", GameConfig.LogUnlock);
+            }
+            return rank;
         }
     }
 }

@@ -3,6 +3,40 @@ using UnityEngine;
 
 namespace AutoBattle
 {
+    /// <summary>
+    /// 战斗表现事件（P4 舞台用）。战斗只负责「发生了什么」，怎么发光、怎么抖由 UI 决定——
+    /// 这样战斗逻辑不需要引用任何 UI 类型，也能被探针脚本无界面地跑。
+    /// </summary>
+    public enum BattleFx
+    {
+        /// <summary>主角普通命中。</summary>
+        PlayerHit,
+        /// <summary>主角暴击。</summary>
+        PlayerCrit,
+        /// <summary>重击类技能。</summary>
+        SkillHeavy,
+        /// <summary>旋风斩。</summary>
+        SkillWhirlwind,
+        /// <summary>斩杀。</summary>
+        SkillExecute,
+        /// <summary>反击。</summary>
+        SkillCounter,
+        /// <summary>其他主动技能（暴击连锁等）。</summary>
+        SkillOther,
+        /// <summary>怪物普通命中。</summary>
+        MonsterHit,
+        /// <summary>怪物暴击。</summary>
+        MonsterCrit,
+        /// <summary>吸血回复。</summary>
+        Drain,
+        /// <summary>护盾生成。</summary>
+        Shield,
+        /// <summary>剧毒词缀。</summary>
+        Poison,
+        /// <summary>狂暴开启。</summary>
+        Berserk,
+    }
+
     /// <summary>一次战斗推进的结果。</summary>
     public enum BattleTickResult
     {
@@ -24,6 +58,18 @@ namespace AutoBattle
     /// </summary>
     public class BattleSystem
     {
+        /// <summary>
+        /// 战斗表现事件：参数是 (发生了什么, 数值)。数值目前是伤害/回复量，
+        /// UI 没用到时可以直接忽略（挂机跑回归时没有订阅者，开销为 0）。
+        /// </summary>
+        public event System.Action<BattleFx, int> Visual;
+
+        private void RaiseVisual(BattleFx fx, int value = 0)
+        {
+            System.Action<BattleFx, int> handler = Visual;
+            if (handler != null) handler(fx, value);
+        }
+
         /// <summary>主角距离下次攻击的剩余时间。</summary>
         private float _playerAttackTimer;
 
@@ -240,12 +286,16 @@ namespace AutoBattle
                     $"主角 → 怪物  {(crit ? "暴击 " : "")}{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp}{shieldLeft})",
                     crit ? GameConfig.LogGold : GameConfig.LogInfo);
                 GameAudio.PlayHit(crit);
+                RaiseVisual(crit ? BattleFx.PlayerCrit : BattleFx.PlayerHit, dmg);
 
                 // 吸血鬼：按实际造成的伤害（含护盾吸收部分）回血。
                 int healed = ApplyLifesteal(player, dmg);
                 if (healed > 0)
+                {
+                    RaiseVisual(BattleFx.Drain, healed);
                     log.AddCombat($"✦ 吸血 +{healed}   (主角 {player.currentHp}/{player.MaxHp})",
                         SkillCatalog.Get(SkillId.Vampire).color);
+                }
 
                 // 暴击连锁：暴击时按概率追加一次伤害。
                 if (crit && !monster.IsDead && player.HasSkill(SkillId.CritChain))
@@ -303,6 +353,7 @@ namespace AutoBattle
                     int poison = Mathf.Max(1, Mathf.RoundToInt(player.MaxHp * GameConfig.PoisonAffixPercent));
                     player.currentHp = Mathf.Max(0, player.currentHp - poison);
                     notes += $"  剧毒 {poison}";
+                    RaiseVisual(BattleFx.Poison, poison);
                 }
 
                 // 吸血：把本次伤害的 30% 转回自身生命。
@@ -319,6 +370,7 @@ namespace AutoBattle
                     $"怪物 → 主角  {(crit ? "暴击 " : "")}{dmg} 伤害{notes}   (主角 {player.currentHp}/{player.MaxHp})",
                     crit ? GameConfig.LogDanger : GameConfig.LogWarn);
                 GameAudio.PlayHit(crit);
+                RaiseVisual(crit ? BattleFx.MonsterCrit : BattleFx.MonsterHit, dmg);
 
                 // 反击：受击时按概率反弹伤害。
                 if (player.HasSkill(SkillId.Counter) && !monster.IsDead && player.currentHp > 0)
@@ -394,6 +446,7 @@ namespace AutoBattle
                     {
                         player.shield = amount;
                         log.AddCombat($"✦ 护盾生成  +{amount}  (护盾 {player.shield})", def.color);
+                        RaiseVisual(BattleFx.Shield, amount);
                     }
                 }
             }
@@ -437,6 +490,7 @@ namespace AutoBattle
                 int atkPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.value, player.SkillLevel) * 100f);
                 int critPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.critBonus, player.SkillLevel) * 100f);
                 log.AddCombat($"✦ 狂暴！{def.duration:0} 秒内攻击 +{atkPct}%、暴击率 +{critPct}%", def.color);
+                RaiseVisual(BattleFx.Berserk);
                 return;
             }
 
@@ -445,6 +499,19 @@ namespace AutoBattle
 
             for (int h = 0; h < hits && !monster.IsDead; h++)
                 DealSkillDamage(player, monster, giant, def, EffectiveAttack(player), log);
+        }
+
+        /// <summary>技能 id → 表现事件。没单独做特效的技能统一走 SkillOther，不额外加分支。</summary>
+        private static BattleFx SkillVisualOf(SkillId skillId)
+        {
+            switch (skillId)
+            {
+                case SkillId.HeavyStrike: return BattleFx.SkillHeavy;
+                case SkillId.Whirlwind: return BattleFx.SkillWhirlwind;
+                case SkillId.Execute: return BattleFx.SkillExecute;
+                case SkillId.Counter: return BattleFx.SkillCounter;
+                default: return BattleFx.SkillOther;
+            }
         }
 
         /// <summary>
@@ -468,11 +535,15 @@ namespace AutoBattle
             log.AddCombat(
                 $"✦ {label}！{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp})",
                 def.color);
+            RaiseVisual(SkillVisualOf(def.id), dmg);
 
             int healed = ApplyLifesteal(player, dmg);
             if (healed > 0)
+            {
+                RaiseVisual(BattleFx.Drain, healed);
                 log.AddCombat($"✦ 吸血 +{healed}   (主角 {player.currentHp}/{player.MaxHp})",
                     SkillCatalog.Get(SkillId.Vampire).color);
+            }
         }
     }
 }

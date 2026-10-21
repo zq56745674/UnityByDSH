@@ -33,6 +33,19 @@ namespace AutoBattle
         /// <summary>撤退二次确认的截止时间（Time.unscaledTime）。</summary>
         private float _endlessRetreatConfirmUntil;
 
+        // ---- 规则 / 历史榜 分页（同一块 640×160 区域，二选一显示） ----
+        private Button _endlessRulesTab;
+        private Text _endlessRulesTabLabel;
+        private Button _endlessHistoryTab;
+        private Text _endlessHistoryTabLabel;
+        private Text _endlessHistoryHint;
+        private Text _endlessHistoryEmpty;
+        private Image[] _endlessHistoryRows;
+        private Text[] _endlessHistoryRowTexts;
+
+        /// <summary>内容区当前显示历史榜还是规则。只影响显示，不参与存档。</summary>
+        private bool _endlessHistoryOpen;
+
         // ---- 本局结果面板 ----
         private RectTransform _endlessResultPanel;
         private Text _endlessResultTitle;
@@ -65,14 +78,43 @@ namespace AutoBattle
             _endlessStartText = CreateText(_endlessPanel, "EndlessStartInfo", "", 20, 86, 640, 24,
                 FontSmall + 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
-            CreateSectionTitle(_endlessPanel, "规则", 20, 118, 200, FontSection);
+            // 规则 / 历史榜 两个页签：共用下面 20..300 的内容区，省得再开一层浮层
+            // （面板之间是 CloseAllPanels 互斥的，单开一个「历史榜」面板反而回不到无尽面板）。
+            _endlessRulesTab = CreateButton(_endlessPanel, "EndlessTabRules", "规则", 20, 112, 96, 28,
+                GameConfig.RowBg, out _endlessRulesTabLabel);
+            _endlessRulesTabLabel.fontSize = FontSmall + 2;
+            _endlessRulesTab.onClick.AddListener(OnEndlessRulesTabClicked);
 
-            _endlessRulesText = CreateText(_endlessPanel, "EndlessRules", "", 20, 146, 640, 126,
+            _endlessHistoryTab = CreateButton(_endlessPanel, "EndlessTabHistory", "历史榜", 124, 112, 96, 28,
+                GameConfig.RowBg, out _endlessHistoryTabLabel);
+            _endlessHistoryTabLabel.fontSize = FontSmall + 2;
+            _endlessHistoryTab.onClick.AddListener(OnEndlessHistoryTabClicked);
+
+            _endlessRulesText = CreateText(_endlessPanel, "EndlessRules", "", 20, 146, 640, 150,
                 FontSmall + 1, GameConfig.TextInfo, TextAnchor.UpperLeft);
             _endlessRulesText.lineSpacing = 1.18f;
 
-            CreateText(_endlessPanel, "EndlessProgressHint", "本局进度", 20, 276, 200, 22,
-                FontTiny + 2, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            // ---- 历史榜（Top-N，最多 5 行） ----
+            _endlessHistoryHint = CreateText(_endlessPanel, "EndlessHistoryHint",
+                "本档历史最好 5 局 · 按到达层数 → 本局清除 → 先达成排序", 20, 146, 640, 18,
+                FontTiny + 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            _endlessHistoryEmpty = CreateText(_endlessPanel, "EndlessHistoryEmpty",
+                "还没有完成的无尽局。\n阵亡或撤退结束一局后，这里会记下成绩（中途退出/换档不算）。",
+                20, 176, 640, 60, FontSmall + 1, GameConfig.TextMuted, TextAnchor.UpperLeft);
+            _endlessHistoryEmpty.lineSpacing = 1.2f;
+
+            _endlessHistoryRows = new Image[EndlessHistory.Capacity];
+            _endlessHistoryRowTexts = new Text[EndlessHistory.Capacity];
+            for (int i = 0; i < _endlessHistoryRows.Length; i++)
+            {
+                Image row = CreateCard(_endlessPanel, "EndlessHistoryRow" + i, 20, 170 + i * 26, 640, 24,
+                    GameConfig.CardBgDim, RadiusButton, GameConfig.BorderSoft);
+                _endlessHistoryRows[i] = row;
+                _endlessHistoryRowTexts[i] = CreateText(row.transform, "RowText", "", 12, 0, 616, 24,
+                    FontSmall + 1, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+                row.gameObject.SetActive(false);
+            }
 
             // 开始 / 继续按钮：未开局开始挑战，局内变成继续战斗。
             _endlessStartButton = CreateButton(_endlessPanel, "EndlessStart", "开始挑战", 20, 328, 200, 40,
@@ -197,7 +239,10 @@ namespace AutoBattle
             _endlessRulesText.text =
                 $"· 每层清完立刻进入下一层；每 {Mathf.Max(1, GameConfig.EndlessBossEvery)} 层一个 BOSS。\n" +
                 "· 死亡或撤退结束本局；最高层只记「已清除」的层。\n" +
+                "· 每局结束会记进本档历史榜（最多 5 局）；中途退出/换档/重置不算。\n" +
                 $"· 掉落等级封顶 {Mathf.Max(1, GameConfig.EndlessDropLevelCap)}；层通过给金币，新纪录额外给首通金币。";
+
+            RefreshEndlessTabs();
 
             bool unlocked = _game.EndlessUnlocked;
             bool canEnter = _game.CanEnterEndless;
@@ -234,6 +279,82 @@ namespace AutoBattle
             RefreshEndlessResult();
         }
 
+        /// <summary>
+        /// 规则 / 历史榜 两个页签共用同一块内容区：这里决定谁可见，并把本档 Top-5 写成行文本。
+        /// 每帧调用——文本量只有 5 行，比做脏标记更省心。
+        /// </summary>
+        private void RefreshEndlessTabs()
+        {
+            if (_endlessRulesTab == null) return;
+
+            _endlessRulesTab.image.color = _endlessHistoryOpen ? GameConfig.RowBg : GameConfig.RowBgSelected;
+            _endlessHistoryTab.image.color = _endlessHistoryOpen ? GameConfig.RowBgSelected : GameConfig.RowBg;
+            _endlessRulesTabLabel.color = _endlessHistoryOpen ? GameConfig.TextMuted : GameConfig.TextTitle;
+            _endlessHistoryTabLabel.color = _endlessHistoryOpen ? GameConfig.TextTitle : GameConfig.TextMuted;
+
+            _endlessRulesText.gameObject.SetActive(!_endlessHistoryOpen);
+            _endlessHistoryHint.gameObject.SetActive(_endlessHistoryOpen);
+
+            System.Collections.Generic.List<EndlessScoreEntry> top =
+                _game.Player != null ? _game.Player.endlessTop : null;
+            int count = top != null ? Mathf.Min(top.Count, _endlessHistoryRows.Length) : 0;
+            _endlessHistoryEmpty.gameObject.SetActive(_endlessHistoryOpen && count == 0);
+
+            for (int i = 0; i < _endlessHistoryRows.Length; i++)
+            {
+                bool show = _endlessHistoryOpen && i < count;
+                _endlessHistoryRows[i].gameObject.SetActive(show);
+                if (!show) continue;
+                _endlessHistoryRowTexts[i].text = DescribeEndlessScore(top[i], i + 1, _game.LastEndlessRecordUtc);
+            }
+        }
+
+        /// <summary>一行历史榜成绩：名次 · 到达层 · 清除/巅峰/第几世 · 用时 · 日期 · 结局。</summary>
+        private static string DescribeEndlessScore(EndlessScoreEntry entry, int rank, long lastRecordUtc)
+        {
+            if (entry == null) return "";
+
+            string floorText = entry.floor > 0 ? $"第 <b>{entry.floor}</b> 层" : "未进入第 1 层";
+            string detail = $"清 {entry.cleared} 层 · P{entry.paragon}";
+            if (entry.rebirth > 0) detail += $" · 第 {entry.rebirth + 1} 世";
+
+            string reason;
+            if (entry.IsRetreat) reason = "<color=#8C99B0>撤退</color>";
+            else if (entry.reason == (int)EndlessEndReason.Death) reason = "<color=#F2683C>阵亡</color>";
+            else reason = "<color=#8C99B0>中断</color>";
+
+            string mark = entry.endedUtc > 0 && entry.endedUtc == lastRecordUtc
+                ? "   <color=#FFE08A>◀ 本次</color>"
+                : "";
+            return $"<color=#FFE08A><b>{rank}</b></color>    {floorText}    {detail} · " +
+                $"{FormatEndlessDuration(entry.seconds)} · {FormatEndlessDate(entry.endedUtc)} · {reason}{mark}";
+        }
+
+        /// <summary>用时格式：1h05m / 12m34s / 42s。</summary>
+        private static string FormatEndlessDuration(int seconds)
+        {
+            if (seconds <= 0) return "—";
+            int hours = seconds / 3600;
+            int minutes = seconds % 3600 / 60;
+            if (hours > 0) return $"{hours}h{minutes:00}m";
+            return minutes > 0 ? $"{minutes}m{seconds % 60:00}s" : $"{seconds}s";
+        }
+
+        /// <summary>结束时间：本地时区的 MM-dd HH:mm；时间戳异常时显示占位符。</summary>
+        private static string FormatEndlessDate(long utcTicks)
+        {
+            if (utcTicks <= 0) return "—";
+            try
+            {
+                return new System.DateTime(utcTicks, System.DateTimeKind.Utc)
+                    .ToLocalTime().ToString("MM-dd HH:mm");
+            }
+            catch (System.ArgumentOutOfRangeException)
+            {
+                return "—";
+            }
+        }
+
         /// <summary>结果面板：只有阵亡/撤退会打开，必须选「再次挑战」或「返回战役」。</summary>
         private void RefreshEndlessResult()
         {
@@ -254,9 +375,13 @@ namespace AutoBattle
             string cleared = run.clearedThisRun > 0
                 ? $"本局清除 <color=#9FD8A0>{run.clearedThisRun}</color> 层"
                 : "尚未清除任何层";
+            string rankNote = run.historyRank > 0
+                ? $"历史榜第 <color=#FFE08A>{run.historyRank}</color> 名"
+                : "未进历史榜前 5";
             _endlessResultBody.text =
                 $"{cleared} · 本档最高 <color=#FFE08A>{best}</color> 层 · 全局最高 <color=#FFE08A>{globalBest}</color> 层\n" +
-                $"起始层 第 {run.startFloor} 层 · 本局击杀 {run.runKills} 只";
+                $"起始层 第 {run.startFloor} 层 · 本局击杀 {run.runKills} 只\n" +
+                $"用时 {FormatEndlessDuration(run.finishSeconds)} · {rankNote}";
 
             int retryFloor = EndlessCatalog.StartFloorFor(best);
             _endlessRetryLabel.text = $"再次挑战（第 {retryFloor} 层）";
@@ -285,6 +410,16 @@ namespace AutoBattle
             _endlessRetreatConfirmUntil = 0f;
             if (_game != null) _game.CloseEndlessPanel();
             GameAudio.PlayUiClose();
+        }
+
+        private void OnEndlessRulesTabClicked()
+        {
+            _endlessHistoryOpen = false;
+        }
+
+        private void OnEndlessHistoryTabClicked()
+        {
+            _endlessHistoryOpen = true;
         }
 
         private void OnEndlessStartClicked()

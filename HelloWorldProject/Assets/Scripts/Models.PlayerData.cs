@@ -75,6 +75,12 @@ namespace AutoBattle
         /// </summary>
         public int endlessBestFloor;
 
+        /// <summary>
+        /// 存档 v11 起：无尽 Top-N 历史榜（最多 5 局，见 <see cref="EndlessHistory"/>）。
+        /// 与 endlessBestFloor 不同，它记的是「每一局分别打到哪」，用于在面板里回看。
+        /// </summary>
+        public List<EndlessScoreEntry> endlessTop = new List<EndlessScoreEntry>();
+
         // ==================== 累计统计 / 成就（存档 v10） ====================
 
         /// <summary>

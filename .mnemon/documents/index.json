@@ -57,7 +57,7 @@
       ],
       "createdAt": "2026-10-12T16:41:30.197Z",
       "updatedAt": "2026-10-12T16:41:30.197Z",
-      "lastAccessedAt": "2026-10-19T18:00:11.854Z",
+      "lastAccessedAt": "2026-10-21T13:03:38.554Z",
       "revision": 1,
       "contentHash": "343ff924fb05029fd4feb87c1955df4f18ab81cbb84bef1fd5debe0ed73a765f",
       "sizeBytes": 5938,
@@ -406,7 +406,7 @@
       ],
       "createdAt": "2026-10-15T04:45:27.012Z",
       "updatedAt": "2026-10-15T04:45:27.012Z",
-      "lastAccessedAt": "2026-10-18T13:44:20.958Z",
+      "lastAccessedAt": "2026-10-21T17:00:20.240Z",
       "revision": 1,
       "contentHash": "8f803fcd2150a44243792c019849cc209575366f8c8cd147217c606fcc210f47",
       "sizeBytes": 6271,
@@ -566,7 +566,7 @@
       ],
       "createdAt": "2026-10-15T18:23:22.330Z",
       "updatedAt": "2026-10-17T12:07:38.060Z",
-      "lastAccessedAt": "2026-10-21T04:34:57.254Z",
+      "lastAccessedAt": "2026-10-21T17:00:20.240Z",
       "revision": 5,
       "contentHash": "411dcf1db1346cb896705cbfd9bc3a550f6ab5fe81c048af8151f494f3a396f7",
       "sizeBytes": 20164,
@@ -651,7 +651,7 @@
       ],
       "createdAt": "2026-10-16T15:29:49.216Z",
       "updatedAt": "2026-10-16T15:29:49.216Z",
-      "lastAccessedAt": "2026-10-19T16:45:22.342Z",
+      "lastAccessedAt": "2026-10-21T17:00:20.240Z",
       "revision": 1,
       "contentHash": "ba70cbccbb5291692db315fc46135c4d2873f1441737e8f002f75dfca29aa63f",
       "sizeBytes": 13582,
@@ -808,7 +808,7 @@
       ],
       "createdAt": "2026-10-19T18:00:30.218Z",
       "updatedAt": "2026-10-19T18:00:30.218Z",
-      "lastAccessedAt": "2026-10-20T14:57:24.540Z",
+      "lastAccessedAt": "2026-10-21T13:03:38.554Z",
       "revision": 1,
       "contentHash": "78b9308166e8cac36655dfc4a46434b3e1e7dd0151be3f1bbdd35a2510aa7118",
       "sizeBytes": 8529,
@@ -936,10 +936,60 @@
       ],
       "createdAt": "2026-10-21T12:14:58.458Z",
       "updatedAt": "2026-10-21T12:14:58.458Z",
-      "lastAccessedAt": "2026-10-21T12:14:58.458Z",
+      "lastAccessedAt": "2026-10-21T13:03:38.554Z",
       "revision": 1,
       "contentHash": "cc3e940aeb93d73eb81d054dfe6aa12e831f222f7ac87e8b5be0a3f3efc4ff80",
       "sizeBytes": 8863,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "d029b086-f8ff-438e-a87b-100aa336080c",
+      "title": "Unity AutoBattle 2D 精灵与技能特效美术方案（深海金潮风格与舞台布局 A）",
+      "description": "HelloWorldProject 的 P4 美术设计：深海金潮风格 8 条规则与配色、808×332 舞台替换日志卡的布局 A、11 族怪物/12 特效资产清单与导入规格、代码补间与特效池化、Seedream 生成与白底/黑底抠图管线踩坑、待定的 3 个决策。",
+      "status": "active",
+      "filename": "unity-autobattle-2d-a-d029b086.md",
+      "relativePath": "documents/active/unity-autobattle-2d-a-d029b086.md",
+      "sourcePaths": [
+        "docs/sprites-and-fx.md",
+        "_art/sprites/_build_concept.py",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "HelloWorldProject/Assets/Scripts/BattleLog.cs",
+        "HelloWorldProject/Assets/Scripts/GameController.cs"
+      ],
+      "sessionIds": [
+        "c350b57a-e139-4d7d-9a44-2e9e4e00afdf"
+      ],
+      "createdAt": "2026-10-21T13:03:54.286Z",
+      "updatedAt": "2026-10-21T13:03:54.286Z",
+      "lastAccessedAt": "2026-10-21T17:00:20.240Z",
+      "revision": 1,
+      "contentHash": "30272b25b298443b5ce52fdb7b281cd4dd28340a42af7639ab83b2a2c274b055",
+      "sizeBytes": 6662,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "b38d2252-8261-4d10-9804-388b724352ca",
+      "title": "Unity AutoBattle P4 表现层落地：战斗舞台、事件驱动特效与可展开日志",
+      "description": "HelloWorldProject 自动战斗游戏 P4 完成后的实现记录：GameUI.Stage 舞台定高与地面线、BattleFx 事件源、12 格特效池与节流、可展开日志（不透光面板）、静态哨兵验证、ToggleRunning 暂停纪律、未提交变更集与剩余美术 TODO。",
+      "status": "active",
+      "filename": "unity-autobattle-p4-b38d2252.md",
+      "relativePath": "documents/active/unity-autobattle-p4-b38d2252.md",
+      "sourcePaths": [
+        "HelloWorldProject/Assets/Scripts/GameUI.Stage.cs",
+        "HelloWorldProject/Assets/Scripts/BattleSystem.cs",
+        "HelloWorldProject/Assets/Scripts/GameUI.cs",
+        "docs/sprites-and-fx.md",
+        "README.md"
+      ],
+      "sessionIds": [
+        "35df920f-4cba-4821-accc-3f4820b1d39b"
+      ],
+      "createdAt": "2026-10-21T17:00:36.673Z",
+      "updatedAt": "2026-10-21T17:00:36.673Z",
+      "lastAccessedAt": "2026-10-21T17:00:36.673Z",
+      "revision": 1,
+      "contentHash": "65ba07b00dfb8e19361d19d6b1bff45a8a22a3edd17a16f4a3a8d1aba348bbb9",
+      "sizeBytes": 5301,
       "memoryBodyIds": []
     }
   ]

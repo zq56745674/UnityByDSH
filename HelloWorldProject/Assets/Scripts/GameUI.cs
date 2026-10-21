@@ -19,7 +19,6 @@ namespace AutoBattle
         private const float PanelH = 696f;
 
         /// <summary>日志区最多同时显示的行数，超出部分靠只显示最新几条来截断。</summary>
-        private const int MaxVisibleLogLines = 22;
 
         private GameController _game;
         private Font _font;
@@ -249,6 +248,9 @@ namespace AutoBattle
 
             EnsureEventSystem();
             BuildCanvas();
+            // 舞台要在第一帧战斗之前就订上事件，否则第一只怪的入场特效会漏掉。
+            EnsureBattleVisualHook();
+
             // 建完之后来一次「全量重建」：这时所有缓存都是初值，textTick=true 才写得出文本。
             Refresh(true);
 
@@ -645,31 +647,19 @@ namespace AutoBattle
             CreateCard(panel, "BuffCard", 8, 116, 808, 32, GameConfig.InsetBg);
             _buffText = CreateText(panel, "BuffText", "", 20, 116, 784, 32, 15, Color.white, TextAnchor.MiddleLeft);
 
-            _logCard = CreateCard(panel, "LogCard", 8, 154, 808, 332, GameConfig.InsetBg, RadiusCard, GameConfig.BorderSoft);
-            CreateSectionTitle(panel, "战斗日志", 20, 160, 300, FontSection, "ui_time");
+            // ---- P4 战斗舞台（布局 A）：原来的整块日志卡让位给「主角 vs 怪物」，
+            // 日志压成底部两行 ticker，点 ▲ 才往上展开成可滚动的大日志。
+            BuildBattleStage(panel);
 
-            // ---- 实时 DPS（步骤 8）：做成右侧的小胶囊，和左侧标题同一行 ----
+            // ---- 实时 DPS（步骤 8）：做成舞台右上角的小胶囊，避开左上角的章节标签 ----
             _dpsPill = CreateCard(panel, "DpsPill", 592, 163, 216, 26, GameConfig.RowBg, 13, GameConfig.BorderSoft);
             _dpsText = CreateText(_dpsPill.rectTransform, "DpsText", "", 0, 0, 216, 26, 14, GameConfig.TextMint, TextAnchor.MiddleCenter);
             Stretch(_dpsText.rectTransform);
 
-            RectTransform logRect = CreateRect(panel, "LogText", 20, 196, 784, 282);
-
             // ---- 伤害飘字层（步骤 7）：不参与布局 ----
-            // 覆盖怪物卡到日志区：伤害数字落在怪物血条上（打的是谁，数字就在谁身上），
-            // 而不是糊在日志文字里——日志是要读的，飘字只是余光。
+            // 覆盖怪物卡到舞台：伤害数字落在怪物身上（打的是谁，数字就在谁身上）。
             _floatLayer = CreateRect(panel, "FloatLayer", 8, 20, 800, 460);
             BuildFloatPool(_floatLayer);
-            _logText = logRect.gameObject.AddComponent<Text>();
-            _logText.font = _font;
-            _logText.fontSize = 14;
-            _logText.lineSpacing = 1.28f;
-            _logText.color = Color.white;
-            _logText.alignment = TextAnchor.UpperLeft;
-            _logText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _logText.verticalOverflow = VerticalWrapMode.Truncate;
-            _logText.supportRichText = true;
-            _logText.lineSpacing = 1.1f;
 
             BuildShopPanel(panel);
 
