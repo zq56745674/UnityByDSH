@@ -724,7 +724,12 @@ namespace AutoBattle
             if (EndlessActive) EndEndlessRun(EndlessEndReason.SlotChanged);
 
             // 当前进度先落盘，否则切走之后这一段就没了。
-            SaveSystem.Save(Player);
+            // 写不进去就**不换槽**：换过去会立刻用目标槽覆盖内存，未落盘的成就/进度直接消失。
+            if (!SaveSystem.Save(Player))
+            {
+                AddLog("⚠ 存档写入失败，已取消切换存档槽（当前进度仍在本槽，稍后再试）", GameConfig.LogWarn);
+                return;
+            }
             SaveSystem.SelectSlot(slot);
 
             Player = new PlayerData();

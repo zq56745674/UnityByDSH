@@ -102,7 +102,7 @@ namespace AutoBattle
             AudioSource source = Instance._sources[Instance._nextVoice];
             Instance._nextVoice = (Instance._nextVoice + 1) % Instance._sources.Length;
             source.volume = volume;
-            source.pitch = pitchMin == pitchMax ? pitchMin : Random.Range(pitchMin, pitchMax);
+            source.pitch = pitchMin == pitchMax ? pitchMin : GameRandom.Range(pitchMin, pitchMax);
             source.PlayOneShot(clip, Mathf.Clamp01(localVolume));
         }
 

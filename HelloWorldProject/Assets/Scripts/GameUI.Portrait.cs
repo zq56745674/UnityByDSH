@@ -62,8 +62,8 @@ namespace AutoBattle
             }
 
             // 从随机相位开始，避免每次启动都像机械表一样同时吸气。
-            _portraitTime = Random.Range(0f, 8f);
-            _portraitBlinkTimer = Random.Range(2.6f, 4.4f);
+            _portraitTime = GameRandom.Range(0f, 8f);
+            _portraitBlinkTimer = GameRandom.Range(2.6f, 4.4f);
         }
 
         /// <summary>每帧推进立绘动画。由 GameUI.Update 调用。</summary>
@@ -125,7 +125,7 @@ namespace AutoBattle
                 }
 
                 _portraitImage.sprite = _portraitOpenSprite;
-                _portraitBlinkTimer = Random.Range(3.2f, 6.5f);
+                _portraitBlinkTimer = GameRandom.Range(3.2f, 6.5f);
                 return;
             }
 
@@ -140,7 +140,7 @@ namespace AutoBattle
             if (_portraitBlinkTimer <= 0f)
             {
                 CloseHeroPortraitEyes(0.11f);
-                _portraitBlinksQueued = Random.value < 0.20f ? 1 : 0;
+                _portraitBlinksQueued = GameRandom.Value < 0.20f ? 1 : 0;
             }
         }
 

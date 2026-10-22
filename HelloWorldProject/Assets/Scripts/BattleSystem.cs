@@ -35,6 +35,22 @@ namespace AutoBattle
         Poison,
         /// <summary>狂暴开启。</summary>
         Berserk,
+        /// <summary>暴击连锁（暴击后追加的一击）。</summary>
+        SkillCritChain,
+        /// <summary>濒死爆发（致死一击时保命）。</summary>
+        SkillNearDeath,
+        /// <summary>不死之身（低血减伤生效）。</summary>
+        SkillUndying,
+        /// <summary>巨人杀手（对精英/Boss 的伤害加成收尾）。</summary>
+        SkillGiantSlayer,
+        /// <summary>纯属性被动：钢铁之躯（只在学到的瞬间表现一次）。</summary>
+        PassiveIronBody,
+        /// <summary>纯属性被动：狂暴之心。</summary>
+        PassiveBerserkHeart,
+        /// <summary>纯属性被动：致命打击。</summary>
+        PassiveLethalStrike,
+        /// <summary>纯属性被动：迅捷。</summary>
+        PassiveSwiftness,
     }
 
     /// <summary>一次战斗推进的结果。</summary>
@@ -288,6 +304,10 @@ namespace AutoBattle
                 GameAudio.PlayHit(crit);
                 RaiseVisual(crit ? BattleFx.PlayerCrit : BattleFx.PlayerHit, dmg);
 
+                // 巨人杀手只在「这一下真的把精英/Boss 打死」时表现，避免每次命中都叠一层金光。
+                if (monster.IsDead && giant > 1.0001f && player.HasSkill(SkillId.GiantSlayer))
+                    RaiseVisual(BattleFx.SkillGiantSlayer, dmg);
+
                 // 吸血鬼：按实际造成的伤害（含护盾吸收部分）回血。
                 int healed = ApplyLifesteal(player, dmg);
                 if (healed > 0)
@@ -332,6 +352,7 @@ namespace AutoBattle
                 {
                     dmg = Mathf.Max(GameConfig.MinDamage,
                         Mathf.RoundToInt(dmg * (1f - player.UndyingReduction)));
+                    RaiseVisual(BattleFx.SkillUndying, dmg);
                 }
 
                 // 主角护盾先扛。
@@ -404,6 +425,7 @@ namespace AutoBattle
 
                     int pct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(nd.value, player.SkillLevel) * 100f);
                     log.AddCombat($"✦ 濒死爆发！攻击 +{pct}%，{nd.duration:0} 秒内不会死亡", nd.color);
+                    RaiseVisual(BattleFx.SkillNearDeath, player.currentHp);
                 }
                 else if (_nearDeathTimer > 0f)
                 {
@@ -510,6 +532,7 @@ namespace AutoBattle
                 case SkillId.Whirlwind: return BattleFx.SkillWhirlwind;
                 case SkillId.Execute: return BattleFx.SkillExecute;
                 case SkillId.Counter: return BattleFx.SkillCounter;
+                case SkillId.CritChain: return BattleFx.SkillCritChain;
                 default: return BattleFx.SkillOther;
             }
         }
@@ -536,6 +559,9 @@ namespace AutoBattle
                 $"✦ {label}！{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp})",
                 def.color);
             RaiseVisual(SkillVisualOf(def.id), dmg);
+
+            if (monster.IsDead && giant > 1.0001f && player.HasSkill(SkillId.GiantSlayer))
+                RaiseVisual(BattleFx.SkillGiantSlayer, dmg);
 
             int healed = ApplyLifesteal(player, dmg);
             if (healed > 0)

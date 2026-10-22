@@ -67,24 +67,24 @@
 |---|---|
 | 舞台 | 808×332，圆角 8；实际是暗底 + 冷青光雾 + 地面带 + 1px 地线，没有用渐变贴图 |
 | 地面线 | 舞台内 y=250（`StageGroundY`，世界坐标 y≈418；设计稿写 252） |
-| 主角 | 高 190px、中心 x=178（设计稿 196 / +165）；源图 170×256 |
-| 怪物 | 普通高 192px、中心 x=604（设计稿 208 / +610）；精英 206、Boss 226 |
-| 精英 / Boss | 靠身高区分（206/192、226/192）；设计里的脚下光环**没做**，Boss 另有独立美术 |
-| 特效单帧 | 源图 256×256，实际显示尺寸 92–200px（256 会整块盖住 192px 高的角色） |
-| 导出 | PNG-24 + alpha，sRGB；导入为 Sprite(Single) + `alphaIsTransparency`，`Resources.Load<Sprite>` 直接可用；压缩与尺寸沿用导入默认，未逐张核对 |
-| 存储预算 | 实测 25 张共 4.17MB，略超 4MB 预算（Boss 三张 265–323KB） |
+| 主角 | 高 190px、中心 x=178（设计稿 196 / +165）；源图 169×256 |
+| 怪物 | 普通高 192px、中心 x=604（设计稿 208 / +610）；精英 206、Boss 226；源图 288×288（画布底部居中，保留各族相对体型） |
+| 精英 / Boss | 身高区分（206/192、226/192）+ 脚下光环（§12.2）；Boss 另有 8 张独立立绘（358×358 源图） |
+| 特效单帧 | 源图 240×240（新 8 张正方形）或 240 高、宽 250–372（旧 12 张），实际显示尺寸 92–200px（256 会整块盖住 192px 高的角色） |
+| 导出 | PNG-24 + alpha，sRGB；导入为 Sprite(Single) + `alphaIsTransparency`，`Resources.Load<Sprite>` 直接可用；`maxTextureSize` 按类别设 512（怪物/Fx/光环）/ 1024（Boss）/ 2048（背景），`textureCompression: 0` |
+| 存储预算 | 实测 74 张共 **1.88MB**（怪物 33 张 0.73 / Boss 11 张 0.36 / Fx 20 张 0.24 / 光环 5 张 0.10 / 背景 4 张 0.43 / 主角 0.02），在 4MB 预算内（2026-10-22 瘦身，见 §12.6） |
 
 ## 5. 资产清单
 
 | 类别 | 数量 | 命名 | 说明 | 状态 |
 |---|---|---|---|---|
 | 主角战斗小人 | 1 | `Sprites/Hero/hero_battle` | 同一角色的 3/4 侧身持剑站姿 | ✅ 概念图已切 |
-| 怪物身体 | 11 | `Sprites/Monsters/m{章:02}_{族}` | 每章 1 族，面朝左 | 样张 3 族（哥布林/狗头人/骷髅）+ 食人魔、蛛魔 |
-| 类型武器层 | 3 | `Sprites/Monsters/w_{sword,bow,dagger}` | 叠加在右手锚点，区分近战/远程/暴击 | 未做 |
-| 档次光环 | 2 | `Sprites/Auras/aura_elite`, `aura_boss` | 168/200px 环，缓慢旋转 | 未做 |
-| 词缀光环 | 3 | `Sprites/Auras/affix_{drain,shield,poison}` | 62px 小环，压在脚下 | 未做 |
-| 技能特效 | 12 | `Sprites/Fx/fx_{hit,crit,heavy,whirlwind,execute,drain,shield,poison,counter,death,levelup,berserk}` | 每张 1 帧静态，代码做缩放/淡出；仅旋风、升级是 2 帧 | ✅ 概念图已切 |
-| 章节背景 | 4（可选） | `Sprites/Backdrops/bg_{crypt,den,ruin,abyss}` | 808×332 剪影层，按章复用 | 未做 |
+| 怪物身体 | 33 | `Sprites/Monsters/{族}_{melee,ranged,crit}` | 11 族 × 3 类型，一族一套剪影，类型由身体自带的武器区分 | ✅ 11 族全做（2026-10-22） |
+| 类型武器层 | 0 | ~~`w_{sword,bow,dagger}`~~ | **取消**：身体图已按类型带武器，再叠一层会出两把武器（§12.3） | ❌ 改用类型分图 |
+| 档次光环 | 2 | `Sprites/Auras/aura_elite`, `aura_boss` | 176 / 208px 宽的扁椭圆环，压在脚下 | ✅（2026-10-22） |
+| 词缀光环 | 3 | `Sprites/Auras/affix_{drain,shield,poison}` | 84px 小环，叠在档次环内圈 | ✅（2026-10-22） |
+| 技能特效 | 20 | `Sprites/Fx/fx_*` | 12 张战斗/状态特效 + 8 张技能专属（§12.4） | ✅ |
+| 章节背景 | 4 | `Sprites/Backgrounds/bg_{cavern,wilds,crypt,citadel}` | 1440×592 JPG，Stretch 满舞台，按章映射 + 色温区分 | ✅（2026-10-22） |
 | 类型徽标 | 3 | 复用 `Icons/glyph_*` 或新增 `glyph_bow`/`glyph_dagger` | 怪物名字前面 14px 小图标 | 部分可复用 |
 
 **先做 11 族身体的理由**：11 章已经写死了 `ChapterMonsterNames`（`GameConfig.Tables.cs:81`，每章 3 个名字），不做 11 族就等于“11 章都在打同一只哥布林”。3 种类型（近战/远程/暴击）共用身体 + 武器层，是把 33 个名字压到 11 张图的唯一办法。
@@ -182,7 +182,7 @@ A 的代价是**日志默认只剩 2 行**。日志原本是核心反馈（`Batt
 | 文件 | 作用 |
 |---|---|
 | `HelloWorldProject/Assets/Scripts/GameUI.Stage.cs`（新增，partial class GameUI） | 战斗舞台 808×332、主角/怪物/阴影、程序化动画、12 个特效的图片池、可展开的战斗日志面板 |
-| `HelloWorldProject/Assets/Scripts/BattleSystem.cs` | 新增 `enum BattleFx`（13 种）、`public event System.Action<BattleFx,int> Visual`、`RaiseVisual(...)`，在命中/暴击/技能/吸血/剧毒/护盾/狂暴/死亡处抛出 |
+| `HelloWorldProject/Assets/Scripts/BattleSystem.cs` | 新增 `enum BattleFx`（13 种，2026-10-22 扩到 21 种）、`public event System.Action<BattleFx,int> Visual`、`RaiseVisual(...)`，在命中/暴击/技能/吸血/剧毒/护盾/狂暴/死亡处抛出 |
 | `HelloWorldProject/Assets/Scripts/GameConfig.Tables.cs` | 新增 `ChapterFamilyNames`（11 章族名，舞台左上角标签与族→贴图映射共用） |
 | `HelloWorldProject/Assets/Scripts/GameUI.cs` | `BuildRightPanel` 里的日志卡整段换成 `BuildBattleStage(panel)`；`Initialize` 里 `EnsureBattleVisualHook()` |
 | `HelloWorldProject/Assets/Scripts/GameUI.Core.cs` | `Update` 末尾 `TickBattleStage(Time.deltaTime)`；`RefreshLog` 改「ticker 两行 + 展开面板 180 条」双写；飘字落点改到怪物躯干；`RefreshDps` 展开日志时连 DPS 胶囊一起藏 |
@@ -215,17 +215,116 @@ A 的代价是**日志默认只剩 2 行**。日志原本是核心反馈（`Batt
 
 ### 11.5 验收结果（2026-10-21，1280×720 实机）
 
-1. 主角、哥布林/狗头人/骷髅三族、三族 Boss 换进舞台都不裁边、脚底对齐、比例合适；4~11 章暂无专属美术，按 `(chapter-1)%3` 轮换复用这三族（**TODO**）。
+1. 主角、哥布林/狗头人/骷髅三族、三族 Boss 换进舞台都不裁边、脚底对齐、比例合适；4~11 章当时暂无专属美术，按 `(chapter-1)%3` 轮换复用这三族（2026-10-22 已补齐，见 §12.1）。
 2. ×4 加速下特效不重叠成一片；同屏最多 12 个特效池实测只占 2~6 个。
 3. 战斗数值、飘字、日志内容与改造前一致（`BalanceRegression.RunStaticOnly()` = PASS）。
 4. 舞台与日志面板点击不穿透到底下的按钮；▲/▼ 开关正常。
 5. console 0 error / 0 warn；`unity command recompile` = completed。
 6. 截图（本地，`_art/stage/shots/` 已 gitignore）：`final1.png` 普通战斗、`final3_goblin.png`/`final4_skeleton.png` 族贴图替换检查、`final6_log.png` 展开日志、`final7_boss.png` Boss 战。
 
-### 11.6 还没做的
+### 11.6 还没做的（2026-10-21 时点）
 
-- 4~11 章的专属怪物美术（现在是三族轮换复用）。
-- 精英与 Boss 的档次光环/前缀特效（目前只靠 226px 身高 + 血条金/红边框区分）。
-- 章节背景图、武器层叠加、主角阵亡/复活的专门表现。
-- 技能特效与技能的一一对应只做了 4 个专属（重击/旋风斩/斩杀/反击），其余 11 个技能共用 `fx_heavy`。
+- ~~4~11 章的专属怪物美术~~：2026-10-22 已补 8 族（§12.1）。
+- ~~精英与 Boss 的档次光环/前缀特效~~：2026-10-22 已做（§12.2）。
+- ~~章节背景图~~：2026-10-22 已做（§12.3）；武器层叠加已取消。
+- ~~技能特效与技能的一一对应只做了 4 个专属~~：2026-10-22 补齐 15 个（§12.4）。
+
+仍未做：主角阵亡/复活的专门表现、Boss 出场演出、背景的视差滚动。
+
+## 12. 2026-10-22 扩充：11 族 / 光环 / 背景 / 15 技能特效
+
+> 这一节是 §11 之后的第二轮表现层扩充，编号对应开发待办 18/19/20/21。所有数字都是 1280×720 实机截图核对过的。
+
+### 12.1 怪物族别补齐（待办 18）
+
+- 第 4~11 章新增 8 族 × 3 类型 = 24 张：`ogre` / `orc` / `spider` / `undead` / `gargoyle` / `demon` / `abyss` / `dragon`，每族 `_melee` / `_ranged` / `_crit`。
+- 族映射从「三族轮换」改成按章查表：
+
+  ```csharp
+  private static readonly string[] StageFamilyKeys =
+      { "goblin", "kobold", "skeleton", "ogre", "orc", "spider", "undead", "gargoyle", "demon", "abyss", "dragon" };
+  int index = Mathf.Clamp(chapter, 1, StageFamilyKeys.Length) - 1;
+  ```
+
+  旧实现是 `Mathf.Abs(chapter - 1) % 3`，所以 4 章以后一直在打哥布林/狗头人/骷髅。
+- 8 张 Boss 改成**每族单独生成**（`Bosses/{族}_boss.png`，源图 512×512）。上一版只有 3 族 Boss，4 章以后 Boss 是「精英怪放大 1.25 倍」。
+- **教训**：先把 8 个 Boss 排成 4 张「一对」的 2048² 白底图再切，四张全部作废——两个角色的斧头/披风在 x 投影上重叠（最小列占用 148~345 px），硬切会把武器切断。多角色同图只适合「列之间有真空白」的怪物表（三列之间至少 40px 全空列），Boss 必须一张一只。
+
+### 12.2 档次光环与词缀光环（待办 19）
+
+| 文件 | 宽 | 用在 |
+|---|---|---|
+| `Sprites/Auras/aura_elite.png` | 176 | 精英怪脚下（金色火焰双环） |
+| `Sprites/Auras/aura_boss.png` | 208 | Boss 脚下（外金符文环 + 内冷青环） |
+| `Sprites/Auras/affix_drain.png` | 84 | 词缀「吸血」 |
+| `Sprites/Auras/affix_shield.png` | 84 | 词缀「护盾」 |
+| `Sprites/Auras/affix_poison.png` | 84 | 词缀「剧毒」 |
+
+- **压成椭圆**：`AuraSquash = 0.42f`（俯视地面环），中心 `y = -(StageGroundY - width * AuraSquash * 0.32f)`，让环的下半沿压在地面线上。
+- **层级靠创建顺序**：两个光环 Image 在主角/怪物 Image **之前**创建（UGUI 兄弟顺序即渲染顺序），所以环在脚下而不是盖在腿上；也在 StageFloor 之后，压在地面带上。
+- **入场/死亡联动**：`alpha = Clamp01(_battleMonsterSpawn) * (1 - deathK)`，tier 再乘 0.92、affix 乘 0.86；`pulse = 1 + sin(_battleAnimTime * 2.2) * 0.045` 做慢脉动。怪物死亡动画结束那一帧把两个光环都关掉。
+- 只有词缀里会改战斗节奏的三个（吸血/护盾/剧毒）配环；狂暴/坚甲/迅捷只改面板数值，不配环——同屏两圈金红叠在一起反而看不清档次。
+- 普通怪不配档次环：192px 高的小怪上方一圈金光会让它看起来像精英。
+
+### 12.3 章节背景（待办 20）
+
+- 4 张 `Sprites/Backgrounds/bg_{cavern,wilds,crypt,citadel}.jpg`，1616×664：从 2048² 四宫格每格取 1024×421 横带（≈8:3.3，贴近舞台 808:332）再 LANCZOS 放大。
+- 按章映射 (`BackdropFor`)：1/2/6 → 洞窟、3/7 → 陵墓、4/5 → 荒野、8~11 → 魔域。
+- **同图不同章用色温区分** `BackdropTint(chapter)`：11 条 ±10% 级别的乘色（洞窟 ch1 冷青 / ch2 火把暖 / ch6 深蓝，陵墓 ch3 幽蓝 / ch7 更暗，荒野 ch4 黄昏 / ch5 偏赤，魔域 ch8 石青 / ch9 恶魔赤 / ch10 深渊紫 / ch11 龙裔金）。缓存键是 `图名:章`，否则同图换章不会重设颜色。
+- Image 的 alpha 固定 0.68，背景在 `StageBackdrop` 纯色之后、`StageHaze` 冷青光雾之前；`preserveAspect = false` 直接拉满 808×332（源图比例已经接近，拉伸不可见）。
+- **武器层叠加取消**：11 族的身体图已经按类型画好武器（剑盾 / 弓弩 / 匕首），再叠一层前景武器只会出现「两把剑」。这是把 33 个怪物名字压成 24 张图（而非 11 张身体 + 3 张武器）的直接原因。
+
+### 12.4 15 个技能的特效一一对应（待办 21）
+
+| 技能 | 特效图 | 尺寸 / 位置 | 触发点 |
+|---|---|---|---|
+| 重击 | `fx_heavy` | 168 @ 怪物躯干 | 主动技命中 |
+| 旋风斩 | `fx_whirlwind` | 186 @ (主角右 40, 154) spin 120 | 主动技 3 段 |
+| 狂暴 | `fx_berserk` | 148 @ 主角 | 主动技发动 |
+| 斩杀 | `fx_execute` | 198 @ 怪物下沿 | 主动技命中 |
+| 钢铁之躯 | `fx_iron_body` | 176 @ 主角 | **学会时**放一次 |
+| 狂暴之心 | `fx_berserk_heart` | 176 @ 主角 | **学会时**放一次 |
+| 致命打击 | `fx_lethal_strike` | 176 @ 主角 | **学会时**放一次 |
+| 迅捷 | `fx_swiftness` | 176 @ 主角 | **学会时**放一次 |
+| 巨人杀手 | `fx_giant_slayer` | 176 @ 怪物 spin −12 | 对精英/Boss 的**收尾击杀** |
+| 不死之身 | `fx_undying` | 160 @ 主角 | 减伤真正生效（挨了致死量级的一击） |
+| 反击 | `fx_counter` | 118 @ 主角 | 反弹伤害 |
+| 暴击连锁 | `fx_crit_chain` | 150 @ 怪物躯干 | 追加伤害结算 |
+| 濒死爆发 | `fx_near_death` | 200 @ 主角脚下 | 触发不死 3 秒 |
+| 护盾生成 | `fx_shield` | 118 @ 主角 | 护盾刷新（0.45s 节流） |
+| 吸血鬼 | `fx_drain` | 92 @ 主角 | 每次吸血（0.45s 节流） |
+
+- 前 4 个是主动技，本来就是每个技能一张图；中间 4 个是**纯数值被动**（防御 +150%、暴击 +8%、暴伤 ×1.2、攻速 +8%），战斗里没有「发动」这个时刻，只在 `CheckStageSkillLearn()` 检测到 `ownedSkillMask` 新增时放一次，当「学会」反馈。
+- 巨人杀手只在**收尾击杀**时亮：每次命中都亮金光会让 Boss 战一直糊着。
+- `BattleFx` 枚举新增 8 项：`SkillCritChain` / `SkillNearDeath` / `SkillUndying` / `SkillGiantSlayer` / `PassiveIronBody` / `PassiveBerserkHeart` / `PassiveLethalStrike` / `PassiveSwiftness`；`SkillVisualOf` 里补了 `SkillId.CritChain → BattleFx.SkillCritChain`（之前落到 `SkillOther` = 通用的 `fx_heavy`）。
+
+### 12.5 验收与遗留
+
+- 2026-10-22 实机截图（`_art/sprites/shots/`，已 gitignore）：`ch1_cavern.png`（1 章洞窟 + 哥布林）、`ch3_crypt.png`（3 章陵墓 + 骷髅）、`ch9_demon.png`（9 章魔域赤 + 恶魔法师）、`aura_elite_poison.png`（8 章精英石像鬼 + 金精英环 + 毒环，4× 放大裁图核对过环压在脚下）、`fx_new.png`（巨人杀手 + 暴击连锁 + 不死之身 + 濒死爆发同屏）。
+- `unity command recompile` = completed、`compilationFailed=false`、console 0 error。
+- **预算曾是 2.9 倍**：刚落地时 74 张共 11.65MB（怪物 5.42 / Boss 3.07 / Fx 1.66 / 光环 0.78 / 背景 0.58 / 主角 0.15）。2026-10-22 已按 §12.6 压到 1.88MB，符合原定 4MB。
+- 待办里**没做**的：Boss 出场演出、背景视差滚动、主角阵亡/复活专门表现。
+
+### 12.6 体积瘦身（2026-10-22）
+
+目标是把 74 张源图从 11.65MB 压回 §4 的 4MB 预算，同时不牺牲舞台上的观感（怪物实际只显示 192px 高、Boss 226px，源图 384/512 本来就过剩）。最终 **1.88MB**：
+
+| 目录 | 压缩前 | 压缩后 | 处理 |
+|---|---|---|---|
+| Monsters 33 张 | 5.42MB | 0.73MB | 384² → 288²（×0.75） |
+| Bosses 11 张 | 3.07MB | 0.36MB | 512² → 358²（×0.70） |
+| Fx 20 张 | 1.66MB | 0.24MB | 320 → 240（×0.75） |
+| Auras 5 张 | 0.78MB | 0.10MB | ×0.75（boss/elite 384²、affix 192²） |
+| Backgrounds 4 张 | 0.58MB | 0.43MB | 1616×664 → 1440×592，JPG q84 progressive |
+| Hero 1 张 | 0.15MB | 0.02MB | 255×384 → 169×256 |
+
+（表内只算 74 个图片文件；算上 74 个 `.meta`，`Assets/Resources/Sprites` 在磁盘上合计 2.07MB。）
+
+做法（脚本 `_art/sprites/shrink_b.py`，一次性、不进仓库）：
+
+1. **预乘 alpha 再缩放**：`PIL` 直接对 RGBA 做 LANCZOS 会让透明区的白色 RGB 渗进边缘，形成 1px 白圈（和切图时踩过的同一个坑）。先把 RGB 乘 alpha、缩放、再用缩放后的 alpha 除回来，透明边缘才干净。
+2. **FASTOCTREE 调色板量化 256 色**：`im.quantize(colors=256, method=Image.FASTOCTREE)` 是 Pillow 里唯一同时保留 alpha 的量化路径；导出成 8-bit 调色板 PNG，体积降到原图约 10–15%。发光特效靠 256 色 + 扩散抖动仍能保住渐变，肉眼在舞台尺寸下与 24-bit 无差（`_art/sprites/_cmp_shrink.png` 三列对照：原图 / 激进 160 色 / 最终 256 色）。
+3. **背景只缩不量化**：JPG 已是有损，缩到 1440 宽（舞台 808 宽的 1.78 倍）+ q84 足够；再量化会出色带。
+
+验收：`Resources.Load<Sprite>` 读回 288×288 / 358×358 / 240×240 / 384² / 1440×592 / 169×256，均非空；Play 模式截 `_art/sprites/shots/shrink_ch1.png`（1 章洞窟 + 哥布林 + 背景）、`shrink_boss.png`（11 章远古·龙裔 Boss + 双光环）确认无糊边、无白圈、无可见色带。`.meta` 的 `maxTextureSize`（512/1024/2048）与平台覆盖不需要改——文件本身已小于上限。
 

@@ -100,9 +100,23 @@
       "importance": "normal"
     },
     {
-      "content": "HelloWorldProject 战斗可复现性：BattleSystem.Tick 只用 UnityEngine.Random（无 Time/DateTime），同状态同种子逐帧完全一致（实测 262 帧 firstDiff=-1），但**同一进程内第一次 Tick 会多消耗一个随机数**（冷启动首战 277 帧、与热态分叉）；写战斗探针前先做一次哑巴 Tick 热身即可复现。存档 2026-10-22 起为 v11，新增 PlayerData.endlessTop（本档 Top-5 历史榜，只记阵亡/撤退结束的局）。",
+      "content": "HelloWorldProject 战斗可复现性：BattleSystem.Tick 只用 UnityEngine.Random（无 Time/DateTime），同状态同种子逐帧完全一致（实测 262 帧 firstDiff=-1）。2026-10-22 已修掉「同一进程内第一次 Tick 多消耗一个随机数」：根因是命中音效 GameAudio.PlayHit 用 UnityEngine.Random 变调，现表现层（音频、UI 抖动）统一改用独立 System.Random（GameRandom.cs，种子 0x5EA17），玩法随机保持 UnityEngine.Random；修复后带音频冷启动也是 54/54/54 draws，写探针不再需要热身。存档 2026-10-22 起为 v11，新增 PlayerData.endlessTop（本档 Top-5 历史榜，只记阵亡/撤退结束的局）。",
       "created_at": "2026-10-21T17:28:29.382Z",
-      "updated_at": "2026-10-21T17:28:29.382Z",
+      "updated_at": "2026-10-22T13:13:40.116Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "HelloWorldProject 战斗舞台美术约定（2026-10-22 定型）：怪物贴图 Sprites/Monsters/{族}_{melee,ranged,crit}.png（384×384），族顺序必须与 GameConfig.ChapterFamilyNames 一致——GameUI.Stage.cs 的 StageFamilyKeys = goblin/kobold/skeleton/ogre/orc/spider/undead/gargoyle/demon/abyss/dragon，第 4~11 章才不再复用前三族；Boss 用单独立绘 Sprites/Bosses/{族}_boss.png（512×512），不是小怪放大；光环 Sprites/Auras/{aura_elite 176,aura_boss 208,affix_drain|shield|poison 84} 宽、AuraSquash=0.42 压成地面椭圆、必须比角色 Image 先创建才在脚下；背景 Sprites/Backgrounds/bg_{cavern,wilds,crypt,citadel}.jpg（1616×664）按章映射 + BackdropTint 色温区分同图章节，缓存键带章号；15 个技能各有专属特效图（fx_iron_body / fx_berserk_heart / fx_lethal_strike / fx_swiftness / fx_giant_slayer / fx_undying / fx_crit_chain / fx_near_death 等）。",
+      "created_at": "2026-10-21T18:44:01.024Z",
+      "updated_at": "2026-10-21T18:44:01.024Z",
+      "target": "memory",
+      "importance": "normal"
+    },
+    {
+      "content": "dsh-image-gen 的 generate_image 默认 provider 是 ComfyUI（本机没跑会报 Could not connect to ComfyUI at http://127.0.0.1:8188）；要出图必须显式传 provider:\"seedream\"，模型 doubao-seedream-5-0-pro-260628，落盘在工作区 dsh-image-gen/image-*.png。多角色同图只适合列间有真空白的怪物表，Boss 必须一张一只（对图硬切会把斧头/披风切断）。",
+      "created_at": "2026-10-21T18:44:01.033Z",
+      "updated_at": "2026-10-21T18:44:01.033Z",
       "target": "memory",
       "importance": "normal"
     }

@@ -4,7 +4,7 @@
 
 项目的特殊之处在于：**它不是手写出来的，而是由 AI 编码代理（DeepSeek Harness）驱动 Unity 编辑器逐步搭建的**。开发过程留在了仓库里（`.mnemon/`），包括每一步的设计理由、踩过的坑和平衡实验数据。
 
-![主界面](HelloWorldProject/Assets/Screenshots/icons-main.png)
+![主界面](docs/shots/icons-main.png)
 
 ## 玩法
 
@@ -28,11 +28,11 @@
 
 | 技能三选一 | 关卡选择 |
 |---|---|
-| ![技能选择](HelloWorldProject/Assets/Screenshots/skill-choice.png) | ![关卡选择](HelloWorldProject/Assets/Screenshots/stage-summary.png) |
+| ![技能选择](docs/shots/skill-choice.png) | ![关卡选择](docs/shots/stage-summary.png) |
 
 | 战斗可读性（飘字 / DPS / 状态栏） | 技能面板 |
 |---|---|
-| ![战斗可读性](HelloWorldProject/Assets/Screenshots/p2.png) | ![技能面板](HelloWorldProject/Assets/Screenshots/skill-panel.png) |
+| ![战斗可读性](docs/shots/p2.png) | ![技能面板](docs/shots/skill-panel.png) |
 
 | 洗练面板 | 洗练日志（最新在上） |
 |---|---|
@@ -44,49 +44,49 @@
 
 | 设置面板（含主音量 / 音效音量） | 装备对比（弱于当前件时红字提示） |
 |---|---|
-| ![设置面板](HelloWorldProject/Assets/Screenshots/settings.png) | ![装备对比](HelloWorldProject/Assets/Screenshots/compare-weak.png) |
+| ![设置面板](docs/shots/settings.png) | ![装备对比](docs/shots/compare-weak.png) |
 
 | 背景音乐（四首 / 自选 / 循环 / 音量） | 主界面顶部音符入口 |
 |---|---|
-| ![背景音乐面板](HelloWorldProject/Assets/Screenshots/music-panel.png) | ![音乐入口](HelloWorldProject/Assets/Screenshots/music-main.png) |
+| ![背景音乐面板](docs/shots/music-panel.png) | ![音乐入口](docs/shots/music-main.png) |
 
 | 五槽装备（2×3 卡） | 五槽对比（顶部五个页签） |
 |---|---|
-| ![五槽装备](HelloWorldProject/Assets/Screenshots/five-slot.png) | ![五槽对比](HelloWorldProject/Assets/Screenshots/five-slot-compare.png) |
+| ![五槽装备](docs/shots/five-slot.png) | ![五槽对比](docs/shots/five-slot-compare.png) |
 
 | 新手引导（在技能栏上挖洞） | 技能推荐分 |
 |---|---|
-| ![新手引导](HelloWorldProject/Assets/Screenshots/guide-replay4.png) | ![技能推荐分](HelloWorldProject/Assets/Screenshots/skill-choice2.png) |
+| ![新手引导](docs/shots/guide-replay4.png) | ![技能推荐分](docs/shots/skill-choice2.png) |
 
 | 无尽模式面板 | 无尽结算（阵亡 / 最高层） |
 |---|---|
-| ![无尽模式](HelloWorldProject/Assets/Screenshots/endless-panel.png) | ![无尽结算](HelloWorldProject/Assets/Screenshots/endless-death.png) |
+| ![无尽模式](docs/shots/endless-panel.png) | ![无尽结算](docs/shots/endless-death.png) |
 
 | P1000 面板（巅峰已达上限） | P1000 无尽 215 层 |
 |---|---|
-| ![P1000 面板](HelloWorldProject/Assets/Screenshots/p1000-panel.png) | ![P1000 无尽](HelloWorldProject/Assets/Screenshots/p1000-endless.png) |
+| ![P1000 面板](docs/shots/p1000-panel.png) | ![P1000 无尽](docs/shots/p1000-endless.png) |
 
 | 轮回入口（存档面板） | 轮回面板（五条永久升级） |
 |---|---|
-| ![轮回入口](HelloWorldProject/Assets/Screenshots/rebirth-entry.png) | ![轮回面板](HelloWorldProject/Assets/Screenshots/rebirth-panel.png) |
+| ![轮回入口](docs/shots/rebirth-entry.png) | ![轮回面板](docs/shots/rebirth-panel.png) |
 
-![转生后：回到 Lv.1，印记与升级保留](HelloWorldProject/Assets/Screenshots/rebirth-after.png)
+![转生后：回到 Lv.1，印记与升级保留](docs/shots/rebirth-after.png)
 
 | 成就面板（分类 / 分页 / 进度） | 解锁 toast（右侧，不挡操作） |
 |---|---|
-| ![成就面板](HelloWorldProject/Assets/Screenshots/ach-final-panel.png) | ![成就 toast](HelloWorldProject/Assets/Screenshots/ach-final-toast.png) |
+| ![成就面板](docs/shots/ach-final-panel.png) | ![成就 toast](docs/shots/ach-final-toast.png) |
 
 | 多形状按钮（开始 / 重置 / 速度 / 装备入口） | 战斗态（怪物卡 / 暂停图标 / 技能冷却） |
 |---|---|
-| ![图标主界面](HelloWorldProject/Assets/Screenshots/icons-main.png) | ![图标战斗](HelloWorldProject/Assets/Screenshots/icons-battle.png) |
+| ![图标主界面](docs/shots/icons-main.png) | ![图标战斗](docs/shots/icons-battle.png) |
 
 | 立绘待机（呼吸 / 轻微摆动） | 眨眼帧 |
 |---|---|
-| ![立绘待机](HelloWorldProject/Assets/Screenshots/portrait-idle.png) | ![眨眼](HelloWorldProject/Assets/Screenshots/portrait-blink.png) |
+| ![立绘待机](docs/shots/portrait-idle.png) | ![眨眼](docs/shots/portrait-blink.png) |
 
 ## 界面
 
-界面全部由代码搭建（`GameUI` 主文件 + 十二个 partial，共十三个文件：构建 / 浮层 / 刷新核心 / 主题工具 / 装备对比 / 设置与引导 / 音乐 / 立绘待机 / 无尽模式 / 转生 / 成就 / 图标 / 按钮底板），没有 prefab。美术资源只有主角立绘、`Resources/Icons` 下 85 个透明 PNG、`Resources/Sfx` 下 14 个 OGG 音效（Kenney CC0），以及 `Resources/Music` 下四首本地 MP3。图标包括 36 个 256×256 圆形徽章（功能入口、技能、属性）、16 个命令 glyph（播放 / 暂停 / 重置 / 关闭 / 购买 / 换装 / 卖出 / 锁定等）、17 个功能 glyph（含音乐音符）、16 张深海军蓝珐琅底框（长条 / 缺口长条 / 方形 / 八角 / 六边 / 盾形 / 丝带 / 药丸 / 椭圆 / 页签 / 横幅等）。功能入口是 44×44 / 40×40 / 34×34 的图标徽章，成就数、存档号做成右下角深色数字；命令按钮换成长条/方形/六边形底框 + 金色 glyph + 名称，开始/暂停、关闭、换装、卖出、购买、强化、洗练、页签共用同一套；音效由 `GameAudio.cs` 播放，BGM 由 `GameMusic.cs` 播放。紧凑入口没有文字，鼠标悬停显示名称（点下后立即收起）；速度按钮是图标在上、×1/×2/×4 在下的竖向排布。图标由 Seedream 生图、去白底、按圆或形状切图后导入为 Single Sprite。参考分辨率 1280×720，CanvasScaler 用 Expand，所有面板挂在居中的 `ContentRoot`（1280×720）上——窗口比例不对时内容居中、两侧留白，而不是被拉伸变形。
+界面全部由代码搭建（`GameUI` 主文件 + 十三个 partial，共十四个文件：构建 / 浮层 / 刷新核心 / 主题工具 / 装备对比 / 设置与引导 / 音乐 / 立绘待机 / 无尽模式 / 转生 / 成就 / 图标 / 按钮底板 / 战斗舞台），没有 prefab。美术资源是主角立绘 + `Resources/Sprites` 下 74 张战斗精灵（主角 1 / 怪物 33 / Boss 11 / 特效 20 / 光环 5 / 章节背景 4）+ `Resources/Icons` 下 85 个透明 PNG + `Resources/Sfx` 下 14 个 OGG 音效（Kenney CC0）+ `Resources/Music` 下四首本地 MP3。图标包括 36 个 256×256 圆形徽章（功能入口、技能、属性）、16 个命令 glyph（播放 / 暂停 / 重置 / 关闭 / 购买 / 换装 / 卖出 / 锁定等）、17 个功能 glyph（含音乐音符）、16 张深海军蓝珐琅底框（长条 / 缺口长条 / 方形 / 八角 / 六边 / 盾形 / 丝带 / 药丸 / 椭圆 / 页签 / 横幅等）。功能入口是 44×44 / 40×40 / 34×34 的图标徽章，成就数、存档号做成右下角深色数字；命令按钮换成长条/方形/六边形底框 + 金色 glyph + 名称，开始/暂停、关闭、换装、卖出、购买、强化、洗练、页签共用同一套；音效由 `GameAudio.cs` 播放，BGM 由 `GameMusic.cs` 播放。紧凑入口没有文字，鼠标悬停显示名称（点下后立即收起）；速度按钮是图标在上、×1/×2/×4 在下的竖向排布。图标由 Seedream 生图、去白底、按圆或形状切图后导入为 Single Sprite。参考分辨率 1280×720，CanvasScaler 用 Expand，所有面板挂在居中的 `ContentRoot`（1280×720）上——窗口比例不对时内容居中、两侧留白，而不是被拉伸变形。
 
 - **左栏**：主角立绘（`Resources/HeroPortrait.png`，140×179 卡片，垫一层冷色背光 + 脚下一滩地灯，否则深色立绘会陷进同样深的面板底；带呼吸、轻微浮动/摇摆和随机眨眼，眨眼帧是同图只闭眼的 `HeroPortraitBlink.png`，整体变换不重绘角色）→ 属性列贴到立绘右侧（等级 / 巅峰 / 关卡 / 生命条 / 攻防速；速度行同时写出有效攻速与攻击间隔），暴击与巅峰经验走整幅宽行 → 装备（2 列 × 3 行、共五张紧凑卡，每卡显示品质色标题/等级、主属性，右上角「倍率 · 评分」；点卡直接打开该槽位的对比）→ 金币与战绩统计 → 6 格技能栏（3 列 × 2 行，主动 / 被动 / 触发各两格，空槽是 `＋`）。
 - **右栏**：怪物卡（名字等级、血条、属性行、状态行；空场时血槽走 `RowBg` 并显示「下一只怪物 N.Ns」）、战斗日志（`实时 DPS` 挂在标题右侧）、商店、操作按钮。
@@ -117,36 +117,37 @@
 
 ```
 HelloWorldProject/Assets/
-├── Scripts/                 运行时（43 个文件，约 15,781 行）
+├── Scripts/                 运行时（45 个文件，17,372 行）
 │   ├── Bootstrap.cs         入口：装配控制器与界面
 │   ├── GameController.cs    主状态机 + 关卡推进 + 掉落结算 + 强化/洗练（1796 行）
-│   ├── GameController.Endless.cs 无尽模式状态机：开局 / 清层 / BOSS / 结算（310 行）
+│   ├── GameController.Endless.cs 无尽模式状态机：开局 / 清层 / BOSS / 结算（352 行）
 │   ├── GameController.Rebirth.cs 转生：印记折算 / 购买 / 重置与结算（225 行）
 │   ├── GameController.Achievements.cs 成就记账 / 无阵亡连续挑战 / 即时求值（163 行）
-│   ├── GameUI.cs            UI 构建与左右面板（768 行）
+│   ├── GameUI.cs            UI 构建与左右面板（758 行）
 │   ├── GameUI.Panels.cs     浮层面板：选关 / 技能 / 强化 / 洗练 / 存档（1,342 行）
 │   ├── GameUI.Compare.cs    装备对比浮层：五槽页签 + 两栏差值 + 换装/卖出/锁定（322 行）
 │   ├── GameUI.Settings.cs   设置面板、音量与新手引导（503 行）
-│   ├── GameUI.Core.cs       刷新循环、控件工厂、飘字与 DPS（884 行）
-│   ├── GameUI.Achievements.cs 成就入口 / 面板 / 分页筛选 / 解锁 toast（509 行）
+│   ├── GameUI.Core.cs       刷新循环、控件工厂、飘字与 DPS（940 行）
+│   ├── GameUI.Achievements.cs 成就入口 / 面板 / 分页筛选 / 解锁 toast（511 行）
 │   ├── GameUI.Portrait.cs   立绘待机动画：呼吸 / 摆动 / 眨眼（153 行）
-│   ├── GameUI.Endless.cs    无尽面板 / 结果面板 / HUD 分支（347 行）
+│   ├── GameUI.Endless.cs    无尽面板 / 结果面板 / HUD 分支（482 行）
 │   ├── GameUI.Rebirth.cs    轮回入口 / 面板 / 二次确认（270 行）
 │   ├── GameUI.Theme.cs      主题工具：圆角图 / 卡片 / 分区标题（218 行）
 │   ├── GameUI.Icons.cs      图标加载与接线：图标按钮 / 分区标题 / 技能卡 / 装备槽（178 行）
-│   ├── GameUI.Buttons.cs    按钮底板 / 图标+名称排版 / 页签 / 悬停提示（265 行）
+│   ├── GameUI.Buttons.cs    按钮底板 / 图标+名称排版 / 页签 / 悬停提示（306 行）
 │   ├── GameUI.Music.cs      背景音乐入口与面板：曲目 / 播放控制 / 循环 / 音量（288 行）
 │   ├── GameSettings.cs      PlayerPrefs 设置项、音量与引导标记（189 行）
 │   ├── GameAudio.cs         音效播放：16 路音源、音量乘积、事件钩子（122 行）
+│   ├── GameRandom.cs        表现层专用随机流：不碰玩法的 UnityEngine.Random（18 行）
 │   ├── GameMusic.cs         背景音乐：四首曲目 / 循环 / 音量 / 状态持久化（284 行）
 │   ├── SkillAdvice.cs       技能推荐分：按当前面板打分与分档（174 行）
 │   ├── AchievementCatalog.cs 成就目录：42 条定义 / 6 类 / 点数与称号（185 行）
 │   ├── AchievementSystem.cs 成就求值：指标读取、Live 解锁、旧档静默补发（306 行）
 │   ├── BattleLog.cs         日志唯一写入点（AddSystem / AddCombat 两个频道）
 │   ├── BattleSystem.cs      战斗结算与技能效果
-│   ├── Endless.cs           无尽层目录：层定义 / 怪物等级 / 击杀目标 / 记录（180 行）
+│   ├── Endless.cs           无尽层目录：层定义 / 怪物等级 / 击杀目标 / 记录（355 行）
 │   ├── Models.cs            数据模型：MonsterData / Equipment / StageDef（772 行）
-│   ├── Models.PlayerData.cs PlayerData：等级、关卡进度、五槽装备、技能槽、转生与存档字段（714 行）
+│   ├── Models.PlayerData.cs PlayerData：等级、关卡进度、五槽装备、技能槽、转生与存档字段（720 行）
 │   ├── Models.Achievements.cs 成就定义 / 状态 / 目录数据模型（59 行）
 │   ├── Models.PlayerStats.cs 跨世累计统计：击杀 / 掉落 / 强化 / 无阵亡掩码（34 行）
 │   ├── Skills.cs            技能目录（15 个技能）
@@ -154,17 +155,17 @@ HelloWorldProject/Assets/
 │   ├── LootSystem.cs        掉落与词条随机
 │   ├── EquipmentScore.cs    装备评分：增量期望 DPS
 │   ├── Stages.cs            关卡目录与首通奖励公式
-│   ├── SaveSystem.cs        存档（PlayerPrefs，当前 v10，按版本号迁移；715 行）
+│   ├── SaveSystem.cs        存档（PlayerPrefs，当前 v11，按版本号迁移；726 行）
 │   ├── RebirthCatalog.cs    转生目录：五条升级 / 费用 / 印记公式（131 行）
 │   └── GameConfig*.cs       配置层：标量可热改，表结构需重编译
-├── Editor/                  编辑器工具（9 个文件，约 4,344 行）
+├── Editor/                  编辑器工具（9 个文件，4,385 行）
 │   ├── LateGameProbe.cs     平衡实验集合（胜率表、技能 / 连携 / 生存审计）
 │   ├── BalanceRegression.cs 平衡回归：静态哨兵（含新档过渡轨迹）+ 胜率表
 │   ├── NewGameProgression.cs 新档进度探针：Lv.1 空身从 1-1 打到终点
 │   ├── EndgamePacing.cs     终局节奏探针：满级之后要磨多久
 │   ├── EndlessPacing.cs     无尽节奏探针：首死层数 / 单层耗时 / 50 层经济
 │   ├── ProbePolicy.cs       探针的「玩家决策」：技能三选一打分 + 强化 + 洗练
-│   ├── AchievementRegression.cs 成就 §11 回归：42 条指标 / 迁移 / 探针（1,070 行）
+│   ├── AchievementRegression.cs 成就 §11 回归：42 条指标 / 迁移 / 存档异常 / 探针（1,111 行）
 │   ├── SkillTableVerify.cs  skills.json 与代码表的对照自检
 │   └── GameConfigReloader.cs 菜单：重读 game_config.json
 ├── Resources/
@@ -175,7 +176,6 @@ HelloWorldProject/Assets/
 │   ├── Sfx/                 14 个 Kenney CC0 音效（OGG）
 │   ├── Music/               四首本地 BGM（MP3，已 gitignore，不随仓库分发）
 │   └── HeroPortrait*.png    主角立绘
-├── Screenshots/             开发过程截图（README 引用的那几张）
 └── Scenes/SampleScene.unity
 ```
 
@@ -183,7 +183,7 @@ HelloWorldProject/Assets/
 
 - `_balance/` —— 平衡回归基线（`baseline.json`）、探针说明（`README.md`）与冒烟截图（`shots/`），放在工程外以免被 Unity 导入。
 - `_art/` —— 立绘素材、生成提示词与图像处理脚本。
-- `docs/` —— 玩法设计与实现记录（装备洗练、无尽、转生、成就、音频来源等），README 里有对应链接。
+- `docs/` —— 玩法设计与实现记录（装备洗练、无尽、转生、成就、音频来源等），README 里有对应链接；其中 `docs/shots/` 是本文引用的界面截图（26 张 / 7.1MB，从 `HelloWorldProject/Assets/Screenshots/` 迁出，避免 Unity 导入这些纯文档图）。
 - `.mnemon/` —— 项目知识库与热记忆，跨会话接手时从这里读。
 - `_archive/` —— 归档区（已 gitignore）：`legacy/` 是拆分前的旧版 `GameController.cs`/`GameUI.cs` 与文件头备份，`screenshots/` 是早期开发截图。不进 Unity 工程，也不会被导入。
 - `dsh-image-gen/` —— 生图插件的输出目录（已 gitignore）。
@@ -205,7 +205,7 @@ HelloWorldProject/Assets/
 
 它同时是回归门禁的一部分：逐章轨迹（章末等级/尝试/阵亡/耗时）写进 `_balance/baseline.json` 的 `transition` 小节，静态哨兵每次都会比对；另外 `CheckInvariants()` 有无需基线的硬约束——不卡死、每章末等级不低于下一章怪级下限、终局 Lv.≥95、阵亡 ≤120 次、时长 ≤45 分钟。整轮模拟只要 20 毫秒左右，所以挂在毫秒级门禁上不心疼。
 
-成就系统的 §11 回归挂在 `Assets/Editor/AchievementRegression.cs`（菜单 **Tools/测试/成就 §11 回归（核心/探针）**）：`RunCore()` 覆盖 42 条指标边界、固定金币幂等、统计记账、无阵亡挑战、v0~v10 迁移与 v11/schema>1/坏档拒读，2026-10-20 为 633 项 / 0 失败。探针部分同时跑新档（含成就金币上界注入）、终局、无尽与真实转生：新档 13.7min / P41 / 阵亡 2；P200 五槽终局余额 5,864,020；合法五槽 P1000 无尽中位 240 层（250 层 4/10）；真实转生印记 +19，成就/统计/无尽纪录跨世保留。详见 [docs/achievements.md](docs/achievements.md) §15.2。
+成就系统的 §11 回归挂在 `Assets/Editor/AchievementRegression.cs`（菜单 **Tools/测试/成就 §11 回归（核心/探针）**）：`RunCore()` 覆盖 42 条指标边界、固定金币幂等、统计记账、无阵亡挑战、v0~v10 迁移、v11/schema>1/坏档拒读与存档写失败保护，2026-10-22 为 644 项 / 0 失败。探针部分同时跑新档（含成就金币上界注入）、终局、无尽与真实转生：新档 13.7min / P41 / 阵亡 2；P200 五槽终局余额 5,864,020；合法五槽 P1000 无尽中位 240 层（250 层 4/10）；真实转生印记 +19，成就/统计/无尽纪录跨世保留。详见 [docs/achievements.md](docs/achievements.md) §15.2。
 
 转生接入后，`NewGameProgression.Run(...)` 与 `EndlessPacing.Run(...)` 都可额外接收五条 rank（默认 0）；新档探针按 `RebirthStartLevel/StartGold/StartPotions` 造起始角色，无尽探针把对应倍率套到满装模板；2026-10-20 已跑 50 种子分布：第 2 世到 11-10 为第 1 世的 92.4%，满轮回 63.5%，都慢于目标 75~85% / 35~50%；详见 [docs/rebirth.md](docs/rebirth.md) §14.4。
 
@@ -221,7 +221,7 @@ HelloWorldProject/Assets/
 
 ## 开发进度
 
-原始规划 12 步，全部完成；P4 的音效、BGM、2D 战斗舞台与技能特效都已接入（[设计与实现记录](docs/sprites-and-fx.md)）：
+原始规划 12 步，全部完成；P4 的音效、BGM、2D 战斗舞台、11 族怪物、章节背景与技能特效都已接入（[设计与实现记录](docs/sprites-and-fx.md)）：
 
 | 阶段 | 步骤 | 状态 |
 |---|---|---|
@@ -236,9 +236,9 @@ HelloWorldProject/Assets/
 | P3 长线目标 | 9 成就系统（42 条 / 805 点 / 7 称号，[设计与实现记录](docs/achievements.md)） | ✅ |
 | | 10 转生（重置等级换永久加成，[设计与实现记录](docs/rebirth.md)） | ✅ |
 | | 11 无尽模式 + 最高层记录 + 本档 Top-5 历史榜（2026-10-22，[docs/endless-mode.md](docs/endless-mode.md) §6.5） | ✅ |
-| P4 表现层 | 12 音效 / 2D 精灵 / 技能特效 | ✅ 最小音效集 + BGM + 2D 战斗舞台（主角 / 3 族怪物 / Boss 独立美术 / 12 技能特效 / 可展开日志） |
+| P4 表现层 | 12 音效 / 2D 精灵 / 技能特效 | ✅ 最小音效集 + BGM + 2D 战斗舞台（主角 / **11 族怪物 × 3 类型** / **11 张 Boss 立绘** / **8 张技能专属特效** / **档次与词缀光环** / **4 张章节背景** / 可展开日志） |
 
-另外已完成但不在原计划里的：护甲穿透属性、装备评分改口径、多存档槽、平衡回归工具、主角立绘与待机动画、设置面板、新手引导、技能推荐分、装备对比/锁定、击杀结算拆分与终局重复结算修复（2026-10-18）、P1000 上限与无尽天花板实测、平衡探针模拟洗练（2026-10-19）、五装备槽与攻速软上限（2026-10-19）、转生系统（轮回，2026-10-20）、成就系统（42 条 / 805 点 / 7 称号，2026-10-20）、多形状按钮与悬停提示（2026-10-21）、最小音效集与主/音效音量（2026-10-21）、本地四首 BGM 与音乐面板（2026-10-21）、2D 战斗舞台与技能特效（2026-10-21）、无尽本档 Top-5 历史榜（2026-10-22）。
+另外已完成但不在原计划里的：护甲穿透属性、装备评分改口径、多存档槽、平衡回归工具、主角立绘与待机动画、设置面板、新手引导、技能推荐分、装备对比/锁定、击杀结算拆分与终局重复结算修复（2026-10-18）、P1000 上限与无尽天花板实测、平衡探针模拟洗练（2026-10-19）、五装备槽与攻速软上限（2026-10-19）、转生系统（轮回，2026-10-20）、成就系统（42 条 / 805 点 / 7 称号，2026-10-20）、多形状按钮与悬停提示（2026-10-21）、最小音效集与主/音效音量（2026-10-21）、本地四首 BGM 与音乐面板（2026-10-21）、2D 战斗舞台与技能特效（2026-10-21）、无尽本档 Top-5 历史榜（2026-10-22）、4~11 章 8 族怪物与 8 张 Boss 立绘 / 精英与 Boss 档次光环 + 词缀光环 / 4 张章节背景 / 15 个技能特效一一对应（2026-10-22）。
 
 2026-10-18 又补了一轮健壮性：热改配置加载后统一夹到安全区间（防除零/死循环/索引越界），读档时清洗技能与装备字段，切档/删档/重置共用 `ResetSessionState()` 清场，装备评分缓存把技能状态纳入缓存键。
 
@@ -248,7 +248,7 @@ HelloWorldProject/Assets/
 
 - **BGM 是 AI 生成曲目**：四首背景音乐由 AI 音频工具生成，不需要署名或授权，可随游戏直接分发。文件仍是 `HelloWorldProject/Assets/Resources/Music/` 下的 MP3，并按仓库体积考虑写进 `.gitignore`；换机或克隆仓库后目录为空，音符面板会显示「缺少文件」并静默跳过不可用曲目（换曲改 `MusicCatalog` 里的路径与标题即可）。
 - **中间章节配装平衡只做了近似验证**：`LateGameProbe` 用"该章预期等级 + 随机精英装备"造人，`NewGameProgression` 从 Lv.1 空身一路打到 11-10（两者都见 `_balance/README.md`）。技能三选一、强化与洗练已由 `ProbePolicy` 接管（洗练默认在每次 BOSS 前把词条质量拉到 80%，锁住已达标的词条，不追 90%），但仍不模拟真人的犹豫：不会卡着不强化攒钱、也不会挑「这关不需要的属性」；手动换装与操作失误也不在探针里。2026-10-19 的 A/B（两槽口径）：新档 seed 12345 不洗练时第 11 章要 97 次尝试（其中 11-10 88 次）/ 87 阵亡 / P60；洗到 80% 后第 11 章只要 20 次（11-10 11 次）/ 10 阵亡 / P44，洗练只花 2,674 金。**这一条在 2026-10-21 五槽复测里没有复现**：同口径 6 个种子（12345 / 777 / 2026 / 4242 / 8888 / 31337，单关上限 30）第 11 章中位尝试「开洗练 22 次 / 关洗练 21.5 次」，单种子差值从 −6 到 +22 次，整体落在种子噪声内；单轮洗练花费 2,465~23,295 金，而同档整轮金币收入只有约 2.3 万——新档里洗练已经是「吃掉过半收入」，不是「只花 2,674 金」。所以**不整体提价**；若要动，只动「同一件反复洗」这一档：`ReforgeCostGrowth` 0.6 → 0.9（首洗 2,762 不变，第 11 次 17,818 → 27,616，31 次滚满 85.6 万 → 124.1 万，端局一套洗到 86% 的平均花费 96.3 万 → 133.7 万）——见 [docs/equipment-reforge.md](docs/equipment-reforge.md) §5.5–5.6，**2026-10-21 已落地**。终局的钱另有账：P1000 全程洗练只花 84.3 万、兜里剩 8.598 亿，那是软出口问题，不是单价问题。第 11 章靠反复刷小怪攒巅峰，节奏由 `EndgamePacing` 单独把关。
-- **`GameUI` / `PlayerData` 偏胖**：`GameUI` 十四个文件合计约 7,035 行（浮层与列表 1,342 / 刷新核心 940 / 战斗舞台 764 / 构建 758 / 成就 511 / 设置、音量与引导 503 / 无尽 482 / 对比 322 / 按钮底板 306 / 音乐 288 / 转生 270 / 主题工具 218 / 图标 178 / 立绘待机 153；2026-10-22 重新实测，旧写的「十三个文件 6,047 行」已过期），`Models.PlayerData.cs` 720 行，职责都还偏多，重构风险高，计划等玩法稳定后再动。
+- **`GameUI` / `PlayerData` 偏胖**：`GameUI` 十四个文件合计约 7,289 行（浮层与列表 1,342 / 战斗舞台 1,018 / 刷新核心 940 / 构建 758 / 成就 511 / 设置、音量与引导 503 / 无尽 482 / 对比 322 / 按钮底板 306 / 音乐 288 / 转生 270 / 主题工具 218 / 图标 178 / 立绘待机 153；2026-10-22 重新实测，旧写的「十三个文件 6,047 行」已过期），`Models.PlayerData.cs` 720 行，职责都还偏多，重构风险高，计划等玩法稳定后再动。
 - **1~10 章的压迫与终局节奏还没有随五槽重调**：章节压迫 `1 + 4%×(章-1)`、章末 BOSS 再乘 `1 + 3%×(章-1)`（第 11 章不吃），终局 BOSS 再额外 ×1.6。2026-10-19 按五槽重跑的章节胜率表（每章每类型 20 场 × 100 次装备抽样，两个种子合并）：第 1~4 章 93%~98%，第 5~8 章 87%/88%/89%/91%，第 9~10 章 67%/65%，第 11 章 0%（精英 9.4%）。五槽显著削平了中期墙，第 9~10 章仍是硬门槛，终局 BOSS 依然 0%。五槽新档探针：2026-10-19 的 11 个种子里 7 个通关、4 个卡在 11-10（通关组阵亡 0~10 次，卡住组 12~32 次）；2026-10-20 扩到 50 个种子后 40 个通关、10 个卡在 11-10。seed 12345 前 109 关 0 阵亡、11-10 仅 2 次阵亡、P41 通关；seed 777/2026 分别 14/10 次阵亡。旧写的「满装自动玩家 0 阵亡」只适用于 1~10 章，终局墙现在是方差而不是稳定门槛。详细数据与复现见 [_balance/balance-analysis.md](_balance/balance-analysis.md)。
 - **终局金币仍是「软出口」**：洗练加锁词条后金币有了确定性用法，但天花板没变——锁住的不重抽、洗出来的不会超过单条上限。2026-10-19 两槽口径下锁 3 条追 80% 词条质量的中位总花费约 7 万；2026-10-20 五槽 P200 复测余额 5,864,020（含刷怪 164.8min）；2026-10-21 五槽 P1000 复测（119,842 次挑战）全程只花掉 132.9 万（强化 486,240 + 洗练 842,890），收尾兜里 859,843,626，软出口在长线下只会更尖锐。转生已经落地「把本世金币一次性折成印记」，但印记总量有上限、每世只能转一次，吸收不了 P1000 的亿级余额；成就的约 4.3 万固定金币也不是出口。真要解决，要么加持续型消耗（如商店 2.0 的强化传承/锁定券等服务，目前只有设计稿），要么加保底/提高单条上限（会抬高天花板，与本系统的设计前提冲突，需重新平衡），要么让强化上限超过 +15。
 - **转生的平衡分布已跑，当前数值未达标（2026-10-20）**：50 种子实测第 2 世到 11-10 为第 1 世的 92.4%、满轮回 63.5%（目标 75~85% / 35~50%），转生加速不足；满轮回 P1000 无尽首死中位 315、P90 330、max 341（同种子转生前基线 290，目标 ≤305），战斗 +5% 偏强。P200 的 11-10 胜率 baseline 80.8%、满轮回 90.5%（目标 80~90%，上沿略超）。探针已接入五条 rank；建议把战斗加成降到 0.005/级（满 +2.5%）或改为仅战役生效，是否实调待定。数据与探针口径见 [docs/rebirth.md](docs/rebirth.md) §14.4。

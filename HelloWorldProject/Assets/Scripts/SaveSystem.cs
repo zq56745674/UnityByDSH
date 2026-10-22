@@ -245,6 +245,11 @@ namespace AutoBattle
 
         public static bool HasSave => HasSaveIn(CurrentSlot);
 
+#if UNITY_EDITOR
+        /// <summary>编辑器测试专用：让下一次 Save 抛异常，用于验证失败路径（不丢待保存标记、不覆盖旧档）。</summary>
+        public static bool FailNextSaveForTest;
+#endif
+
         /// <summary>写入存档；返回是否成功落盘。失败时成就的待保存标记会保留。</summary>
         public static bool Save(PlayerData player)
         {
@@ -299,6 +304,13 @@ namespace AutoBattle
 
             try
             {
+#if UNITY_EDITOR
+                if (FailNextSaveForTest)
+                {
+                    FailNextSaveForTest = false;
+                    throw new InvalidOperationException("【测试】注入的存档写入失败");
+                }
+#endif
                 PlayerPrefs.SetString(KeyOf(CurrentSlot), JsonUtility.ToJson(data));
                 PlayerPrefs.Save();
                 AchievementSystem.NotifySaveResult(true);

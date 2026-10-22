@@ -103,7 +103,7 @@ namespace AutoBattle
             // 注意：CreateRect 的坐标系是「y 向下为正」，所以这里存的是向下偏移量。
             // 上限 690：五位数伤害的字宽约 70px，再往右会被画布右缘切掉。
             _floatPos[i] = new Vector2(Mathf.Clamp(x, 40f, 690f), Mathf.Clamp(y + lane * 15f, 12f, 450f));
-            _floatVel[i] = new Vector2(UnityEngine.Random.Range(-8f, 8f), -58f);
+            _floatVel[i] = new Vector2(GameRandom.Range(-8f, 8f), -58f);
             _floatTexts[i].rectTransform.anchoredPosition = new Vector2(_floatPos[i].x, -_floatPos[i].y);
         }
 
@@ -278,14 +278,14 @@ namespace AutoBattle
                     int dmg = int.Parse(mPlayer.Groups[1].Value);
                     // 落在怪物血条右半段：血条中央是「260 / 2115」的读数，别压它。
                     // 普通命中按 1/3 概率丢弃——飘字是节奏感，不是逐条回执，日志里有全量。
-                    if (crit || UnityEngine.Random.value > 0.5f)
+                    if (crit || GameRandom.Value > 0.5f)
                     {
                         // 落点跟着怪物走：飘字层压在舞台上方，怪物躯干在层内的 y 约 250~290。
                         SpawnFloat(crit ? dmg + "!" : dmg.ToString(),
                             crit ? GameConfig.FloatCrit : GameConfig.TextNormal,
                             crit ? 19 : 14,
-                            522f + UnityEngine.Random.Range(0f, 140f),
-                            250f + UnityEngine.Random.Range(0f, 34f));
+                            522f + GameRandom.Range(0f, 140f),
+                            250f + GameRandom.Range(0f, 34f));
                     }
                     _dpsDamageAccum += dmg;
                     continue;
@@ -296,8 +296,8 @@ namespace AutoBattle
                 {
                     int dmg = int.Parse(mSkill.Groups[1].Value);
                     SpawnFloat(dmg.ToString(), GameConfig.FloatDamage, 17,
-                        548f + UnityEngine.Random.Range(0f, 104f),
-                        246f + UnityEngine.Random.Range(0f, 40f));
+                        548f + GameRandom.Range(0f, 104f),
+                        246f + GameRandom.Range(0f, 40f));
                     _dpsDamageAccum += dmg;
                     continue;
                 }

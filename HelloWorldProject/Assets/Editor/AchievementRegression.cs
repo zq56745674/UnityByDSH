@@ -776,6 +776,7 @@ namespace AutoBattle.EditorTools
             try
             {
                 SaveRoundTrip();
+                SaveFailureTests();
                 LoadV9Migration();
                 LoadV8Migration();
                 LoadV5Migration();
@@ -854,6 +855,36 @@ namespace AutoBattle.EditorTools
             Check(q.accessory != null && q.accessory.quality == EquipmentQuality.Uncommon, "饰品往返");
             Check(q.stats.kills == 17 && q.stats.drops == 5, "统计往返");
             Check(q.achievements.IsUnlocked("first_kill"), "成就往返");
+        }
+
+        private static void SaveFailureTests()
+        {
+            ClearSlot0();
+            SaveSystem.SelectSlot(0);
+            PlayerData p = Fresh();
+            p.level = 33;
+            Check(SaveSystem.Save(p), "基线存档写入成功");
+            string baseline = ReadRaw();
+            Check(!string.IsNullOrEmpty(baseline), "基线存档非空");
+
+            AchievementSystem.GrantSilent(p, "first_kill");
+            Check(AchievementSystem.HasUnsavedUnlocks, "静默补发后有待保存标记");
+
+            SaveSystem.FailNextSaveForTest = true;
+            bool failed = SaveSystem.Save(p);
+            Check(!failed, "注入失败时 Save 返回 false");
+            Check(AchievementSystem.HasUnsavedUnlocks, "失败后待保存标记保留");
+            Check(ReadRaw() == baseline, "失败不覆盖旧档");
+
+            bool retried = SaveSystem.Save(p);
+            Check(retried, "重试成功");
+            Check(!AchievementSystem.HasUnsavedUnlocks, "成功后清除待保存标记");
+            Check(ReadRaw() != baseline, "成功后写入新内容");
+
+            PlayerData q;
+            bool loaded = LoadFromRaw(ReadRaw(), out q);
+            Check(loaded && q.achievements.IsUnlocked("first_kill"), "重试后成就已落盘");
+            Check(!AchievementSystem.HasUnsavedUnlocks, "重试成功后无待保存标记");
         }
 
         private static void LoadV9Migration()
@@ -947,16 +978,26 @@ namespace AutoBattle.EditorTools
             Check(p.clearedStages.Count == 0, "v0 无通关记录");
         }
 
+        private static int NextSaveVersion()
+        {
+            // 从 SaveSystem 自己的常量推导，避免存档版本再次升级后这条用例默默失效（2026-10-22 曾因此 FAIL）。
+            var field = typeof(SaveSystem).GetField("CurrentSaveVersion",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            int current = field != null ? (int)field.GetRawConstantValue() : 11;
+            return current + 1;
+        }
+
         private static void LoadRejectsNewer()
         {
             ClearSlot0();
-            SaveSystem.SaveData d = BaseData(11);
+            int newer = NextSaveVersion();
+            SaveSystem.SaveData d = BaseData(newer);
             d.level = 50;
             string json = JsonUtility.ToJson(d);
             PlayerData p;
             bool ok = LoadFromRaw(json, out p);
-            Check(!ok, "v11 拒绝加载");
-            Check(BackupRaw() == json, "v11 原文备份");
+            Check(!ok, $"v{newer} 拒绝加载");
+            Check(BackupRaw() == json, $"v{newer} 原文备份");
         }
 
         private static void LoadRejectsNewerSchema()

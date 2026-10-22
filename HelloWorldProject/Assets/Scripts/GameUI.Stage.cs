@@ -33,6 +33,11 @@ namespace AutoBattle
         private const float StageTickerH = 56f;
         private const float StageLogPanelH = 256f;
         private const int StageFxPool = 12;
+        // ---- 地面光环：俯视看是扁椭圆，高度按宽度乘这个系数 ----
+        private const float AuraSquash = 0.42f;
+        private const float StageAuraEliteW = 176f;
+        private const float StageAuraBossW = 208f;
+        private const float StageAuraAffixW = 84f;
         private const int MaxDetailLogLines = 180;
 
         /// <summary>同一个特效两次触发的最小间隔（秒）：连击/多段技能同帧爆一堆会糊成白光。</summary>
@@ -42,6 +47,10 @@ namespace AutoBattle
         // ---- 舞台控件 ----
         private Image _battleStageCard;
         private RectTransform _battleStageRoot;
+        private Image _battleBackdropArt;      // 章节背景图（Resources/Sprites/Backgrounds）
+        private string _battleBackdropKey;
+        private Image _battleMonsterAura;      // 精英/Boss 档次光环
+        private Image _battleAffixAura;        // 词缀光环（吸血 / 护盾 / 剧毒）
         private Image _battleHero;
         private Image _battleMonster;
         private Image _battleHeroShadow;
@@ -82,6 +91,7 @@ namespace AutoBattle
         private bool _battleHeroDead;
         private float _battleHeroDeathT;
         private int _battleLastLevel = -1;
+        private int _battleLastSkillMask = -1;
         private string _battleChapterLabel;
         private Sprite _battleHeroSprite;
         private BattleSystem _battleVisualSource;
@@ -107,6 +117,12 @@ namespace AutoBattle
             backdrop.color = new Color(0.031f, 0.039f, 0.060f, 1f);
             Stretch(backdrop.rectTransform);
 
+            // 章节背景图：铺满舞台、压暗一点，让角色仍然是最亮的主体
+            _battleBackdropArt = CreateImage(_battleStageRoot, "StageBackdropArt", 0, 0, StageW, StageH, Color.white);
+            Stretch(_battleBackdropArt.rectTransform);
+            _battleBackdropArt.preserveAspect = false;
+            _battleBackdropArt.enabled = false;
+
             Image haze = CreateImage(_battleStageRoot, "StageHaze", -60, 96, 928, 300,
                 new Color(0.27f, 0.66f, 0.60f, 0.075f));
             haze.sprite = GlowSprite();   // 一片很淡的冷青光，给背景一点纵深
@@ -122,6 +138,10 @@ namespace AutoBattle
 
             _battleMonsterShadow = CreateStageShadow("MonsterShadow", StageMonsterCx, 150f);
             _battleHeroShadow = CreateStageShadow("HeroShadow", StageHeroCx, 120f);
+
+            // 光环先于角色创建：UGUI 按兄弟顺序叠，光环才会压在脚下而不是盖住身体
+            _battleMonsterAura = CreateStageAura("MonsterAura", StageMonsterCx, StageAuraEliteW);
+            _battleAffixAura = CreateStageAura("MonsterAffixAura", StageMonsterCx, StageAuraAffixW);
 
             _battleHero = CreateStageActor("BattleHero", StageHeroCx);
             _battleMonster = CreateStageActor("BattleMonster", StageMonsterCx);
@@ -180,6 +200,20 @@ namespace AutoBattle
             rt.sizeDelta = new Vector2(w, 26f);
             shadow.enabled = false;
             return shadow;
+        }
+
+        /// <summary>地面光环：轴心在脚下、横向压扁成椭圆，只靠缩放/透明度做呼吸。</summary>
+        private Image CreateStageAura(string name, float cx, float width)
+        {
+            Image aura = CreateImage(_battleStageRoot, name, 0, 0, width, width * AuraSquash, Color.white);
+            RectTransform rt = aura.rectTransform;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(cx, -(StageGroundY - width * AuraSquash * 0.32f));
+            rt.sizeDelta = new Vector2(width, width * AuraSquash);
+            aura.enabled = false;
+            return aura;
         }
 
         /// <summary>战斗单位：锚在舞台左上、轴心在脚底，所以缩放是「绕脚长高」而不是绕中心鼓起来。</summary>
@@ -282,6 +316,7 @@ namespace AutoBattle
             TickBattleMonster(dt);
             TickBattleFx(dt);
             CheckStageLevelUp();
+            CheckStageSkillLearn();
             RefreshBattleChapterLabel();
         }
 
@@ -300,6 +335,7 @@ namespace AutoBattle
                 _battleMonsterShake = 0f;
                 _battleMonsterHeight = MonsterDisplayHeight(live);
                 ApplyActorSprite(_battleMonster, MonsterSpriteFor(live), _battleMonsterHeight, StageMonsterCx);
+                ApplyMonsterAuras(live);
                 if (_battleMonsterShadow != null)
                 {
                     _battleMonsterShadow.enabled = _battleMonster.enabled;
@@ -386,6 +422,8 @@ namespace AutoBattle
                     _battleMonsterDying = false;
                     _battleMonster.enabled = false;
                     if (_battleMonsterShadow != null) _battleMonsterShadow.enabled = false;
+                    if (_battleMonsterAura != null) _battleMonsterAura.enabled = false;
+                    if (_battleAffixAura != null) _battleAffixAura.enabled = false;
                     return;
                 }
             }
@@ -411,6 +449,12 @@ namespace AutoBattle
                 SetImageAlpha(_battleMonsterShadow,
                     0.85f * Mathf.Clamp01(_battleMonsterSpawn * 1.4f) * (1f - deathK * 0.7f));
             }
+
+            // 光环跟入场一起淡入、跟死亡一起淡出，并缓慢呼吸
+            float auraK = Mathf.Clamp01(_battleMonsterSpawn) * (1f - deathK);
+            float auraPulse = 1f + Mathf.Sin(_battleAnimTime * 2.2f) * 0.045f;
+            ApplyAuraPose(_battleMonsterAura, 0.92f * auraK, auraPulse);
+            ApplyAuraPose(_battleAffixAura, 0.86f * auraK, auraPulse * 1.03f);
         }
 
         private void TickBattleFx(float dt)
@@ -442,6 +486,9 @@ namespace AutoBattle
         {
             if (_battleChapterText == null || _game == null || _game.Player == null) return;
 
+            StageDef stage = _game.Player.CurrentStage;
+            int chapter = Mathf.Clamp(stage.chapter, 1, GameConfig.ChapterCount);
+
             string label;
             if (_game.EndlessActive && _game.EndlessRun != null)
             {
@@ -449,14 +496,183 @@ namespace AutoBattle
             }
             else
             {
-                StageDef stage = _game.Player.CurrentStage;
-                int chapter = Mathf.Clamp(stage.chapter, 1, GameConfig.ChapterCount);
                 label = $"第 {chapter} 章 · {GameConfig.ChapterFamilyNames[chapter - 1]}";
             }
+
+            RefreshStageBackdrop(chapter);
 
             if (label == _battleChapterLabel) return;
             _battleChapterLabel = label;
             _battleChapterText.text = label;
+        }
+
+        // ==================== 章节背景 / 档次光环 / 被动特效 ====================
+
+        /// <summary>按章挑背景图。无尽也落在同一套图里（按当前章节）。</summary>
+        private static string BackdropFor(int chapter)
+        {
+            switch (Mathf.Clamp(chapter, 1, 11))
+            {
+                case 1:
+                case 2:
+                case 6: return "bg_cavern";
+                case 3:
+                case 7: return "bg_crypt";
+                case 4:
+                case 5: return "bg_wilds";
+                default: return "bg_citadel";
+            }
+        }
+
+        /// <summary>
+        /// 同一张底图在不同章上色温，避免 8~11 章（都是 bg_citadel）看起来完全同一关。
+        /// 值都很轻，只做「这是另一片区域」的暗示，不抢角色。
+        /// </summary>
+        private static Color BackdropTint(int chapter)
+        {
+            switch (Mathf.Clamp(chapter, 1, 11))
+            {
+                case 1: return new Color(0.92f, 1.00f, 1.05f);   // 洞窟：冷、潮湿
+                case 2: return new Color(1.05f, 0.98f, 0.90f);   // 洞窟：火把偏暖
+                case 6: return new Color(0.84f, 0.94f, 1.02f);   // 洞窟：更深更蓝
+                case 3: return new Color(0.86f, 0.98f, 1.06f);   // 陵墓：幽蓝
+                case 7: return new Color(0.78f, 0.86f, 1.02f);   // 陵墓：更暗
+                case 4: return new Color(1.06f, 0.96f, 0.86f);   // 荒野：黄昏暖
+                case 5: return new Color(1.00f, 0.90f, 0.90f);   // 荒野：偏赤
+                case 8: return new Color(0.94f, 0.96f, 1.04f);   // 魔域：石青
+                case 9: return new Color(1.10f, 0.82f, 0.80f);   // 魔域：恶魔赤
+                case 10: return new Color(0.94f, 0.82f, 1.10f);  // 魔域：深渊紫
+                default: return new Color(1.08f, 0.96f, 0.90f);  // 龙裔：金
+            }
+        }
+
+        /// <summary>只在换章时换图：Resources.Load 有缓存，但每帧重设 sprite 会一直刷 UI。</summary>
+        private void RefreshStageBackdrop(int chapter)
+        {
+            if (_battleBackdropArt == null) return;
+
+            int ch = Mathf.Clamp(chapter, 1, 11);
+            string key = BackdropFor(ch);
+            string cacheKey = key + ":" + ch;   // 同图不同章也要重设色温
+            if (cacheKey == _battleBackdropKey) return;
+            _battleBackdropKey = cacheKey;
+
+            if (string.IsNullOrEmpty(key))
+            {
+                _battleBackdropArt.sprite = null;
+                _battleBackdropArt.enabled = false;
+                return;
+            }
+
+            Sprite sprite = SpriteOf("Sprites/Backgrounds/" + key);
+            if (sprite == null)
+            {
+                _battleBackdropArt.sprite = null;
+                _battleBackdropArt.enabled = false;
+                return;
+            }
+
+            _battleBackdropArt.sprite = sprite;
+            Color tint = BackdropTint(ch);
+            _battleBackdropArt.color = new Color(tint.r, tint.g, tint.b, 0.68f);   // 压暗一档，角色仍是主体
+            _battleBackdropArt.enabled = true;
+        }
+
+        /// <summary>精英/Boss 档次光环 + 词缀光环（吸血/护盾/剧毒）只在对应怪身上亮。</summary>
+        private void ApplyMonsterAuras(MonsterData monster)
+        {
+            string tierKey = null;
+            float tierWidth = StageAuraEliteW;
+            if (monster != null)
+            {
+                if (monster.tier == MonsterTier.Boss)
+                {
+                    tierKey = "Sprites/Auras/aura_boss";
+                    tierWidth = StageAuraBossW;
+                }
+                else if (monster.tier == MonsterTier.Elite)
+                {
+                    tierKey = "Sprites/Auras/aura_elite";
+                }
+            }
+            ApplyAuraSprite(_battleMonsterAura, tierKey, tierWidth);
+
+            string affixKey = null;
+            if (monster != null && monster.HasAffix)
+            {
+                switch (monster.affix)
+                {
+                    case MonsterAffix.Lifesteal: affixKey = "Sprites/Auras/affix_drain"; break;
+                    case MonsterAffix.Shield: affixKey = "Sprites/Auras/affix_shield"; break;
+                    case MonsterAffix.Poison: affixKey = "Sprites/Auras/affix_poison"; break;
+                }
+            }
+            ApplyAuraSprite(_battleAffixAura, affixKey, StageAuraAffixW);
+        }
+
+        private void ApplyAuraSprite(Image aura, string path, float width)
+        {
+            if (aura == null) return;
+
+            float height = width * AuraSquash;
+            aura.rectTransform.sizeDelta = new Vector2(width, height);
+            aura.rectTransform.anchoredPosition =
+                new Vector2(StageMonsterCx, -(StageGroundY - height * 0.32f));
+            aura.rectTransform.localScale = Vector3.one;
+
+            if (string.IsNullOrEmpty(path))
+            {
+                aura.enabled = false;
+                return;
+            }
+
+            Sprite sprite = SpriteOf(path);
+            if (sprite == null)
+            {
+                aura.enabled = false;
+                return;
+            }
+
+            aura.sprite = sprite;
+            aura.color = new Color(1f, 1f, 1f, 0f);   // 透明度交给 Tick 淡入
+            aura.enabled = true;
+        }
+
+        private static void ApplyAuraPose(Image aura, float alpha, float pulse)
+        {
+            if (aura == null || !aura.enabled) return;
+            SetImageAlpha(aura, Mathf.Clamp01(alpha));
+            aura.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
+        }
+
+        /// <summary>
+        /// 纯属性被动（钢铁之躯/狂暴之心/致命打击/迅捷）在战斗里没有事件可挂，
+        /// 所以只在「学会的那一瞬间」放一次特效：比对技能位掩码，增量就是刚学的。
+        /// </summary>
+        private void CheckStageSkillLearn()
+        {
+            if (_game == null || _game.Player == null) return;
+
+            int mask = _game.Player.ownedSkillMask;
+            if (_battleLastSkillMask < 0)
+            {
+                _battleLastSkillMask = mask;   // 首帧只记录，避免进游戏就放一串特效
+                return;
+            }
+
+            int added = mask & ~_battleLastSkillMask;
+            _battleLastSkillMask = mask;
+            if (added == 0) return;
+
+            float cy = StageGroundY - StageHeroH * 0.55f;
+            if ((added & (1 << (int)SkillId.IronBody)) != 0)
+                PlayBattleFxSprite("fx_iron_body", StageHeroCx, cy, 176f, 0.7f, 1.25f, 0f);
+            if ((added & (1 << (int)SkillId.BerserkHeart)) != 0)
+                PlayBattleFxSprite("fx_berserk_heart", StageHeroCx, cy, 176f, 0.7f, 1.25f, 0f);
+            if ((added & (1 << (int)SkillId.LethalStrike)) != 0)
+                PlayBattleFxSprite("fx_lethal_strike", StageHeroCx, cy, 176f, 0.7f, 1.25f, 0f);
+            if ((added & (1 << (int)SkillId.Swiftness)) != 0)
+                PlayBattleFxSprite("fx_swiftness", StageHeroCx, cy, 176f, 0.7f, 1.25f, 0f);
         }
 
         // ==================== 日志展开 / 收起 ====================
@@ -569,7 +785,7 @@ namespace AutoBattle
             float monTop = StageGroundY - _battleMonsterHeight;
             float monCy = monTop + _battleMonsterHeight * 0.52f;     // 躯干中部，不是脚底
             float heroCy = StageGroundY - StageHeroH * 0.55f;
-            float jitter = Random.Range(-12f, 12f);
+            float jitter = GameRandom.Range(-12f, 12f);
 
             switch (fx)
             {
@@ -636,6 +852,41 @@ namespace AutoBattle
                 case BattleFx.Berserk:
                     PlayBattleFxSprite("fx_berserk", StageHeroCx, heroCy, 148f, 0.55f, 1.28f, 0f);
                     break;
+
+                // ---- 21：15 个技能各自的特效（不再全都借 fx_heavy） ----
+                case BattleFx.SkillCritChain:
+                    _battleMonsterShake = 0.7f;
+                    PlayBattleFxSprite("fx_crit_chain", StageMonsterCx + jitter, monCy, 150f, 0.3f, 1.4f, 0f);
+                    break;
+
+                case BattleFx.SkillNearDeath:
+                    PlayBattleFxSprite("fx_near_death", StageHeroCx, StageGroundY - 34f, 200f, 0.6f, 1.3f, 0f);
+                    break;
+
+                case BattleFx.SkillUndying:
+                    PlayBattleFxSprite("fx_undying", StageHeroCx, heroCy, 160f, 0.5f, 1.3f, 0f);
+                    break;
+
+                case BattleFx.SkillGiantSlayer:
+                    PlayBattleFxSprite("fx_giant_slayer", StageMonsterCx, monCy, 176f, 0.45f, 1.35f, -12f);
+                    break;
+
+                // 纯属性被动没有战斗事件，只在学会那一帧由 CheckStageSkillLearn 直接放
+                case BattleFx.PassiveIronBody:
+                    PlayBattleFxSprite("fx_iron_body", StageHeroCx, heroCy, 176f, 0.7f, 1.25f, 0f);
+                    break;
+
+                case BattleFx.PassiveBerserkHeart:
+                    PlayBattleFxSprite("fx_berserk_heart", StageHeroCx, heroCy, 176f, 0.7f, 1.25f, 0f);
+                    break;
+
+                case BattleFx.PassiveLethalStrike:
+                    PlayBattleFxSprite("fx_lethal_strike", StageHeroCx, heroCy, 176f, 0.7f, 1.25f, 0f);
+                    break;
+
+                case BattleFx.PassiveSwiftness:
+                    PlayBattleFxSprite("fx_swiftness", StageHeroCx, heroCy, 176f, 0.7f, 1.25f, 0f);
+                    break;
             }
         }
 
@@ -684,14 +935,17 @@ namespace AutoBattle
 
         // ==================== 美术查表 ====================
 
-        /// <summary>
-        /// 章节 → 有美术的族。第 4 章以后还没有专属美术（TODO），先按 3 族轮换，
-        /// 至少做到「换章 = 换脸」，而不是 8 章都打同一只骷髅。
-        /// </summary>
+        /// <summary>章节 → 怪的族，和 GameConfig.ChapterFamilyNames 一一对应（11 章 11 族）。</summary>
+        private static readonly string[] StageFamilyKeys =
+        {
+            "goblin", "kobold", "skeleton", "ogre", "orc", "spider",
+            "undead", "gargoyle", "demon", "abyss", "dragon"
+        };
+
         private static string MonsterFamilyKey(int chapter)
         {
-            int index = Mathf.Abs(chapter - 1) % 3;
-            return index == 0 ? "goblin" : index == 1 ? "kobold" : "skeleton";
+            int index = Mathf.Clamp(chapter, 1, StageFamilyKeys.Length) - 1;
+            return StageFamilyKeys[index];
         }
 
         private static string MonsterTypeKey(MonsterType type)
