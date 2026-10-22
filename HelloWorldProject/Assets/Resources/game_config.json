@@ -136,10 +136,10 @@
 
   "RebirthUnlockParagon": 100,
   "RebirthBattlePerRank": 0.01,
-  "RebirthExpPerRank": 0.20,
+  "RebirthExpPerRank": 0.60,
   "RebirthGoldPerRank": 0.20,
   "RebirthDropPerRank": 0.02,
-  "RebirthLegacyLevelPerRank": 2,
+  "RebirthLegacyLevelPerRank": 3,
   "RebirthAlchemyPotionPerRank": 1,
   "RebirthAlchemyGoldPerRank": 500,
   "RebirthBattleCostBase": 3,

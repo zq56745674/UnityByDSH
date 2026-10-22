@@ -747,13 +747,13 @@ namespace AutoBattle.EditorTools
             p.rebirthAlchemyRank = 5;
             Check(Mathf.Abs(p.RebirthBattleMultiplier - 1.05f) < 0.0001f,
                 "战斗本能 +5%", "实际 " + p.RebirthBattleMultiplier);
-            Check(Mathf.Abs(p.RebirthExpMultiplier - 2f) < 0.0001f,
-                "历练经验 +100%", "实际 " + p.RebirthExpMultiplier);
+            Check(Mathf.Abs(p.RebirthExpMultiplier - 4f) < 0.0001f,
+                "历练经验 +300%", "实际 " + p.RebirthExpMultiplier);
             Check(Mathf.Abs(p.RebirthGoldMultiplier - 2f) < 0.0001f,
                 "财运金币 +100%", "实际 " + p.RebirthGoldMultiplier);
             Check(Mathf.Abs(p.RebirthDropBonus - 0.10f) < 0.0001f,
                 "财运掉落 +10 个百分点", "实际 " + p.RebirthDropBonus);
-            Check(p.RebirthStartLevel == 11, "传承 5 从 Lv.11 开始", "实际 " + p.RebirthStartLevel);
+            Check(p.RebirthStartLevel == 16, "传承 5 从 Lv.16 开始", "实际 " + p.RebirthStartLevel);
             Check(p.RebirthStartGold == 2500, "行囊 5 起始 2500 金币", "实际 " + p.RebirthStartGold);
             Check(p.RebirthStartPotions == 5, "行囊 5 起始 5 瓶药剂", "实际 " + p.RebirthStartPotions);
 

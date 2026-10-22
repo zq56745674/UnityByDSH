@@ -43,6 +43,11 @@ namespace AutoBattle
         private Image[] _endlessHistoryRows;
         private Text[] _endlessHistoryRowTexts;
 
+        /// <summary>清空本档历史榜：与撤退/删档同一套两次点击确认。</summary>
+        private Button _endlessClearButton;
+        private Text _endlessClearLabel;
+        private float _endlessClearConfirmUntil;
+
         /// <summary>内容区当前显示历史榜还是规则。只影响显示，不参与存档。</summary>
         private bool _endlessHistoryOpen;
 
@@ -115,6 +120,14 @@ namespace AutoBattle
                     FontSmall + 1, GameConfig.TextInfo, TextAnchor.MiddleLeft);
                 row.gameObject.SetActive(false);
             }
+
+            // 清空榜单：只在历史榜有内容时出现；点两次才真的清（与撤退/删档同一套确认）。
+            _endlessClearButton = CreateButton(_endlessPanel, "EndlessClear", "清空榜单", 528, 112, 132, 28,
+                GameConfig.BtnDanger, out _endlessClearLabel);
+            StyleBar(_endlessClearButton, _endlessClearLabel, "frame_pill", "glyph_delete", 15f,
+                "清空本档历史榜（不影响最高层记录）", FontSmall + 1);
+            _endlessClearButton.onClick.AddListener(OnEndlessClearHistoryClicked);
+            _endlessClearButton.gameObject.SetActive(false);
 
             // 开始 / 继续按钮：未开局开始挑战，局内变成继续战斗。
             _endlessStartButton = CreateButton(_endlessPanel, "EndlessStart", "开始挑战", 20, 328, 200, 40,
@@ -300,6 +313,24 @@ namespace AutoBattle
             int count = top != null ? Mathf.Min(top.Count, _endlessHistoryRows.Length) : 0;
             _endlessHistoryEmpty.gameObject.SetActive(_endlessHistoryOpen && count == 0);
 
+            bool canClear = _endlessHistoryOpen && count > 0;
+            _endlessClearButton.gameObject.SetActive(canClear);
+            if (canClear)
+            {
+                float now = Time.unscaledTime;
+                if (_endlessClearConfirmUntil > now)
+                    _endlessClearLabel.text = $"确认清空 {_endlessClearConfirmUntil - now:0.0}s";
+                else
+                {
+                    _endlessClearConfirmUntil = 0f;
+                    _endlessClearLabel.text = "清空榜单";
+                }
+            }
+            else
+            {
+                _endlessClearConfirmUntil = 0f;
+            }
+
             for (int i = 0; i < _endlessHistoryRows.Length; i++)
             {
                 bool show = _endlessHistoryOpen && i < count;
@@ -393,8 +424,9 @@ namespace AutoBattle
         private void OnEndlessButtonClicked()
         {
             if (_game == null) return;
-            // 撤退确认只属于「当前打开的这一轮面板」：关掉再打开不该还带着倒计时。
+            // 撤退/清榜确认只属于「当前打开的这一轮面板」：关掉再打开不该还带着倒计时。
             _endlessRetreatConfirmUntil = 0f;
+            _endlessClearConfirmUntil = 0f;
             bool open = _game.EndlessPanelOpen;
             _game.ToggleEndlessPanel();
             if (open) GameAudio.PlayUiClose();
@@ -408,6 +440,7 @@ namespace AutoBattle
         private void OnEndlessCloseClicked()
         {
             _endlessRetreatConfirmUntil = 0f;
+            _endlessClearConfirmUntil = 0f;
             if (_game != null) _game.CloseEndlessPanel();
             GameAudio.PlayUiClose();
         }
@@ -415,11 +448,29 @@ namespace AutoBattle
         private void OnEndlessRulesTabClicked()
         {
             _endlessHistoryOpen = false;
+            _endlessClearConfirmUntil = 0f;
         }
 
         private void OnEndlessHistoryTabClicked()
         {
             _endlessHistoryOpen = true;
+            _endlessClearConfirmUntil = 0f;
+        }
+
+        /// <summary>清空本档历史榜：第一次只上膛，3 秒内再点才真的清（与撤退/删档一致）。</summary>
+        private void OnEndlessClearHistoryClicked()
+        {
+            if (_game == null) return;
+
+            float now = Time.unscaledTime;
+            if (_endlessClearConfirmUntil <= now)
+            {
+                _endlessClearConfirmUntil = now + ConfirmWindow;
+                return;
+            }
+
+            _endlessClearConfirmUntil = 0f;
+            _game.ClearEndlessHistory();
         }
 
         private void OnEndlessStartClicked()

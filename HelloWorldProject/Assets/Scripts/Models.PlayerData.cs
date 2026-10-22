@@ -340,7 +340,7 @@ namespace AutoBattle
         /// <summary>战斗本能：攻击 / 防御 / 最大生命 +1% / 级（乘在最终值最外层）。</summary>
         public float RebirthBattleMultiplier => 1f + GameConfig.RebirthBattlePerRank * rebirthBattleRank;
 
-        /// <summary>历练：获得的经验 +20% / 级。</summary>
+        /// <summary>历练：获得的经验 +60% / 级。</summary>
         public float RebirthExpMultiplier => 1f + GameConfig.RebirthExpPerRank * rebirthGrowthRank;
 
         /// <summary>财运：正向金币 +20% / 级（扣款不乘）。</summary>

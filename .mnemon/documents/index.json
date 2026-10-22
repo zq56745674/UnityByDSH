@@ -202,7 +202,7 @@
       ],
       "createdAt": "2026-10-13T18:02:20.360Z",
       "updatedAt": "2026-10-13T18:02:20.360Z",
-      "lastAccessedAt": "2026-10-18T15:13:40.771Z",
+      "lastAccessedAt": "2026-10-22T14:53:34.751Z",
       "revision": 1,
       "contentHash": "75a55bd1be02c861709980dbdab786b8b287592f7ab17d7c372af263fa40c2e2",
       "sizeBytes": 7330,
@@ -781,7 +781,7 @@
       ],
       "createdAt": "2026-10-19T04:28:24.336Z",
       "updatedAt": "2026-10-19T04:28:24.336Z",
-      "lastAccessedAt": "2026-10-21T12:14:41.757Z",
+      "lastAccessedAt": "2026-10-22T14:53:34.751Z",
       "revision": 1,
       "contentHash": "30f0749329f368de6d9621a60a833ed15ab3a0dc4d48ac26a674dcbdc47848c4",
       "sizeBytes": 6014,
@@ -861,7 +861,7 @@
       ],
       "createdAt": "2026-10-20T14:57:39.064Z",
       "updatedAt": "2026-10-20T14:57:39.064Z",
-      "lastAccessedAt": "2026-10-21T17:31:47.479Z",
+      "lastAccessedAt": "2026-10-22T14:53:34.751Z",
       "revision": 1,
       "contentHash": "2e11ead9b7ad31812ce80df3b7ac91cb2358d103c47413f1da94ed80a533e946",
       "sizeBytes": 6957,
@@ -936,7 +936,7 @@
       ],
       "createdAt": "2026-10-21T12:14:58.458Z",
       "updatedAt": "2026-10-21T12:14:58.458Z",
-      "lastAccessedAt": "2026-10-21T13:03:38.554Z",
+      "lastAccessedAt": "2026-10-22T14:53:34.751Z",
       "revision": 1,
       "contentHash": "cc3e940aeb93d73eb81d054dfe6aa12e831f222f7ac87e8b5be0a3f3efc4ff80",
       "sizeBytes": 8863,
@@ -990,6 +990,32 @@
       "revision": 1,
       "contentHash": "65ba07b00dfb8e19361d19d6b1bff45a8a22a3edd17a16f4a3a8d1aba348bbb9",
       "sizeBytes": 5301,
+      "memoryBodyIds": []
+    },
+    {
+      "id": "83ec5a02-9b24-4ebe-87f8-036d825ec99f",
+      "title": "Unity AutoBattle 转生加速落地与 50 种子复跑（2026-10-22，Exp 0.60 / Legacy 3）",
+      "description": "转生加速参数落地（RebirthExpPerRank 0.60、RebirthLegacyLevelPerRank 3）的改点行号、50 种子复跑分布（第2世 82.6%、满轮回 47.1%）、验证命令与文档同步、遗留项。",
+      "status": "active",
+      "filename": "unity-autobattle-50-2026-10-22-exp-0-60-legacy-3-83ec5a02.md",
+      "relativePath": "documents/active/unity-autobattle-50-2026-10-22-exp-0-60-legacy-3-83ec5a02.md",
+      "sourcePaths": [
+        "docs/rebirth.md",
+        "README.md",
+        "HelloWorldProject/Assets/Scripts/GameConfig.cs",
+        "HelloWorldProject/Assets/Scripts/GameConfigData.cs",
+        "HelloWorldProject/Assets/Scripts/Models.PlayerData.cs",
+        "HelloWorldProject/Assets/Editor/AchievementRegression.cs"
+      ],
+      "sessionIds": [
+        "345c5236-d098-4030-b45f-6b2869c4c7ee"
+      ],
+      "createdAt": "2026-10-22T14:53:47.072Z",
+      "updatedAt": "2026-10-22T14:53:47.072Z",
+      "lastAccessedAt": "2026-10-22T14:53:47.072Z",
+      "revision": 1,
+      "contentHash": "c9b41002fff9059d6d6d5903df5117bb4d61c1d8dc9ed3588a1046fb87d1233e",
+      "sizeBytes": 5357,
       "memoryBodyIds": []
     }
   ]

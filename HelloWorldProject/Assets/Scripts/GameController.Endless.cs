@@ -348,5 +348,21 @@ namespace AutoBattle
             }
             return rank;
         }
+
+        /// <summary>
+        /// 清空本档 Top-5 历史榜。最高层 <see cref="PlayerData.endlessBestFloor"/> 是另一份数据：
+        /// 清榜单不动它，否则清一次榜就会把检查点起始层与转生印记一起抹掉。
+        /// </summary>
+        public bool ClearEndlessHistory()
+        {
+            if (Player == null || Player.endlessTop == null || Player.endlessTop.Count == 0) return false;
+
+            int removed = Player.endlessTop.Count;
+            Player.endlessTop.Clear();
+            LastEndlessRecordUtc = 0;
+            SaveSystem.Save(Player);
+            AddLog($"🗑 已清空本档无尽历史榜（{removed} 局）；最高层记录与全局纪录不受影响", GameConfig.LogWarn);
+            return true;
+        }
     }
 }

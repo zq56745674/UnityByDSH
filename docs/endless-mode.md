@@ -523,8 +523,11 @@ EndlessRecord 静态类：
 - `EndlessHistory.Clamp` 对读档/写入的每条做夹取：floor/cleared ∈ 0..9999、kills ∈ 0..1e8、paragon ∈ 0..1000、rebirth ∈ 0..1e6、seconds ∈ 0..30 天、reason 越界归 None、endedUtc < 0 归 0。坏档不会让面板崩。
 - 删档/重置会重建 PlayerData，历史榜随档清空（与 endlessBestFloor 一致）；全局最高层仍在 PlayerPrefs 里保留。
 - 老档不补历史：一条 bestFloor 无法反推单局成绩，宁可空着。
+- 清空：历史榜页签右侧的「清空榜单」按钮只在有记录时出现，点两次（3 秒内，与撤退/删档同一套确认）才调 `GameController.ClearEndlessHistory()`。它**只清 endlessTop**，不动 `endlessBestFloor`（检查点起始层、转生印记都靠它）、也不动 PlayerPrefs 里的全局最高层；清完立即 `SaveSystem.Save`，并写一条 WARN 日志。
 
 实测（2026-10-22，Play 模式）：两次真实无尽局（第 15 层 / 1m10s / 撤退、第 5 层 / 17s / 撤退）正确入榜并按 floor 排序；存档 JSON 出现 `version:11` 与 `endlessTop:[{floor:15,cleared:14,kills:59,paragon:177,rebirth:0,seconds:70,...}]`；v10 档（手工把版本改回 10 并删掉 endlessTop）读入后 `endlessTop.Count == 0`、等级与 bestFloor 不变。
+
+复验（2026-10-23，Play 模式，槽隔离）：6 局按 3/7/5/4/6/9 层阵亡后榜稳定为 9/7/6/5/4（第 3 层被容量 5 挤出），名次 1/1/2/3/2/1；落盘 `version=11` + 5 条 `endlessTop`，重载重排结果一致；「清空榜单」需两次点击（第一次文案变「确认清空 x.xs」），只清 `endlessTop`，`endlessBestFloor` 与 PlayerPrefs 里的全局最高（250 层）都不动。截图 `_art/topn/panel_history_1023.png`（本档证据目录，已 gitignore）、`_art/topn/shop5_boss_1023.png`（第 5 层 BOSS 前商店）。
 
 ### 6.6 Top-5 不上榜的边界
 
@@ -647,6 +650,9 @@ ResetSessionState() 需要追加：
     Text _endlessHistoryHint, _endlessHistoryEmpty;
     Image[] _endlessHistoryRows;        // 5 行卡片
     Text[] _endlessHistoryRowTexts;
+    Button _endlessClearButton;         // 清空本档历史榜（仅历史榜有内容时可见）
+    Text _endlessClearLabel;
+    float _endlessClearConfirmUntil;    // 两次点击确认的截止时间
     bool _endlessHistoryOpen;
 
 历史榜态（§6.5）：
@@ -654,7 +660,7 @@ ResetSessionState() 需要追加：
     ┌ 无尽模式 ──────────────────────────────────────── [关闭] ┐
     │ 本档最高  第 14 层          全局最高  第 250 层         │
     │ 起始层    第 10 层（本档最高 − 4）                        │
-    │ [规则] [历史榜]                                          │
+    │ [规则] [历史榜]                            [清空榜单]      │
     │ 本档历史最好 5 局 · 按到达层数 → 本局清除 → 先达成排序    │
     │ 1  第 15 层   清 14 层 · P177 · 1m10s · 10-22 01:16 · 撤退│
     │ 2  第 5 层    清 4 层 · P177 · 17s · 10-22 01:17 · 撤退 ◀ 本次│
@@ -663,6 +669,7 @@ ResetSessionState() 需要追加：
     └──────────────────────────────────────────────────────────┘
 
 - 页签常驻显示，不因无数据隐藏；空态（「还没有完成的无尽局。阵亡或撤退结束一局后，这里会记下成绩（中途退出/换档不算）」）才是没有数据的唯一表达。
+- 「清空榜单」只在历史榜有记录时出现（无记录时隐藏，避免清一个空榜）；第一次点击文字变成「确认清空 x.xs」，3 秒内再点才真的清，切页签/关面板会复位。
 - 页签状态 `_endlessHistoryOpen` 跨开合保留：本次会话看过历史榜，下次打开还是历史榜。
 - 「◀ 本次」只在本次会话刚打完的那一局上出现（比对 `LastEndlessRecordUtc`）。
 
@@ -1124,7 +1131,7 @@ unity job wait <job-id>
 | 2 | ✅ | 新档造 109 关首通 + 11-10 5/6，BOSS 击杀后横幅「+1520 金币 · ✦ 无尽模式已解锁」、日志一条、入口可用 |
 | 3 | ✅ | 反射 `StartEndlessRun(1)` 进入第 1 层，HUD/击杀数正常 |
 | 4 | ✅ | 清层进第 2 层、新纪录横幅、最高层 +1 |
-| 5 | ◐ | 第 5 层强制生成 BOSS 并清层成功；这次测试绕过了商店，商店开放未单独验 |
+| 5 | ✅ | 首轮：第 5 层强制生成 BOSS 并清层成功（那次测试绕过了商店）。2026-10-23 补验商店：反射把第 5 层击杀数置为 2（`KillTargetOf(5)=3`）后调 `SpawnMonster()` → `State=Shopping`、`ShopTimeLeft=3.00`、无怪物，日志依次「🛒 即将迎战BOSS，商店开放 3 秒」「◆ 自动购买生命药剂 ×5（-2600 金币，持有 5/5）」「♥ 决战前已恢复全部生命」；约 3s 后生成「远古·龙裔卫士 Lv.134」（tier=Boss、type=Melee、maxHp 30,408、无词缀） |
 | 6 | ✅ | 等价验证：清到第 11 层后停止/重开 Play，best 仍为 11，落盘正确 |
 | 7 | ✅ | 等价验证：反射 `HandlePlayerDied` 在第 12 层触发，结果面板、TotalDeaths、本档/全局最高、再次挑战层数均正确 |
 | 8 | ✅ | best=11 时再次挑战从第 7 层开始 |
@@ -1141,6 +1148,8 @@ unity job wait <job-id>
 | 19 | ✅ | P200 20 种子探针：首死中位 45、P90 50、单层 P90 最大约 16s；P1000 + maxGear 50 种子：中位 221、P10 196 / P90 235、最高 250 层、230 层通过率 57% |
 | 19a | ✅ | P1000 Play：主档临时改 P1000 后左栏「巅峰 1000 / 已达上限」、技能 15/15；第 215 层怪 Lv.1,394，战斗/DPS 正常（测试后已恢复主档） |
 | 20 | ✅ | compilationFailed=false，consoleErrors/Warnings=0 |
+| 21 | ✅ | 2026-10-23 v11 Top-5 榜：连续 6 局按 3/7/5/4/6/9 层阵亡，名次依次 1/1/2/3/2/1；最终 5 条、层序 9/7/6/5/4，第 3 层被容量 5 挤出；手设的 endlessBestFloor=5 不被阵亡改写。存档 JSON `version=11`、`endlessTop` 5 条；`new PlayerData()` + `SaveSystem.Load` 读回仍重排为 9/7/6/5/4 |
+| 22 | ✅ | 2026-10-23 「清空榜单」：历史页签 5 行全显示、按钮可见且文案「清空榜单」、空提示隐藏；第一次点击只上膛（文案「确认清空 3.0s」，条数仍 5），第二次才真清（count=0、按钮隐藏、空提示出现、best 仍 5、落盘 `endlessTop` 为 0） |
 
 Play 模式验收顺序建议：
 
@@ -1197,6 +1206,8 @@ Play 模式验收顺序建议：
 - 2026-10-19 补充边界验收：新档解锁横幅、v6 迁移、坏档夹取、配置缺失/0/负值、第 50 层经验与掉落封顶均通过，结果记在 §13.1。
 - 2026-10-19 补 P1000 Play 验收与探针模拟洗练；P1000 无尽 50 种子，数据见 §12.5 与 README。
 - 2026-10-21 五槽 P1000 终局复测（119,842 次挑战 / 6,081.6min 纯战斗 / 兜里 8.598 亿），数据见 `_balance/balance-analysis.md` §3.5.4。
+- 2026-10-22 按洗练 0.9 口径重跑同一 seed（119,834 次挑战 / 5,528.7min 纯战斗 / 兜里 8.593 亿），旧数保留为 0.6 口径历史对照。
+- 2026-10-23 补验无尽第 5 层 BOSS 前商店（§13.1 第 5 项由 ◐ 转 ✅）与 v11 Top-5 榜 / 清空榜单（新增第 21、22 项）；截图 `_art/topn/panel_history_1023.png`、`_art/topn/shop5_boss_1023.png`。
 - 按用户规矩：未明确说「提交」不得 commit/push。
 
 ## 15. 待确认问题（默认按推荐执行）

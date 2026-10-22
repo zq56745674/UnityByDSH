@@ -683,8 +683,8 @@ namespace AutoBattle
         /// <summary>战斗本能每级：攻击 / 防御 / 最大生命 +1%。</summary>
         public static float RebirthBattlePerRank = 0.01f;
 
-        /// <summary>历练每级：经验获取 +20%。</summary>
-        public static float RebirthExpPerRank = 0.20f;
+        /// <summary>历练每级：经验获取 +60%（2026-10-22 由 20% 提到 60%，把第 2 世压进 75~85%）。</summary>
+        public static float RebirthExpPerRank = 0.60f;
 
         /// <summary>财运每级：正向金币 +20%。</summary>
         public static float RebirthGoldPerRank = 0.20f;
@@ -692,8 +692,8 @@ namespace AutoBattle
         /// <summary>财运每级：掉落率 +2%（加算）。</summary>
         public static float RebirthDropPerRank = 0.02f;
 
-        /// <summary>传承每级：下次转生起始等级 +2。</summary>
-        public static int RebirthLegacyLevelPerRank = 2;
+        /// <summary>传承每级：下次转生起始等级 +3（2026-10-22 由 2 提到 3，满轮回起始 Lv16）。</summary>
+        public static int RebirthLegacyLevelPerRank = 3;
 
         /// <summary>行囊每级：下次转生起始药剂 +1。</summary>
         public static int RebirthAlchemyPotionPerRank = 1;

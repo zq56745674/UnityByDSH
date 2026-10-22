@@ -155,10 +155,10 @@ namespace AutoBattle
         // ---- 转生 ----
         public int RebirthUnlockParagon = 100;
         public float RebirthBattlePerRank = 0.01f;
-        public float RebirthExpPerRank = 0.20f;
+        public float RebirthExpPerRank = 0.60f;
         public float RebirthGoldPerRank = 0.20f;
         public float RebirthDropPerRank = 0.02f;
-        public int RebirthLegacyLevelPerRank = 2;
+        public int RebirthLegacyLevelPerRank = 3;
         public int RebirthAlchemyPotionPerRank = 1;
         public int RebirthAlchemyGoldPerRank = 500;
         public int RebirthBattleCostBase = 3;
