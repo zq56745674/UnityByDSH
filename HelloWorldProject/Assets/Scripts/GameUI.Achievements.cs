@@ -37,6 +37,8 @@ namespace AutoBattle
         private Text[] _achRowDesc;
         private Text[] _achRowProgress;
         private Text[] _achRowPoints;
+        private Button[] _achTitleButtons;
+        private Text[] _achTitleLabels;
 
         private int _achTabIndex;
         private bool _achOnlyUnfinished;
@@ -64,7 +66,8 @@ namespace AutoBattle
 
         private void BuildAchievements(Transform root)
         {
-            _achievementPanel = CreatePanel(root, "AchievementPanel", 236, 80, 808, 560,
+            // 2026-10-24 B3：底部加一排称号按钮，面板高度 560 → 620（底边 700，仍在 720 内）。
+            _achievementPanel = CreatePanel(root, "AchievementPanel", 236, 80, 808, 620,
                 GameConfig.OverlayBg, true);
 
             CreateSectionTitle(_achievementPanel, "成就", 20, 12, 260, FontTitle, "ui_achievement");
@@ -142,8 +145,26 @@ namespace AutoBattle
             StyleIcon(_achNextButton, _achNextLabel, "frame_tab", "glyph_next", 18f, "下一页");
             _achNextButton.onClick.AddListener(OnAchievementNextClicked);
 
-            CreateText(_achievementPanel, "AchFootNote", "成就点只用于展示，不提供战斗属性。",
-                20, 536, 600, 18, 10, GameConfig.TextDisabled, TextAnchor.MiddleLeft);
+            // 称号栏：只列带称号的成就（当前 7 个）。点一下佩戴，再点一下卸下。
+            CreateText(_achievementPanel, "AchTitleHint", "称号（解锁后可佩戴，再点一次卸下）",
+                20, 542, 600, 18, 10, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            _achTitleButtons = new Button[AchievementCatalog.Titles.Count];
+            _achTitleLabels = new Text[_achTitleButtons.Length];
+            for (int i = 0; i < _achTitleButtons.Length; i++)
+            {
+                int index = i;
+                AchievementDef def = AchievementCatalog.Titles[i];
+                _achTitleButtons[i] = CreateButton(_achievementPanel, "AchTitle" + i, def.title,
+                    20 + i * 109, 566, 104, 26, GameConfig.BtnHeader, out _achTitleLabels[i]);
+                StyleTab(_achTitleButtons[i], _achTitleLabels[i], "frame_tab", 11);
+                AttachTooltip(_achTitleButtons[i], "佩戴称号「" + def.title + "」\n来源成就：" + def.name +
+                    (string.IsNullOrEmpty(def.desc) ? string.Empty : "\n" + def.desc));
+                _achTitleButtons[i].onClick.AddListener(() => OnAchievementTitleClicked(index));
+            }
+
+            CreateText(_achievementPanel, "AchFootNote", "成就点只用于展示，不提供战斗属性；称号只影响显示。",
+                20, 596, 600, 18, 10, GameConfig.TextDisabled, TextAnchor.MiddleLeft);
 
             _achievementPanel.gameObject.SetActive(false);
 
@@ -213,6 +234,17 @@ namespace AutoBattle
         {
             _game.CloseAchievementPanel();
             GameAudio.PlayUiClose();
+        }
+
+        private void OnAchievementTitleClicked(int index)
+        {
+            if (index < 0 || index >= AchievementCatalog.Titles.Count) return;
+            string id = AchievementCatalog.Titles[index].id;
+            bool equipped = _game.Player != null &&
+                            string.Equals(_game.Player.equippedTitle, id, StringComparison.Ordinal);
+            _game.SetEquippedTitle(equipped ? string.Empty : id);
+            _achDirty = true;
+            GameAudio.PlayUiOpen();
         }
 
         private void OnAchievementTabClicked(int index)
@@ -381,6 +413,28 @@ namespace AutoBattle
                 _achEmptyText.text = AchievementCatalog.Loaded
                     ? (_achOnlyUnfinished ? "当前分类已全部完成。" : "当前分类没有成就。")
                     : "成就表未载入：找不到 Resources/achievements.json。";
+            }
+
+            RefreshAchievementTitles(p);
+        }
+
+        private void RefreshAchievementTitles(PlayerData p)
+        {
+            if (_achTitleButtons == null) return;
+            for (int i = 0; i < _achTitleButtons.Length; i++)
+            {
+                AchievementDef def = AchievementCatalog.Titles[i];
+                bool unlocked = p.achievements.IsUnlocked(def.id);
+                bool equipped = unlocked && string.Equals(p.equippedTitle, def.id, StringComparison.Ordinal);
+
+                _achTitleButtons[i].interactable = unlocked;
+                _achTitleLabels[i].text = (equipped ? "✓ " : string.Empty) + def.title;
+                _achTitleLabels[i].color = equipped
+                    ? GameConfig.TextGold
+                    : (unlocked ? GameConfig.TextNormal : GameConfig.BtnDisabledText);
+                _achTitleButtons[i].image.color = equipped
+                    ? Color.white
+                    : new Color(0.60f, 0.64f, 0.72f, 1f);
             }
         }
 

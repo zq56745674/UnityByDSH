@@ -33,6 +33,30 @@ namespace AutoBattle
             AchievementPanelOpen = false;
         }
 
+        /// <summary>
+        /// 佩戴/卸下称号（空字符串 = 卸下）。只影响左栏显示，不改任何战斗数值；
+        /// 未解锁的称号拒绝佩戴，防止存档被手改成不存在的 id。
+        /// </summary>
+        public void SetEquippedTitle(string id)
+        {
+            if (Player == null) return;
+            string next = string.IsNullOrEmpty(id) ? string.Empty : id;
+            if (next.Length > 0 && !AchievementCatalog.IsUnlockedTitle(Player, next))
+            {
+                AddLog("<color=#FF8080>✖ 这个称号还没有解锁。</color>", GameConfig.LogWarn);
+                return;
+            }
+
+            if (string.Equals(Player.equippedTitle ?? string.Empty, next)) return;
+            Player.equippedTitle = next;
+
+            if (next.Length == 0)
+                AddLog("✦ 已卸下称号。", GameConfig.LogNeutral);
+            else
+                AddLog("✦ 已佩戴称号「" + AchievementCatalog.TitleNameOf(next) + "」。", GameConfig.LogGold);
+            TrySave();
+        }
+
         // ==================== 无阵亡挑战（不存档） ====================
 
         private void ClearNoDeathAttempt()

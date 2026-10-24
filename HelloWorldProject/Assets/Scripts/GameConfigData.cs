@@ -121,8 +121,8 @@ namespace AutoBattle
         // ---- 关卡 / 章节（步骤 4a）----
         public int ChapterCount = 11;
         public float ChapterPressureBase = 1.0f;
-        public float ChapterPressurePerChapter = 0.04f;
-        public float ChapterBossPressurePerChapter = 0.03f;
+        public float ChapterPressurePerChapter = 0.055f;
+        public float ChapterBossPressurePerChapter = 0.04f;
         public int StagesPerChapter = 10;
         public int ChapterMonsterLevelStep = 10;
         public int StageKillTargetBase = 3;

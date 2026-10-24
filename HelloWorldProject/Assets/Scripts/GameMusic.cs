@@ -76,6 +76,30 @@ namespace AutoBattle
         public MusicTrack CurrentTrack =>
             MusicCatalog.Tracks[Mathf.Clamp(_index, 0, MusicCatalog.Count - 1)];
 
+        /// <summary>当前曲目已播秒数；暂停时 AudioSource.time 不动，读出来就是冻结的位置。</summary>
+        public float ElapsedSeconds
+        {
+            get
+            {
+                if (_source == null || _source.clip == null) return 0f;
+                return Mathf.Clamp(_source.time, 0f, _source.clip.length);
+            }
+        }
+
+        /// <summary>当前曲目总长：优先用实际 clip 的长度，缺文件时退回清单里的标称时长。</summary>
+        public float TrackLengthSeconds =>
+            _source != null && _source.clip != null ? _source.clip.length : CurrentTrack.Length;
+
+        /// <summary>播放进度 0~1（暂停时停在当前比例）。</summary>
+        public float Progress01
+        {
+            get
+            {
+                float length = TrackLengthSeconds;
+                return length > 0.01f ? Mathf.Clamp01(ElapsedSeconds / length) : 0f;
+            }
+        }
+
         private void Awake()
         {
             if (Instance != null && Instance != this)

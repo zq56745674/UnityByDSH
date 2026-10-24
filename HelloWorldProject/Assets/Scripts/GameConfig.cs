@@ -192,17 +192,24 @@ namespace AutoBattle
         /// <summary>章节总数。第 N 章的怪物等级 = ChapterMonsterLevelStep×(N-1)+1 ~ ChapterMonsterLevelStep×N。</summary>
         public static int ChapterCount = 11;
         /// <summary>
-        /// 第 1~10 章的整体压迫：每章 +2.5% 生命/攻击/防御。
+        /// 第 1~10 章的整体压迫：每章再乘一档生命/攻击/防御。
         /// 之前这十章的稳态胜率是 100%，推章没有任何风险；加这一层让它变成「会死人、但不会卡死」。
         /// 第 11 章不吃这一层——它有自己的 ×3 终局档，再加会盖过 MaxTier 的调参口径。
         /// </summary>
         public static float ChapterPressureBase = 1.0f;
 
-        /// <summary>章节压迫的逐章增量（在此之上每章再加 4%）。</summary>
-        public static float ChapterPressurePerChapter = 0.04f;
+        /// <summary>
+        /// 章节压迫的逐章增量（每章 +5.5%）。2026-10-23 由 4% 上调：五装备槽把裸装下界的
+        /// 第 5~8 章抬到 87~92%、几乎与第 1 章持平，压迫线被削平了；上调后裸装下界恢复
+        /// 「2~4 章 90~91% → 5~8 章 79/80/68/61% → 9~10 章 34/22%」的下降阶梯（300 次建样均值）。
+        /// </summary>
+        public static float ChapterPressurePerChapter = 0.055f;
 
-        /// <summary>章末 Boss 在章节压迫之上再乘的额外压迫（每章 +3%），把关底做成真正的检查点。</summary>
-        public static float ChapterBossPressurePerChapter = 0.03f;
+        /// <summary>
+        /// 章末 Boss 在章节压迫之上再乘的额外压迫（每章 +4%，2026-10-23 由 3% 上调），
+        /// 把关底做成真正的检查点：裸装下界第 10 章章末 22%，真实推进（带强化/洗练）仍能过。
+        /// </summary>
+        public static float ChapterBossPressurePerChapter = 0.04f;
 
         /// <summary>章节压迫倍率：1~10 章随章节线性上升，第 11 章恒为 1。</summary>
         public static float ChapterPressure(int chapter, bool isBoss)
@@ -293,7 +300,13 @@ namespace AutoBattle
         /// <summary>
         /// 终局 BOSS（Lv.110 章末关底）额外的全属性倍率：战斗探针实测，只叠 MaxTier ×3 时
         /// 传说装备 + 巅峰 26 的玩家平均 7 次挑战就能打下来——终局只硬一分钟。
-        /// 这一层专门把「什么时候能过」推到巅峰 100 之后，让巅峰曲线真正成为终局的门。
+        /// 这一层再抬 60%，把 11-10 变成一个明确的「关卡门」（不是巅峰门槛）。
+        /// 2026-10-23 复测（EndgamePacing，种子 20261018~20261022）：首通第 2~62 次挑战、
+        /// 巅峰 P15~P58（中位 P31）、战斗 0.2~9.9 min，不是原注释说的「巅峰 100 之后」——
+        /// 这个说法在两槽时代（2026-10-19）实测就是 P23，从未成立。
+        /// 抬倍率能把首通推到 1.8→P44 / 3.0→P50~P71 / 5.0→P75~P90，但同一件 BOSS 也是
+        /// 新档 11-10 的门：30 种子真实推进的通关率 1.6→25/30、1.8→17、2.2→16、3.0→9、5.0→3，
+        /// 所以定格 1.6；终局的门由巅峰曲线 + 无尽/转生承担。详见 _balance/balance-analysis.md §3.5.4a。
         /// 只作用于 Boss，不碰 11-1~11-9 的精英。
         /// </summary>
         public static float FinalBossStatFactor = 1.6f;

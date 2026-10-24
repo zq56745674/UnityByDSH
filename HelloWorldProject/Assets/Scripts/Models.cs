@@ -291,7 +291,11 @@ namespace AutoBattle
         /// 强化倍率 = 1 + 每级加成 × 强化等级。0 级时为 1（完全不改变原属性）。
         /// 乘算而非加算：同品质两件装备的强弱差距在强化后不会被绝对值稀释掉。
         /// </summary>
-        public float EnhanceMultiplier => 1f + GameConfig.EnhanceBonusPerLevel * Mathf.Max(0, enhanceLevel);
+        public float EnhanceMultiplier => EnhanceMultiplierAt(enhanceLevel);
+
+        /// <summary>指定强化等级下的倍率；面板用它预览「下一级」的属性。</summary>
+        public float EnhanceMultiplierAt(int level) =>
+            1f + GameConfig.EnhanceBonusPerLevel * Mathf.Max(0, level);
 
         /// <summary>强化后的攻击（武器主属性）。未强化时等于 <see cref="attack"/>。</summary>
         public int EnhancedAttack => Mathf.RoundToInt(attack * EnhanceMultiplier);
@@ -327,27 +331,40 @@ namespace AutoBattle
         public string EnhanceText => enhanceLevel > 0 ? $" +{enhanceLevel}" : string.Empty;
 
         /// <summary>强化后的主属性展示（形如「攻击 12 → 14」）；未强化时只给当前值。</summary>
-        public string EnhanceGainText
+        public string EnhanceGainText => EnhanceGainTextAt(enhanceLevel);
+
+        /// <summary>
+        /// 指定强化等级下的主属性展示。+0 只给当前值，之后都给「原值 → 该等级值」；
+        /// 强化面板用它同时显示当前与下一级，不必复制一份每槽位的属性公式。
+        /// </summary>
+        public string EnhanceGainTextAt(int level)
         {
-            get
+            level = Mathf.Clamp(level, 0, GameConfig.EnhanceMaxLevel);
+            float mul = EnhanceMultiplierAt(level);
+            int atk = Mathf.RoundToInt(attack * mul);
+            int def = Mathf.RoundToInt(defense * mul);
+            int life = Mathf.RoundToInt(hp * mul);
+            int spd = Mathf.RoundToInt(speed * mul);
+            float hastePct = haste * 100f * mul;
+            float penPct = armorPen * 100f * mul;
+            float critDmgPct = critDamage * 100f * mul;
+
+            switch (slot)
             {
-                switch (slot)
-                {
-                    case EquipmentSlot.Weapon:
-                        return enhanceLevel > 0 ? $"攻击 {attack} → {EnhancedAttack}" : $"攻击 {attack}";
-                    case EquipmentSlot.Boots:
-                        return enhanceLevel > 0
-                            ? $"速度 {speed} → {EnhancedSpeed}   攻速 {haste * 100f:0.#}% → {EnhancedHaste * 100f:0.#}%"
-                            : $"速度 {speed}   攻速 {haste * 100f:0.#}%";
-                    case EquipmentSlot.Accessory:
-                        return enhanceLevel > 0
-                            ? $"暴击伤害 {critDamage * 100f:0.#}% → {EnhancedCritDamage * 100f:0.#}%   穿甲 {armorPen * 100f:0.#}% → {EnhancedArmorPen * 100f:0.#}%"
-                            : $"暴击伤害 {critDamage * 100f:0.#}%   穿甲 {armorPen * 100f:0.#}%";
-                    default:
-                        return enhanceLevel > 0
-                            ? $"防御 {defense} → {EnhancedDefense}   生命 {hp} → {EnhancedHp}"
-                            : $"防御 {defense}   生命 {hp}";
-                }
+                case EquipmentSlot.Weapon:
+                    return level > 0 ? $"攻击 {attack} → {atk}" : $"攻击 {attack}";
+                case EquipmentSlot.Boots:
+                    return level > 0
+                        ? $"速度 {speed} → {spd}   攻速 {haste * 100f:0.#}% → {hastePct:0.#}%"
+                        : $"速度 {speed}   攻速 {haste * 100f:0.#}%";
+                case EquipmentSlot.Accessory:
+                    return level > 0
+                        ? $"暴击伤害 {critDamage * 100f:0.#}% → {critDmgPct:0.#}%   穿甲 {armorPen * 100f:0.#}% → {penPct:0.#}%"
+                        : $"暴击伤害 {critDamage * 100f:0.#}%   穿甲 {armorPen * 100f:0.#}%";
+                default:
+                    return level > 0
+                        ? $"防御 {defense} → {def}   生命 {hp} → {life}"
+                        : $"防御 {defense}   生命 {hp}";
             }
         }
 
@@ -695,8 +712,9 @@ namespace AutoBattle
                 defenseFactor *= GameConfig.MaxTierDefenseFactor;
                 speedFactor *= GameConfig.MaxTierSpeedFactor;
 
-                // 终局 BOSS 再叠一层：让「什么时候能过 11-10」落在巅峰 100 之后，
-                // 而不是靠七次挑战的运气。只作用于关底 Boss。
+                // 终局 BOSS 再叠一层：让 11-10 成为明确的关卡门，而不是「七次挑战的运气」。
+                // 实测首通落在巅峰 P15~P58（中位 P31），不是 P100；再往上抬会把新档通关率砍半
+                // （30 种子 25/30 → 1.8 的 17/30），所以定格 1.6。只作用于关底 Boss。
                 if (tier == MonsterTier.Boss)
                 {
                     hpFactor *= GameConfig.FinalBossStatFactor;

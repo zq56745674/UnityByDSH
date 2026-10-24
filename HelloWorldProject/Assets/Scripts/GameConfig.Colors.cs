@@ -42,6 +42,12 @@ namespace AutoBattle
         /// <summary>列表行底色（次级、未选中）。</summary>
         public static readonly Color RowBgDim = new Color(0.086f, 0.102f, 0.145f);
 
+        /// <summary>音量条未填充格：比 RowBg 亮一档，否则 80% 只能数出 6~8 格。</summary>
+        public static readonly Color VolumeCellOff = new Color(0.240f, 0.275f, 0.360f);
+
+        /// <summary>音量条格子的细描边，让相邻空格之间也有边界。</summary>
+        public static readonly Color VolumeCellBorder = new Color(1f, 1f, 1f, 0.22f);
+
         /// <summary>生命条底槽。</summary>
         public static readonly Color BarTrackHp = new Color(0.145f, 0.075f, 0.090f);
 

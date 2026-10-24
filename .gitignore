@@ -65,6 +65,12 @@ _art/stage/
 
 # 无尽 Top-5 历史榜的实机验收截图（见 docs/endless-mode.md §6.5）
 _art/topn/
+
+# UI 逐面板审计截图（2026-10-22~23，见 docs/roadmap.md 第 4 节）
+_art/ui-audit/
+
+# 一次性验证产物：探针脚本、UI dump、提交信息草稿（见 docs/roadmap.md A2）
+_tmp_verify/
 _balance/*.bak
 
 # 归档区：拆分前的备份、早期截图，保留在本地但不入库

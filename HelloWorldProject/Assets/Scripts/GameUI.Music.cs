@@ -26,13 +26,15 @@ namespace AutoBattle
         private Text _musicLoopLabel;
         private Image[] _musicVolumeCells;
         private Text _musicVolumeValue;
+        private Image _musicProgressFill;
+        private Text _musicProgressText;
 
         private bool _musicPanelWasOpen;
         private int _musicUiSig = int.MinValue;
 
         private void BuildMusicPanel(Transform root)
         {
-            _musicPanel = CreatePanel(root, "MusicPanel", 340, 126, 600, 486, GameConfig.OverlayBg, true);
+            _musicPanel = CreatePanel(root, "MusicPanel", 340, 126, 600, 524, GameConfig.OverlayBg, true);
 
             CreateSectionTitle(_musicPanel, "背景音乐", 24, 14, 300, FontTitle, "glyph_music");
 
@@ -98,17 +100,29 @@ namespace AutoBattle
             StyleTab(_musicLoopButton, _musicLoopLabel, "frame_pill", 13);
             _musicLoopButton.onClick.AddListener(OnMusicLoopClicked);
 
+            // 播放进度：细条 + 「当前 / 总长」。暂停时 AudioSource.time 不变，条自然冻结。
+            Image progressBg = CreateImage(_musicPanel, "MusicProgress", 24, 380, 552, 6,
+                GameConfig.RowBgDim, false);
+            Round(progressBg, RadiusBar);
+            _musicProgressFill = CreateImage(progressBg.rectTransform, "MusicProgressFill", 0, 0, 552, 6,
+                GameConfig.LogGold, false);
+            Round(_musicProgressFill, RadiusBar);
+            Stretch(_musicProgressFill.rectTransform);
+            _musicProgressText = CreateText(_musicPanel, "MusicProgressText", "0:00 / 0:00", 24, 392, 552, 18,
+                11, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
             // 音乐音量：10 格 + 百分比 + ±。和设置面板的音量条保持同一种交互。
-            CreateText(_musicPanel, "MusicVolumeLabel", "音乐音量", 24, 382, 100, 20, 13,
+            CreateText(_musicPanel, "MusicVolumeLabel", "音乐音量", 24, 420, 100, 20, 13,
                 GameConfig.TextNormal, TextAnchor.MiddleLeft);
 
             _musicVolumeCells = new Image[10];
             for (int i = 0; i < _musicVolumeCells.Length; i++)
             {
                 float x = 130f + i * 21f;
-                Image cell = CreateImage(_musicPanel, "MusicVol" + i, x, 385f, 18f, 14f,
-                    GameConfig.RowBg, true);
+                Image cell = CreateImage(_musicPanel, "MusicVol" + i, x, 423f, 18f, 14f,
+                    GameConfig.VolumeCellOff, true);
                 Round(cell, 3);
+                AddBorder(cell, 3, GameConfig.VolumeCellBorder);
 
                 var button = cell.gameObject.AddComponent<Button>();
                 button.targetGraphic = cell;
@@ -119,15 +133,15 @@ namespace AutoBattle
                 _musicVolumeCells[i] = cell;
             }
 
-            _musicVolumeValue = CreateText(_musicPanel, "MusicVolumeValue", "80%", 350, 382, 50, 20, 13,
+            _musicVolumeValue = CreateText(_musicPanel, "MusicVolumeValue", "80%", 350, 420, 50, 20, 13,
                 GameConfig.TextGold, TextAnchor.MiddleRight, FontStyle.Bold);
 
-            Button down = CreateButton(_musicPanel, "MusicVolDown", "−", 410, 380, 32, 24,
+            Button down = CreateButton(_musicPanel, "MusicVolDown", "−", 410, 418, 32, 24,
                 GameConfig.BtnNeutral, out Text downLabel);
             StyleTab(down, downLabel, "frame_pill", 18);
             down.onClick.AddListener(delegate { OnMusicVolumeStepClicked(-1); });
 
-            Button up = CreateButton(_musicPanel, "MusicVolUp", "+", 450, 380, 32, 24,
+            Button up = CreateButton(_musicPanel, "MusicVolUp", "+", 450, 418, 32, 24,
                 GameConfig.BtnNeutral, out Text upLabel);
             StyleTab(up, upLabel, "frame_pill", 18);
             up.onClick.AddListener(delegate { OnMusicVolumeStepClicked(1); });
@@ -135,7 +149,7 @@ namespace AutoBattle
             CreateText(_musicPanel, "MusicHint",
                 "列表循环会按顺序播完四首再回到第一首；切到「单曲循环」只重复当前曲目。\n" +
                 "音乐音量与主音量相乘；音乐文件在 Assets/Resources/Music 下。",
-                24, 416, 552, 48, 13, GameConfig.TextNormal, TextAnchor.UpperLeft);
+                24, 452, 552, 48, 13, GameConfig.TextNormal, TextAnchor.UpperLeft);
 
             _musicPanel.gameObject.SetActive(false);
         }
@@ -229,6 +243,9 @@ namespace AutoBattle
                       | ((music != null && music.RepeatOne) ? 1 << 9 : 0)
                       | (volumeStep << 10)
                       | (availableMask << 16);
+            // 进度条每帧都要动，所以放在「签名没变就早退」之前。
+            UpdateMusicProgress(music);
+
             if (!justOpened && sig == _musicUiSig) return;
             _musicUiSig = sig;
 
@@ -280,9 +297,28 @@ namespace AutoBattle
 
             for (int i = 0; i < _musicVolumeCells.Length; i++)
             {
-                _musicVolumeCells[i].color = i < volumeStep ? GameConfig.LogGold : GameConfig.RowBg;
+                _musicVolumeCells[i].color = i < volumeStep ? GameConfig.LogGold : GameConfig.VolumeCellOff;
             }
             _musicVolumeValue.text = $"{Mathf.RoundToInt(GameSettings.MusicVolume * 100f)}%";
+        }
+
+        /// <summary>播放进度：暂停时 AudioSource.time 不会走，进度条与数字一起冻结。</summary>
+        private void UpdateMusicProgress(GameMusic music)
+        {
+            if (_musicProgressFill == null) return;
+
+            float elapsed = music != null ? music.ElapsedSeconds : 0f;
+            float length = music != null ? music.TrackLengthSeconds : 0f;
+            SetBar(_musicProgressFill, length > 0.01f ? Mathf.Clamp01(elapsed / length) : 0f);
+
+            if (_musicProgressText != null)
+                _musicProgressText.text = $"{FormatClock(elapsed)} / {FormatClock(length)}";
+        }
+
+        private static string FormatClock(float seconds)
+        {
+            int total = Mathf.Max(0, Mathf.FloorToInt(seconds));
+            return $"{total / 60}:{total % 60:00}";
         }
     }
 }

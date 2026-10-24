@@ -28,6 +28,31 @@ namespace AutoBattle
         }
     }
 
+    /// <summary>
+    /// 给任意 Graphic（属性文字、进度条、规则区）挂悬停提示。
+    /// 按钮走 UITooltipTrigger（Button 负责点击），非按钮控件用这个，两者接口一致。
+    /// </summary>
+    public class UITooltipArea : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public GameUI owner;
+        public string text;
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (owner != null) owner.ShowTooltip(text, (RectTransform)transform);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (owner != null) owner.HideTooltip();
+        }
+
+        private void OnDisable()
+        {
+            if (owner != null) owner.HideTooltip();
+        }
+    }
+
     public partial class GameUI
     {
         private RectTransform _tooltipRoot;
@@ -252,6 +277,8 @@ namespace AutoBattle
 
             RectTransform textRt = _tooltipText.rectTransform;
             _tooltipText.text = text;
+            // 单行提示居中；多行（装备卡、转生购买键）必须左对齐——居中会让长短行像排版错位。
+            _tooltipText.alignment = text.IndexOf('\n') >= 0 ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
             // 先把宽度定下来，preferredHeight 才是「这个宽度下换行后」的真实高度。
             textRt.sizeDelta = new Vector2(width - TooltipPadX * 2f, 22f);
             float textHeight = Mathf.Max(18f, _tooltipText.preferredHeight);
@@ -280,13 +307,23 @@ namespace AutoBattle
             _tooltipRoot.gameObject.SetActive(true);
         }
 
-        /// <summary>粗估单行宽度（13 号字）：全角约 13.6px、半角约 7.2px。</summary>
+        /// <summary>
+        /// 粗估宽度（13 号字）：全角约 13.6px、半角约 7.2px。
+        /// 跳过富文本标签（&lt;color&gt; &lt;size&gt; &lt;b&gt; 不占宽度），并按「最长的一行」算——
+        /// 否则多行提示会被当成一整行超长文本，宽度一上来就顶到上限。
+        /// </summary>
         private static float EstimateTextWidth(string text)
         {
-            float w = 0f;
+            float best = 0f, w = 0f;
+            bool inTag = false;
             foreach (char c in text)
+            {
+                if (c == '<') { inTag = true; continue; }
+                if (inTag) { if (c == '>') inTag = false; continue; }
+                if (c == '\n') { if (w > best) best = w; w = 0f; continue; }
                 w += c >= 0x2E80 && c <= 0xFFEF ? 13.6f : 7.2f;
-            return w;
+            }
+            return w > best ? w : best;
         }
 
         public void HideTooltip()
@@ -301,6 +338,48 @@ namespace AutoBattle
             if (trigger == null) trigger = button.gameObject.AddComponent<UITooltipTrigger>();
             trigger.owner = this;
             trigger.text = text;
+        }
+
+        /// <summary>
+        /// 动态 tooltip：装备卡、转生购买键的内容会随装备/印记余额变，
+        /// 建面板时写死一份就会一直显示建面板那一刻的文本。传空串等于「这一帧没有提示」。
+        /// </summary>
+        private void SetTooltip(Button button, string text)
+        {
+            if (button == null) return;
+
+            UITooltipTrigger trigger = button.GetComponent<UITooltipTrigger>();
+            if (trigger == null)
+            {
+                if (!string.IsNullOrEmpty(text)) AttachTooltip(button, text);
+                return;
+            }
+
+            trigger.text = text ?? string.Empty;
+        }
+
+        /// <summary>非按钮控件的悬停提示（属性行、规则文字、质量说明）。</summary>
+        private void AttachTooltip(RectTransform target, string text)
+        {
+            if (target == null || string.IsNullOrEmpty(text)) return;
+            UITooltipArea area = target.GetComponent<UITooltipArea>();
+            if (area == null) area = target.gameObject.AddComponent<UITooltipArea>();
+            area.owner = this;
+            area.text = text;
+        }
+
+        /// <summary>非按钮控件的动态悬停提示；传空串等于「这一帧没有提示」。</summary>
+        private void SetTooltip(RectTransform target, string text)
+        {
+            if (target == null) return;
+            UITooltipArea area = target.GetComponent<UITooltipArea>();
+            if (area == null)
+            {
+                if (!string.IsNullOrEmpty(text)) AttachTooltip(target, text);
+                return;
+            }
+
+            area.text = text ?? string.Empty;
         }
     }
 }

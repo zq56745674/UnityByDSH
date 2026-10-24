@@ -17,8 +17,10 @@ namespace AutoBattle
         private readonly Image[] _settingsIcons = new Image[5];
         private readonly Image[] _masterVolumeCells = new Image[10];
         private readonly Image[] _sfxVolumeCells = new Image[10];
+        private readonly Image[] _settingsMusicCells = new Image[10];
         private Text _masterVolumeValue;
         private Text _sfxVolumeValue;
+        private Text _settingsMusicValue;
         private Text _settingsGuideLabel;
         private bool _settingsPanelWasOpen;
         private bool _settingsPanelDirty;
@@ -65,7 +67,8 @@ namespace AutoBattle
 
         private void BuildSettingsPanel(Transform root)
         {
-            _settingsPanel = CreatePanel(root, "SettingsPanel", 300, 90, 680, 560, GameConfig.OverlayBg, true);
+            // 高度 560 → 620：多出一行「音乐」音量，底部再加一行快捷键提示（2026-10-23）。
+            _settingsPanel = CreatePanel(root, "SettingsPanel", 300, 90, 680, 620, GameConfig.OverlayBg, true);
 
             CreateSectionTitle(_settingsPanel, "设置", 24, 14, 240, FontTitle, "ui_settings");
             CreateText(_settingsPanel, "SettingsHint",
@@ -104,27 +107,48 @@ namespace AutoBattle
                 352, _masterVolumeCells, 0);
             _sfxVolumeValue = BuildVolumeRow("音效", "按钮、命中、拾取、升级等提示音",
                 402, _sfxVolumeCells, 1);
+            // 音乐音量原来只能在背景音乐浮层里调，设置面板反而没有——同一个设置项两个入口不一致。
+            _settingsMusicValue = BuildVolumeRow("音乐", "背景音乐；与主音量相乘",
+                452, _settingsMusicCells, 2);
 
             // 引导行：它不是开关，而是「重看」入口，所以单独一行、单独排版。
-            CreateCard(_settingsPanel, "GuideRow", 20, 454, 640, 44, GameConfig.CardBg,
+            // 三行音量之后整体下移 50：音量 452 行到 496 结束，留给引导行一点空隙。
+            CreateCard(_settingsPanel, "GuideRow", 20, 504, 640, 44, GameConfig.CardBg,
                 RadiusButton, GameConfig.BorderSoft);
-            CreateText(_settingsPanel, "GuideName", "新手引导", 34, 457, 240, 20, FontBody,
+            CreateText(_settingsPanel, "GuideName", "新手引导", 34, 507, 240, 20, FontBody,
                 GameConfig.TextNormal, TextAnchor.MiddleLeft);
-            _settingsGuideLabel = CreateText(_settingsPanel, "GuideState", "", 34, 477, 300, 18, FontTiny,
+            _settingsGuideLabel = CreateText(_settingsPanel, "GuideState", "", 34, 527, 300, 18, FontTiny,
                 GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
-            Button replay = CreateButton(_settingsPanel, "GuideReplay", "重看引导", 520, 460, 120, 32,
+            Button replay = CreateButton(_settingsPanel, "GuideReplay", "重看引导", 520, 510, 120, 32,
                 GameConfig.BtnNeutral, out Text replayLabel);
             StyleBar(replay, replayLabel, "frame_bar_notched", "glyph_book", 16f, "重新观看新手引导");
             replay.onClick.AddListener(OnReplayGuideClicked);
 
-            Button reset = CreateButton(_settingsPanel, "SettingsReset", "恢复默认", 20, 510, 120, 34,
+            Button reset = CreateButton(_settingsPanel, "SettingsReset", "恢复默认", 20, 560, 120, 34,
                 GameConfig.RowBg, out Text resetLabel);
             StyleBar(reset, resetLabel, "frame_pill", "glyph_reset", 16f, "恢复默认设置");
             reset.onClick.AddListener(OnResetSettingsClicked);
 
+            // 关于入口（roadmap A4 / C8）：版本、存档版本、素材来源与数据位置。
+            Button about = CreateButton(_settingsPanel, "SettingsAbout", "关于", 146, 560, 86, 34,
+                GameConfig.RowBg, out Text aboutLabel);
+            StyleBar(about, aboutLabel, "frame_pill", "glyph_book", 14f, "关于本作", 13);
+            about.onClick.AddListener(OnAboutClicked);
+
+            // 显示设置（roadmap C9/C11）：设置面板本身已经满了，单独开一个浮层。
+            Button display = CreateButton(_settingsPanel, "SettingsDisplay", "显示", 238, 560, 86, 34,
+                GameConfig.RowBg, out Text displayLabel);
+            StyleBar(display, displayLabel, "frame_pill", "glyph_settings", 14f, "窗口、分辨率与色弱友好", 13);
+            display.onClick.AddListener(OnDisplayClicked);
+
             CreateText(_settingsPanel, "SettingsFoot", "提示：锁定装备与「自动换装」在对比面板里配合使用。",
-                156, 516, 500, 22, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+                330, 566, 326, 22, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            // 快捷键目前没有任何入口提示（工程原来一个键都不认），写在设置面板最底下最容易被看到。
+            CreateText(_settingsPanel, "SettingsShortcutHint",
+                "快捷键：空格 暂停/继续 · 1/2/4 变速 · Esc 关浮层（无浮层时暂停）· R 重置",
+                24, 590, 632, 20, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
             _settingsPanel.gameObject.SetActive(false);
         }
@@ -146,8 +170,9 @@ namespace AutoBattle
             {
                 int captured = i;
                 Image cell = CreateImage(_settingsPanel, "VolumeCell" + channel + "_" + i,
-                    236 + i * 23, y + 15, 20, 14, GameConfig.RowBg, true);
+                    236 + i * 23, y + 15, 20, 14, GameConfig.VolumeCellOff, true);
                 Round(cell, 3);
+                AddBorder(cell, 3, GameConfig.VolumeCellBorder);
                 Button button = cell.gameObject.AddComponent<Button>();
                 button.targetGraphic = cell;
                 button.onClick.AddListener(GameAudio.PlayUiClick);
@@ -176,7 +201,9 @@ namespace AutoBattle
 
         private void OnVolumeStepClicked(int channel, int step)
         {
-            float current = channel == 0 ? GameSettings.MasterVolume : GameSettings.SfxVolume;
+            float current = channel == 0
+                ? GameSettings.MasterVolume
+                : channel == 1 ? GameSettings.SfxVolume : GameSettings.MusicVolume;
             float next = Mathf.Round((current + step * 0.1f) * 10f) / 10f;
             ApplyVolume(channel, Mathf.Clamp01(next));
         }
@@ -184,8 +211,12 @@ namespace AutoBattle
         private void ApplyVolume(int channel, float value)
         {
             if (channel == 0) GameSettings.MasterVolume = value;
-            else GameSettings.SfxVolume = value;
+            else if (channel == 1) GameSettings.SfxVolume = value;
+            else GameSettings.MusicVolume = value;
+
             GameAudio.RefreshVolumes();
+            // 主音量同时乘在音乐上，所以三行里任何一行改动都要把音乐音量重算一次。
+            if (GameMusic.Instance != null) GameMusic.Instance.RefreshVolume();
             _settingsPanelDirty = true;
         }
 
@@ -193,7 +224,7 @@ namespace AutoBattle
         {
             int filled = Mathf.RoundToInt(volume * 10f);
             for (int i = 0; i < cells.Length; i++)
-                cells[i].color = i < filled ? GameConfig.LogGold : GameConfig.RowBg;
+                cells[i].color = i < filled ? GameConfig.LogGold : GameConfig.VolumeCellOff;
             if (value != null) value.text = Mathf.RoundToInt(volume * 100f) + "%";
         }
 
@@ -229,6 +260,7 @@ namespace AutoBattle
 
             RefreshVolumeRow(_masterVolumeCells, _masterVolumeValue, GameSettings.MasterVolume);
             RefreshVolumeRow(_sfxVolumeCells, _sfxVolumeValue, GameSettings.SfxVolume);
+            RefreshVolumeRow(_settingsMusicCells, _settingsMusicValue, GameSettings.MusicVolume);
 
             _settingsGuideLabel.text = GameSettings.GuideDone
                 ? "已完成。可以重看，不会重置任何进度。"
@@ -260,7 +292,9 @@ namespace AutoBattle
         private void OnResetSettingsClicked()
         {
             GameSettings.ResetToDefaults();
+            if (_game != null) _game.ResetSpeedToDefault();
             GameAudio.RefreshVolumes();
+            if (GameMusic.Instance != null) GameMusic.Instance.RefreshVolume();
             _settingsPanelDirty = true;
             _game.AddLog("↺ 显示、自动化与音量设置已恢复默认。", GameConfig.LogInfo);
         }
@@ -271,6 +305,302 @@ namespace AutoBattle
             _settingsPanelDirty = true;
             _game.CloseSettingsPanel();
             BeginGuide();
+        }
+
+
+        // ==================== 显示（roadmap C9 / C11）====================
+
+        private RectTransform _displayPanel;
+        private Text _displayResolutionText;
+        private Text _displayModeText;
+        private Text _displayFullscreenLabel;
+        private Text _displayResizableLabel;
+        private Text _displayColorBlindLabel;
+        private bool _displayPanelWasOpen;
+
+        /// <summary>
+        /// 显示设置浮层：全屏 / 分辨率预设 / 允许缩放 / 色弱友好。
+        /// 没有塞进设置面板，是因为设置面板 680×620 已经顶到 710 的底边。
+        /// </summary>
+        private void BuildDisplayPanel(Transform root)
+        {
+            _displayPanel = CreatePanel(root, "DisplayPanel", 300, 100, 680, 520, GameConfig.OverlayBg, true);
+
+            CreateSectionTitle(_displayPanel, "显示", 24, 14, 240, FontTitle, "glyph_settings");
+
+            Button close = CreateButton(_displayPanel, "DisplayClose", "关闭", 566, 16, 90, 32,
+                GameConfig.BtnNeutral, out Text closeLabel);
+            StyleBar(close, closeLabel, "frame_pill", "glyph_close", 14f, "关闭显示设置");
+            close.onClick.AddListener(OnDisplayCloseClicked);
+
+            CreateText(_displayPanel, "DisplayHint",
+                "窗口、分辨率与缩放只对构建后的窗口生效；编辑器里由 Game 视图控制，设置仍会记住。",
+                24, 44, 632, 40, FontSmall, GameConfig.TextMuted, TextAnchor.UpperLeft);
+
+            CreateCard(_displayPanel, "DisplayFullscreenRow", 20, 94, 640, 44, GameConfig.CardBg,
+                RadiusButton, GameConfig.BorderSoft);
+            CreateText(_displayPanel, "DisplayFullscreenName", "全屏", 34, 97, 200, 20, FontBody,
+                GameConfig.TextNormal, TextAnchor.MiddleLeft);
+            CreateText(_displayPanel, "DisplayFullscreenHint", "独占全屏；窗口模式下分辨率预设才会改窗口大小",
+                34, 117, 480, 18, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            Button fullscreen = CreateButton(_displayPanel, "DisplayFullscreenToggle", "关", 548, 100, 92, 32,
+                GameConfig.BtnNeutral, out _displayFullscreenLabel);
+            StyleBar(fullscreen, _displayFullscreenLabel, "frame_pill", "glyph_confirm", 14f, "切换全屏", 12);
+            fullscreen.onClick.AddListener(OnDisplayFullscreenClicked);
+
+            CreateCard(_displayPanel, "DisplayResolutionRow", 20, 144, 640, 44, GameConfig.CardBg,
+                RadiusButton, GameConfig.BorderSoft);
+            CreateText(_displayPanel, "DisplayResolutionName", "窗口分辨率", 34, 147, 200, 20, FontBody,
+                GameConfig.TextNormal, TextAnchor.MiddleLeft);
+            CreateText(_displayPanel, "DisplayResolutionHint", "16:9 / 16:10 / 21:9 都只会多出留边，不会裁掉 UI",
+                34, 167, 480, 18, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            _displayResolutionText = CreateText(_displayPanel, "DisplayResolutionValue", "", 360, 157, 148, 20,
+                FontSmall, GameConfig.TextInfo, TextAnchor.MiddleRight);
+            Button prev = CreateButton(_displayPanel, "DisplayResolutionPrev", "◀", 514, 151, 64, 26,
+                GameConfig.BtnNeutral, out Text prevLabel);
+            StyleTab(prev, prevLabel, "frame_pill", 14);
+            prev.onClick.AddListener(() => OnDisplayResolutionStep(-1));
+            Button next = CreateButton(_displayPanel, "DisplayResolutionNext", "▶", 582, 151, 64, 26,
+                GameConfig.BtnNeutral, out Text nextLabel);
+            StyleTab(next, nextLabel, "frame_pill", 14);
+            next.onClick.AddListener(() => OnDisplayResolutionStep(1));
+
+            CreateCard(_displayPanel, "DisplayResizableRow", 20, 194, 640, 44, GameConfig.CardBg,
+                RadiusButton, GameConfig.BorderSoft);
+            CreateText(_displayPanel, "DisplayResizableName", "允许缩放", 34, 197, 200, 20, FontBody,
+                GameConfig.TextNormal, TextAnchor.MiddleLeft);
+            CreateText(_displayPanel, "DisplayResizableHint", "窗口模式下可以拖边改变大小；内容等比缩放",
+                34, 217, 480, 18, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            Button resizable = CreateButton(_displayPanel, "DisplayResizableToggle", "开", 548, 200, 92, 32,
+                GameConfig.BtnNeutral, out _displayResizableLabel);
+            StyleBar(resizable, _displayResizableLabel, "frame_pill", "glyph_confirm", 14f, "切换允许缩放", 12);
+            resizable.onClick.AddListener(OnDisplayResizableClicked);
+
+            CreateCard(_displayPanel, "DisplayColorBlindRow", 20, 244, 640, 44, GameConfig.CardBg,
+                RadiusButton, GameConfig.BorderSoft);
+            CreateText(_displayPanel, "DisplayColorBlindName", "色弱友好", 34, 247, 200, 20, FontBody,
+                GameConfig.TextNormal, TextAnchor.MiddleLeft);
+            CreateText(_displayPanel, "DisplayColorBlindHint", "品质色换成蓝绿 / 天蓝 / 紫红 / 橙；品质名照旧显示，不只靠颜色",
+                34, 267, 500, 18, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            Button colorBlind = CreateButton(_displayPanel, "DisplayColorBlindToggle", "关", 548, 250, 92, 32,
+                GameConfig.BtnNeutral, out _displayColorBlindLabel);
+            StyleBar(colorBlind, _displayColorBlindLabel, "frame_pill", "glyph_confirm", 14f, "切换色弱友好配色", 12);
+            colorBlind.onClick.AddListener(OnDisplayColorBlindClicked);
+
+            CreateCard(_displayPanel, "DisplayScaleNote", 20, 298, 640, 100, GameConfig.InsetBg,
+                RadiusButton, GameConfig.BorderSoft);
+            CreateText(_displayPanel, "DisplayScaleNoteTitle", "为什么没有界面缩放滑杆", 34, 306, 400, 20,
+                FontBody, GameConfig.TextTitle, TextAnchor.MiddleLeft);
+            CreateText(_displayPanel, "DisplayScaleNoteBody",
+                "UI 按 1280×720 设计，CanvasScaler 用 Expand：窗口比 16:9 更宽/更高时只会多出背景留边，" +
+                "文字与按钮不会裁切。再叠 0.9 缩放会把 9~12px 的小字压到不可读，放大则必然裁边，" +
+                "所以这里只保证 1280×720 以上等比可读，不提供自由缩放。",
+                34, 328, 610, 64, FontTiny, GameConfig.TextMuted, TextAnchor.UpperLeft);
+
+            _displayModeText = CreateText(_displayPanel, "DisplayModeText", "", 24, 410, 632, 20, FontTiny,
+                GameConfig.TextInfo, TextAnchor.MiddleLeft);
+
+            Button reset = CreateButton(_displayPanel, "DisplayReset", "恢复默认", 20, 452, 120, 34,
+                GameConfig.RowBg, out Text resetLabel);
+            StyleBar(reset, resetLabel, "frame_pill", "glyph_reset", 16f, "恢复默认显示设置");
+            reset.onClick.AddListener(OnDisplayResetClicked);
+
+            CreateText(_displayPanel, "DisplayFoot", "改动立即保存在本机，与存档槽无关；构建后下次启动应用。",
+                160, 458, 390, 22, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            _displayPanel.gameObject.SetActive(false);
+        }
+
+        private void RefreshDisplayPanel()
+        {
+            if (_displayPanel == null || _game == null) return;
+
+            bool open = _game.DisplayOpen;
+            _displayPanel.gameObject.SetActive(open);
+            if (!open)
+            {
+                _displayPanelWasOpen = false;
+                return;
+            }
+
+            bool justOpened = !_displayPanelWasOpen;
+            _displayPanelWasOpen = true;
+            if (!justOpened) return;
+
+            _displayResolutionText.text = DisplaySettings.ResolutionLabel(DisplaySettings.ResolutionIndex);
+            SetToggleLabel(_displayFullscreenLabel, DisplaySettings.Fullscreen);
+            SetToggleLabel(_displayResizableLabel, DisplaySettings.Resizable);
+            SetToggleLabel(_displayColorBlindLabel, DisplaySettings.ColorBlind);
+            _displayModeText.text = Application.isEditor
+                ? "编辑器内不应用窗口设置；当前存档与配色设置仍然生效。"
+                : "当前：" + (DisplaySettings.Fullscreen ? "全屏" : "窗口");
+        }
+
+        private static void SetToggleLabel(Text label, bool on)
+        {
+            if (label == null) return;
+            label.text = on ? "开" : "关";
+            label.color = on ? GameConfig.LogHeal : GameConfig.TextMuted;
+        }
+
+        private void OnDisplayClicked()
+        {
+            _game.ToggleDisplayPanel();
+            GameAudio.PlayUiOpen();
+        }
+
+        private void OnDisplayCloseClicked()
+        {
+            _game.CloseDisplayPanel();
+            GameAudio.PlayUiClose();
+        }
+
+        private void OnDisplayFullscreenClicked()
+        {
+            DisplaySettings.Fullscreen = !DisplaySettings.Fullscreen;
+            SetToggleLabel(_displayFullscreenLabel, DisplaySettings.Fullscreen);
+            _displayModeText.text = Application.isEditor
+                ? "编辑器内不应用窗口设置；当前存档与配色设置仍然生效。"
+                : "当前：" + (DisplaySettings.Fullscreen ? "全屏" : "窗口");
+            DisplaySettings.Apply();
+            GameAudio.PlayUiClick();
+        }
+
+        private void OnDisplayResizableClicked()
+        {
+            DisplaySettings.Resizable = !DisplaySettings.Resizable;
+            SetToggleLabel(_displayResizableLabel, DisplaySettings.Resizable);
+            DisplaySettings.Apply();
+            GameAudio.PlayUiClick();
+        }
+
+        private void OnDisplayResolutionStep(int delta)
+        {
+            int next = Mathf.Clamp(DisplaySettings.ResolutionIndex + delta, 0, DisplaySettings.ResolutionCount - 1);
+            if (next == DisplaySettings.ResolutionIndex)
+            {
+                GameAudio.PlayUiClick();
+                return;
+            }
+            DisplaySettings.ResolutionIndex = next;
+            _displayResolutionText.text = DisplaySettings.ResolutionLabel(next);
+            DisplaySettings.Apply();
+            GameAudio.PlayUiClick();
+        }
+
+        private void OnDisplayColorBlindClicked()
+        {
+            DisplaySettings.ColorBlind = !DisplaySettings.ColorBlind;
+            SetToggleLabel(_displayColorBlindLabel, DisplaySettings.ColorBlind);
+            _settingsPanelDirty = true;
+            GameAudio.PlayUiClick();
+            _game.AddLog(DisplaySettings.ColorBlind
+                ? "◐ 色弱友好配色已开启：品质色换成蓝绿 / 天蓝 / 紫红 / 橙，品质名照旧显示。"
+                : "◑ 已恢复默认品质配色（白 / 绿 / 蓝 / 紫 / 橙）。", GameConfig.LogInfo);
+        }
+
+        private void OnDisplayResetClicked()
+        {
+            DisplaySettings.ResetToDefaults();
+            DisplaySettings.Apply();
+            _displayResolutionText.text = DisplaySettings.ResolutionLabel(DisplaySettings.ResolutionIndex);
+            SetToggleLabel(_displayFullscreenLabel, DisplaySettings.Fullscreen);
+            SetToggleLabel(_displayResizableLabel, DisplaySettings.Resizable);
+            SetToggleLabel(_displayColorBlindLabel, DisplaySettings.ColorBlind);
+            _settingsPanelDirty = true;
+            GameAudio.PlayUiClick();
+            _game.AddLog("↺ 显示设置已恢复默认。", GameConfig.LogInfo);
+        }
+
+        // ==================== 关于 ====================
+
+        private RectTransform _aboutPanel;
+        private Text _aboutVersionText;
+        private Text _aboutSaveText;
+        private Text _aboutRuntimeText;
+        private bool _aboutPanelWasOpen;
+
+        /// <summary>
+        /// 关于面板（roadmap A4 / C8）：版本、存档版本与槽位、数据位置、素材来源、工程说明。
+        /// 原来这些信息只散在 README 里，游戏内无处可查；版本号取 PlayerSettings 的 bundleVersion。
+        /// </summary>
+        private void BuildAboutPanel(Transform root)
+        {
+            _aboutPanel = CreatePanel(root, "AboutPanel", 300, 100, 680, 520, GameConfig.OverlayBg, true);
+
+            CreateSectionTitle(_aboutPanel, "关于", 24, 14, 240, FontTitle, "glyph_book");
+
+            Button close = CreateButton(_aboutPanel, "AboutClose", "关闭", 566, 16, 90, 32,
+                GameConfig.BtnNeutral, out Text closeLabel);
+            StyleBar(close, closeLabel, "frame_pill", "glyph_close", 14f, "关闭关于");
+            close.onClick.AddListener(OnAboutCloseClicked);
+
+            _aboutVersionText = CreateText(_aboutPanel, "AboutVersion", "", 24, 52, 630, 24, FontBody,
+                GameConfig.TextTitle, TextAnchor.MiddleLeft);
+            _aboutSaveText = CreateText(_aboutPanel, "AboutSave", "", 24, 78, 630, 20, FontSmall,
+                GameConfig.TextInfo, TextAnchor.MiddleLeft);
+            _aboutRuntimeText = CreateText(_aboutPanel, "AboutRuntime", "", 24, 100, 630, 20, FontSmall,
+                GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            CreateSectionTitle(_aboutPanel, "数据", 24, 136, 120, FontBody);
+            CreateText(_aboutPanel, "AboutData",
+                "存档写在本机 PlayerPrefs（3 个槽，与账号无关），卸载或清注册表即失效。\n" +
+                "「导出」写 " + SaveSystem.ExportFolder + "\\slotN.json；「导入」优先读剪贴板，读不到再读同名文件。",
+                34, 166, 610, 46, FontSmall, GameConfig.TextMuted, TextAnchor.UpperLeft);
+
+            CreateSectionTitle(_aboutPanel, "素材", 24, 224, 120, FontBody);
+            CreateText(_aboutPanel, "AboutAssets",
+                "主角立绘、怪物、Boss、光环与背景为 AI 生成（火山方舟 Seedream），非人工绘制。\n" +
+                "背景音乐四首来自「星落落oi」，署名与来源见 docs/audio-credits.md。",
+                34, 254, 610, 46, FontSmall, GameConfig.TextMuted, TextAnchor.UpperLeft);
+
+            CreateSectionTitle(_aboutPanel, "工程", 24, 312, 120, FontBody);
+            CreateText(_aboutPanel, "AboutProject",
+                "单机自动战斗 Demo：不联网、不上传任何数据，全部数值可离线复现。\n" +
+                "设计、平衡与验收记录见 README.md、docs/ 与 _balance/。",
+                34, 342, 610, 46, FontSmall, GameConfig.TextMuted, TextAnchor.UpperLeft);
+
+            CreateText(_aboutPanel, "AboutFoot",
+                "回归：Unity 菜单「工具 → 回归 → 跑一遍快速回归」，详见 README 的「自动化回归」。",
+                24, 470, 630, 20, FontTiny, GameConfig.TextDisabled, TextAnchor.MiddleLeft);
+
+            _aboutPanel.gameObject.SetActive(false);
+        }
+
+        private void RefreshAbout()
+        {
+            if (_aboutPanel == null || _game == null) return;
+
+            bool open = _game.AboutOpen;
+            _aboutPanel.gameObject.SetActive(open);
+            if (!open)
+            {
+                _aboutPanelWasOpen = false;
+                return;
+            }
+
+            bool justOpened = !_aboutPanelWasOpen;
+            _aboutPanelWasOpen = true;
+            if (!justOpened) return;
+
+            string product = string.IsNullOrEmpty(Application.productName) ? "AutoBattle" : Application.productName;
+            _aboutVersionText.text = product + "   v" + Application.version;
+            _aboutSaveText.text = "存档 v" + SaveSystem.SaveVersion + " · " + SaveSystem.SlotCount + " 槽"
+                + " · 当前 存档 " + (_game.SaveSlot + 1);
+            _aboutRuntimeText.text = "Unity " + Application.unityVersion + " · " + Application.platform
+                + " · 设计分辨率 1280×720";
+        }
+
+        private void OnAboutClicked()
+        {
+            _game.ToggleAboutPanel();
+            GameAudio.PlayUiOpen();
+        }
+
+        private void OnAboutCloseClicked()
+        {
+            _game.CloseAboutPanel();
+            GameAudio.PlayUiClose();
         }
 
         // ==================== 新手引导 ====================

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
 
 namespace AutoBattle
@@ -160,12 +162,286 @@ namespace AutoBattle
             CurrentSlot = Mathf.Clamp(PlayerPrefs.GetInt(CurrentSlotKey, 0), 0, SlotCount - 1);
         }
 
-        /// <summary>删除某槽的存档（连同它的备份）。</summary>
+        /// <summary>删除某槽的存档（连同它的备份与自定义名字）。</summary>
         public static void ClearSlot(int slot)
         {
             PlayerPrefs.DeleteKey(KeyOf(slot));
             PlayerPrefs.DeleteKey(KeyOf(slot) + BackupSuffix);
+            PlayerPrefs.DeleteKey(SlotNameKey(slot));
             PlayerPrefs.Save();
+        }
+
+        // ==================== 槽位改名 / 跨槽复制（roadmap C10）====================
+
+        private const string SlotNamePrefix = GameConfig.SaveKey + "_name";
+        public const int SlotNameMaxLength = 12;
+
+        /// <summary>槽位自定义名字的 PlayerPrefs Key。名字与存档分开存：复制存档不会连带复制“当前槽”之类的状态。</summary>
+        public static string SlotNameKey(int slot)
+        {
+            slot = Mathf.Clamp(slot, 0, SlotCount - 1);
+            return SlotNamePrefix + slot;
+        }
+
+        /// <summary>槽位默认名：存档 1 / 2 / 3。</summary>
+        public static string DefaultSlotName(int slot) => "存档 " + (Mathf.Clamp(slot, 0, SlotCount - 1) + 1);
+
+        /// <summary>界面显示用名字：没改过就是默认名。</summary>
+        public static string DisplayNameOf(int slot)
+        {
+            string custom = PlayerPrefs.GetString(SlotNameKey(slot), string.Empty);
+            return string.IsNullOrEmpty(custom) ? DefaultSlotName(slot) : custom;
+        }
+
+        /// <summary>
+        /// 给槽位改名。空字符串恢复默认名；最长 12 个字（中英文都按字符数算），
+        /// 换行/制表符会被换成空格，避免把卡片布局撑坏。
+        /// </summary>
+        public static bool RenameSlot(int slot, string name, out string error)
+        {
+            error = null;
+            slot = Mathf.Clamp(slot, 0, SlotCount - 1);
+            string trimmed = (name ?? string.Empty).Replace('\n', ' ').Replace('\r', ' ').Replace('\t', ' ').Trim();
+            if (trimmed.Length > SlotNameMaxLength)
+            {
+                error = "名字最多 " + SlotNameMaxLength + " 个字";
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(trimmed) || trimmed == DefaultSlotName(slot))
+                PlayerPrefs.DeleteKey(SlotNameKey(slot));
+            else
+                PlayerPrefs.SetString(SlotNameKey(slot), trimmed);
+            PlayerPrefs.Save();
+            return true;
+        }
+
+        /// <summary>
+        /// 把 from 槽的**原始 JSON** 复制到 to 槽（连同自定义名字）。
+        /// 原始 JSON 而不是内存 PlayerData：复制是存档层面的操作，不该受当前打开的是哪一档影响。
+        /// 目标槽原有内容会被覆盖，UI 必须先确认。
+        /// </summary>
+        public static bool CopySlot(int from, int to, out string error)
+        {
+            error = null;
+            from = Mathf.Clamp(from, 0, SlotCount - 1);
+            to = Mathf.Clamp(to, 0, SlotCount - 1);
+            if (from == to)
+            {
+                error = "源槽与目标槽相同";
+                return false;
+            }
+
+            string json = PlayerPrefs.GetString(KeyOf(from), string.Empty);
+            if (string.IsNullOrEmpty(json))
+            {
+                error = "源槽没有存档，无法复制";
+                return false;
+            }
+
+            try
+            {
+                PlayerPrefs.SetString(KeyOf(to), json);
+                string name = PlayerPrefs.GetString(SlotNameKey(from), string.Empty);
+                if (string.IsNullOrEmpty(name)) PlayerPrefs.DeleteKey(SlotNameKey(to));
+                else PlayerPrefs.SetString(SlotNameKey(to), name);
+                PlayerPrefs.Save();
+                return true;
+            }
+            catch (Exception e)
+            {
+                error = "复制失败：" + e.Message;
+                return false;
+            }
+        }
+
+        // ==================== 导出 / 导入（roadmap A6 / C10） ====================
+
+        /// <summary>当前存档格式版本（只读，供关于页显示）。</summary>
+        public static int SaveVersion => CurrentSaveVersion;
+
+        /// <summary>导出目录：我的文档\AutoBattle。放文档目录而不是 persistentDataPath，重装游戏也不会清掉。</summary>
+        public static string ExportFolder =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "AutoBattle");
+
+        /// <summary>某槽的导出文件名：slot1.json / slot2.json / slot3.json（与 UI 的槽号一致）。</summary>
+        public static string ExportPathOf(int slot)
+        {
+            slot = Mathf.Clamp(slot, 0, SlotCount - 1);
+            return Path.Combine(ExportFolder, "slot" + (slot + 1) + ".json");
+        }
+
+        /// <summary>导出文件格式标识；导入时靠它区分「带信封的导出文件」与「裸 SaveData」。</summary>
+        public const string ExportFormat = "autobattle.save/v1";
+
+        /// <summary>导出文件的外层信封：保存版本/时间/来源，读档时人类也能看懂这是哪一档。</summary>
+        [Serializable]
+        public class ExportFile
+        {
+            public string format;
+            public string exportedAt;
+            public string gameVersion;
+            public int saveVersion;
+            public int slot;
+            public int level;
+            public SaveData data;
+        }
+
+        /// <summary>导出结果：失败时 error 给 UI 直接显示，json 为裸存档内容（复制到剪贴板用）。</summary>
+        public struct ExportResult
+        {
+            public bool ok;
+            public string path;
+            public string json;
+            public string error;
+        }
+
+        /// <summary>
+        /// 把某槽**已落盘**的 JSON 包成导出文件写进文档目录。
+        /// 刻意不读内存、不触发保存：调用方要先 Save，导出的才是当前进度。
+        /// </summary>
+        public static ExportResult ExportSlot(int slot)
+        {
+            var result = new ExportResult();
+            string json = PlayerPrefs.GetString(KeyOf(slot), string.Empty);
+            if (string.IsNullOrEmpty(json))
+            {
+                result.error = "该槽还没有存档，先进入游戏存一次";
+                return result;
+            }
+
+            SaveData data;
+            try { data = JsonUtility.FromJson<SaveData>(json); }
+            catch (Exception e)
+            {
+                result.error = "该槽的存档内容无法解析：" + e.Message;
+                return result;
+            }
+            if (data == null)
+            {
+                result.error = "该槽的存档内容无法解析";
+                return result;
+            }
+
+            var file = new ExportFile
+            {
+                format = ExportFormat,
+                exportedAt = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ssK"),
+                gameVersion = Application.version,
+                saveVersion = data.version,
+                slot = slot + 1,
+                level = data.level,
+                data = data,
+            };
+
+            try
+            {
+                Directory.CreateDirectory(ExportFolder);
+                result.path = ExportPathOf(slot);
+                File.WriteAllText(result.path, JsonUtility.ToJson(file, true), new UTF8Encoding(false));
+                result.ok = true;
+                result.json = json;
+            }
+            catch (Exception e)
+            {
+                result.ok = false;
+                result.path = null;
+                result.json = null;
+                result.error = "写文件失败：" + e.Message;
+            }
+            return result;
+        }
+
+        /// <summary>读回某槽的导出文件；没有文件时 error 说明原因。</summary>
+        public static string ReadExportFile(int slot, out string error)
+        {
+            error = null;
+            string path = ExportPathOf(slot);
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    error = "没有找到导出文件 " + path;
+                    return null;
+                }
+                return File.ReadAllText(path, Encoding.UTF8);
+            }
+            catch (Exception e)
+            {
+                error = "读导出文件失败：" + e.Message;
+                return null;
+            }
+        }
+
+        /// <summary>粗判一段文本像不像存档 JSON（导入时决定读剪贴板还是读文件，不解析）。</summary>
+        public static bool LooksLikeSaveJson(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            string t = text.TrimStart();
+            return t.StartsWith("{", StringComparison.Ordinal)
+                && (t.Contains("\"version\"") || t.Contains("\"format\""));
+        }
+
+        /// <summary>
+        /// 把一段文本（导出信封或裸 SaveData）导进指定槽。**只写 PlayerPrefs，不动内存里的 Player**：
+        /// 调用方负责重新 Load 与清会话状态，避免出现「内存是旧档、磁盘是新档」的半新半旧。
+        /// </summary>
+        public static bool TryImport(int slot, string text, out string error)
+        {
+            error = null;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                error = "没有可导入的内容（剪贴板为空）";
+                return false;
+            }
+
+            SaveData data;
+            try
+            {
+                ExportFile wrapped = JsonUtility.FromJson<ExportFile>(text);
+                data = wrapped != null && wrapped.format == ExportFormat
+                    ? wrapped.data
+                    : JsonUtility.FromJson<SaveData>(text);
+            }
+            catch (Exception e)
+            {
+                error = "不是有效的 JSON：" + e.Message;
+                return false;
+            }
+
+            if (data == null)
+            {
+                error = "不是有效的存档 JSON";
+                return false;
+            }
+            if (data.version < 0)
+            {
+                error = "存档版本不合法（v" + data.version + "）";
+                return false;
+            }
+            if (data.version > CurrentSaveVersion)
+            {
+                error = "存档版本 v" + data.version + " 比当前支持的 v" + CurrentSaveVersion + " 新，请先升级游戏";
+                return false;
+            }
+            // 光有 version 的空壳能过 JSON 解析，但读进去就是一级空档：挡在写盘之前。
+            if (data.level < 1 && data.paragonLevel <= 0 && data.rebirthCount <= 0)
+            {
+                error = "存档内容不完整（等级 / 巅峰 / 转生全为空），已拒绝导入";
+                return false;
+            }
+
+            try
+            {
+                PlayerPrefs.SetString(KeyOf(slot), JsonUtility.ToJson(data));
+                PlayerPrefs.Save();
+                return true;
+            }
+            catch (Exception e)
+            {
+                error = "写入本机存储失败：" + e.Message;
+                return false;
+            }
         }
 
         /// <summary>实际落盘的字段集合（只存必要状态，属性由等级推导，不冗余存储）。</summary>
@@ -241,6 +517,9 @@ namespace AutoBattle
             /// <summary>v10 起：跨世累计统计与成就状态。</summary>
             public PlayerStats stats;
             public AchievementState achievements;
+
+            /// <summary>当前佩戴的称号（成就 id，空 = 未佩戴）。新增字段，旧档读出来为空。</summary>
+            public string equippedTitle;
         }
 
         public static bool HasSave => HasSaveIn(CurrentSlot);
@@ -300,6 +579,7 @@ namespace AutoBattle
                 rebirthAlchemyRank = player.rebirthAlchemyRank,
                 stats = player.stats,
                 achievements = player.achievements,
+                equippedTitle = player.equippedTitle ?? string.Empty,
             };
 
             try
@@ -564,6 +844,11 @@ namespace AutoBattle
             // 加载路径必须显式静默核对：只补「按存档已能证明」的条目，
             // 不发金币、不弹 toast；新档也只会在 0/42，不会误发。
             AchievementSystem.LoadReconcile(player);
+
+            // 佩戴的称号必须仍在本档已解锁列表里：手改档/旧档可能写着未解锁的 id。
+            player.equippedTitle = data.equippedTitle ?? string.Empty;
+            if (!AchievementCatalog.IsUnlockedTitle(player, player.equippedTitle))
+                player.equippedTitle = string.Empty;
 
             return true;
         }

@@ -103,6 +103,9 @@ namespace AutoBattle
         private float _autoSaveTimer;
         private bool _loadedFromSave;
 
+        /// <summary>存档失败横幅的冷却（真实秒）：自动存档每 15 秒一次，横幅不能跟着每 15 秒弹。</summary>
+        private float _saveWarnCooldown;
+
         /// <summary>
         /// 待选掉落（按槽位下标存，每槽最多一件，仅本会话有效）。
         /// 只有两种情况会进来：当前装备上了锁，或设置里关掉了「自动换装」。
@@ -190,6 +193,14 @@ namespace AutoBattle
 
             // 未开始时先不生成怪物，等玩家点开始。
             CurrentState = State.WaitingRespawn;
+
+            // 速度档位沿用上次的选择（换档也沿用，和显示设置一样存在 PlayerPrefs 里）。
+            // 这里不走 SetSpeedIndex：启动时不该往日志里刷一条「速度 xN」。
+            SpeedIndex = Mathf.Clamp(GameSettings.SpeedIndex, 0, GameConfig.SpeedOptions.Length - 1);
+            SpeedMultiplier = GameConfig.SpeedOptions[SpeedIndex];
+
+            // 显示设置（全屏 / 分辨率 / 允许缩放，roadmap C9）：编辑器内不碰窗口，构建后才生效。
+            DisplaySettings.Apply();
         }
 
         private void Update()
@@ -197,6 +208,7 @@ namespace AutoBattle
             float realDt = Time.unscaledDeltaTime;
             AutoSaveTick(realDt);
             TickBanner(realDt);
+            if (_saveWarnCooldown > 0f) _saveWarnCooldown = Mathf.Max(0f, _saveWarnCooldown - realDt);
 
             if (!IsRunning) return;
 
@@ -207,7 +219,7 @@ namespace AutoBattle
             // 设置 / 引导 / 对比同理：它们都能从常驻按钮点开，必须和别的浮层一样有冻结权。
             if (StagePanelOpen || SavePanelOpen || EnhancePanelOpen || ReforgePanelOpen || SkillPanelOpen
                 || SettingsOpen || MusicPanelOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen
-                || RebirthPanelOpen || AchievementPanelOpen) return;
+                || RebirthPanelOpen || AchievementPanelOpen || AboutOpen || DisplayOpen) return;
 
             // 游戏速度只影响战斗推进，不影响存档节奏（要求 16）。
             float dt = Time.deltaTime * SpeedMultiplier;
@@ -244,12 +256,32 @@ namespace AutoBattle
 
         private void OnApplicationPause(bool pauseStatus)
         {
-            if (pauseStatus) SaveSystem.Save(Player);
+            if (pauseStatus) TrySave();
         }
 
         private void OnApplicationQuit()
         {
-            SaveSystem.Save(Player);
+            TrySave();
+        }
+
+        /// <summary>
+        /// 自动存档入口（roadmap A6）：SaveSystem.Save 早就返回 bool，但以前所有调用点都把它丢掉，
+        /// 磁盘满 / 无写权限时玩家看到的是「一切正常」，进度其实只留在内存里。
+        /// 现在失败会写一条警告日志并弹一次横幅；横幅 8 秒冷却，免得自动存档每几秒弹一次。
+        /// 失败**不丢内存状态**：下一次自动存档会重试。
+        /// </summary>
+        public bool TrySave()
+        {
+            if (SaveSystem.Save(Player)) return true;
+
+            AddLog("⚠ 存档写入失败：本机存储不可写（磁盘满 / 权限 / 注册表被锁），进度仍在内存，稍后自动重试",
+                GameConfig.LogWarn);
+            if (_saveWarnCooldown <= 0f)
+            {
+                ShowBanner("存档写入失败", "进度暂留在内存，会自动重试；请检查磁盘空间");
+                _saveWarnCooldown = 8f;
+            }
+            return false;
         }
 
         // ==================== 对外操作 ====================
@@ -291,7 +323,16 @@ namespace AutoBattle
         {
             SpeedIndex = Mathf.Clamp(index, 0, GameConfig.SpeedOptions.Length - 1);
             SpeedMultiplier = GameConfig.SpeedOptions[SpeedIndex];
+            GameSettings.SpeedIndex = SpeedIndex;
             AddLog($"⚡ 速度 x{SpeedMultiplier:0}", GameConfig.LogSystem);
+        }
+
+        /// <summary>设置面板「恢复默认」用：速度回 ×1 并落盘，但不刷一条日志（调用方自己会记一条总述）。</summary>
+        public void ResetSpeedToDefault()
+        {
+            SpeedIndex = 0;
+            SpeedMultiplier = GameConfig.SpeedOptions[0];
+            GameSettings.SpeedIndex = 0;
         }
 
         // ==================== 选关 ====================
@@ -411,6 +452,8 @@ namespace AutoBattle
             EndlessPanelOpen = false;
             RebirthPanelOpen = false;
             AchievementPanelOpen = false;
+            AboutOpen = false;
+            DisplayOpen = false;
         }
 
         /// <summary>打开 / 关闭选关面板。</summary>
@@ -478,25 +521,78 @@ namespace AutoBattle
         /// </summary>
         public EnhanceResult EnhanceEquipment(EquipmentSlot slot)
         {
-            Equipment e = Player.GetEquipment(slot);
-            if (e == null) return EnhanceResult.NoEquipment;
-            if (!e.CanEnhance) return EnhanceResult.MaxLevel;
-
-            int cost = e.EnhanceCost;
-            if (Player.gold < cost) return EnhanceResult.NotEnoughGold;
-
-            // 先记下旧的生命上限：衣服强化会抬高上限，不补这一截的话，
-            // 强化完血量占比反而变小，看着像「强化掉血」。武器强化时增量为 0，此处无害。
-            int oldMaxHp = Player.MaxHp;
-
-            Player.gold -= cost;
-            e.enhanceLevel++;
-            Player.currentHp += Mathf.Max(0, Player.MaxHp - oldMaxHp);
+            EnhanceResult result = ApplyEnhanceLevel(slot, out Equipment e, out int cost);
+            if (result != EnhanceResult.Success) return result;
 
             AddLog($"◆ 强化 {e.Title}  →  花费 {cost} 金币", GameConfig.QualityColors[(int)e.quality]);
             GameAudio.PlayEnhance();
             RecordEnhanceStats(e);
             EvaluateAchievements();
+            return EnhanceResult.Success;
+        }
+
+        /// <summary>
+        /// 连续强化最多 maxLevels 级：每级都走和单点完全相同的扣费与属性重算，
+        /// 金币不足时停在买得起的那一级，不会透支。
+        /// 音效逐级播放（听得出停在哪），日志与成就评估合并成一次，避免 15 行刷屏。
+        /// </summary>
+        public int EnhanceEquipmentBulk(EquipmentSlot slot, int maxLevels, out EnhanceResult stopReason)
+        {
+            stopReason = EnhanceResult.Success;
+            int levels = 0;
+            int spent = 0;
+            int startLevel = 0;
+
+            Equipment start = Player.GetEquipment(slot);
+            if (start != null) startLevel = start.enhanceLevel;
+
+            for (int i = 0; i < Mathf.Max(0, maxLevels); i++)
+            {
+                EnhanceResult result = ApplyEnhanceLevel(slot, out Equipment e, out int cost);
+                if (result != EnhanceResult.Success)
+                {
+                    stopReason = result;
+                    break;
+                }
+
+                levels++;
+                spent += cost;
+                GameAudio.PlayEnhance();
+                // 成就统计按级累计；评估留到循环结束后统一做一次。
+                RecordEnhanceStats(e);
+            }
+
+            if (levels > 0)
+            {
+                Equipment final = Player.GetEquipment(slot);
+                string title = final != null ? final.Title : EquipmentSlots.Name(slot);
+                AddLog($"◆ 强化 {title}  +{startLevel} → +{(final != null ? final.enhanceLevel : startLevel + levels)}" +
+                       $"  →  花费 {spent:N0} 金币（{levels} 级）", GameConfig.QualityColors[(int)(final != null ? final.quality : EquipmentQuality.Common)]);
+                EvaluateAchievements();
+            }
+
+            return levels;
+        }
+
+        /// <summary>真正扣钱与升级的那一步；单个与批量强化共用，保证两种入口的费用完全一致。</summary>
+        private EnhanceResult ApplyEnhanceLevel(EquipmentSlot slot, out Equipment equipment, out int cost)
+        {
+            equipment = Player.GetEquipment(slot);
+            cost = 0;
+            if (equipment == null) return EnhanceResult.NoEquipment;
+            if (!equipment.CanEnhance) return EnhanceResult.MaxLevel;
+
+            int price = equipment.EnhanceCost;
+            if (Player.gold < price) return EnhanceResult.NotEnoughGold;
+
+            // 先记下旧的生命上限：衣服强化会抬高上限，不补这一截的话，
+            // 强化完血量占比反而变小，看着像「强化掉血」。武器强化时增量为 0，此处无害。
+            int oldMaxHp = Player.MaxHp;
+
+            Player.gold -= price;
+            equipment.enhanceLevel++;
+            Player.currentHp += Mathf.Max(0, Player.MaxHp - oldMaxHp);
+            cost = price;
             return EnhanceResult.Success;
         }
 
@@ -539,6 +635,36 @@ namespace AutoBattle
 
         /// <summary>关闭设置面板。</summary>
         public void CloseSettingsPanel() => SettingsOpen = false;
+
+        /// <summary>关于浮层是否展开（roadmap A4 / C8）。和设置一样冻结战斗，否则看版本时怪会继续打。</summary>
+        public bool AboutOpen { get; set; }
+
+        /// <summary>打开 / 关闭关于面板。</summary>
+        public void ToggleAboutPanel()
+        {
+            if (ChoicePending) return;
+            bool open = !AboutOpen;
+            CloseAllPanels();
+            AboutOpen = open;
+        }
+
+        /// <summary>关闭关于面板。</summary>
+        public void CloseAboutPanel() => AboutOpen = false;
+
+        /// <summary>显示设置浮层（窗口 / 分辨率 / 允许缩放 / 色弱友好，roadmap C9+C11）。和设置一样冻结战斗。</summary>
+        public bool DisplayOpen { get; set; }
+
+        /// <summary>打开 / 关闭显示设置面板。</summary>
+        public void ToggleDisplayPanel()
+        {
+            if (ChoicePending) return;
+            bool open = !DisplayOpen;
+            CloseAllPanels();
+            DisplayOpen = open;
+        }
+
+        /// <summary>关闭显示设置面板。</summary>
+        public void CloseDisplayPanel() => DisplayOpen = false;
 
         /// <summary>打开 / 关闭背景音乐面板。</summary>
         public void ToggleMusicPanel()
@@ -750,6 +876,92 @@ namespace AutoBattle
                 AddLog($"⇄ 切换到存档 {slot + 1}（空档，已开始新游戏）。", GameConfig.LogGold);
             }
             AddLog("点击「开始」进入自动战斗。", GameConfig.LogNeutral);
+        }
+
+        /// <summary>
+        /// 从磁盘重读当前槽（C10 跨槽复制把自己的槽当目标时用）。
+        /// 与 SwitchSlot 不同：这里绝不先 Save，否则会把刚复制进来的内容又覆盖掉。
+        /// </summary>
+        public void ReloadCurrentSlotFromDisk()
+        {
+            if (EndlessActive) EndEndlessRun(EndlessEndReason.SlotChanged);
+            Player = new PlayerData();
+            Player.FillHp();
+            _loadedFromSave = SaveSystem.Load(Player);
+            ResetSessionState();
+            EnsureEquipmentSlotStarters();
+        }
+
+        // ---- 存档导出 / 导入（roadmap A6 / C10）----
+
+        /// <summary>
+        /// 导出当前槽到「我的文档\AutoBattle\slotN.json」，顺手把裸 JSON 放进剪贴板。
+        /// 先 Save 再导出：导出的是磁盘上的内容，内存里可能还有这一段没写进去。
+        /// </summary>
+        public void ExportCurrentSlot()
+        {
+            if (!TrySave()) return;
+
+            SaveSystem.ExportResult result = SaveSystem.ExportSlot(SaveSystem.CurrentSlot);
+            if (!result.ok)
+            {
+                AddLog($"⚠ 导出存档失败：{result.error}", GameConfig.LogWarn);
+                ShowBanner("导出失败", result.error);
+                return;
+            }
+
+            GUIUtility.systemCopyBuffer = result.json;
+            AddLog($"⇪ 已导出存档 {SaveSystem.CurrentSlot + 1} → {result.path}", GameConfig.LogSuccess);
+            AddLog("  存档 JSON 已复制到剪贴板；导入时优先读剪贴板，读不到再读同名导出文件。", GameConfig.LogInfo);
+            ShowBanner("存档已导出", "文件已写入文档目录，JSON 已复制");
+        }
+
+        /// <summary>
+        /// 把剪贴板（或同名导出文件）里的存档导进当前槽。
+        /// 导入只写 PlayerPrefs，然后按切档的流程重载内存，避免「内存旧档、磁盘新档」的半新半旧。
+        /// </summary>
+        public void ImportIntoCurrentSlot()
+        {
+            string text = GUIUtility.systemCopyBuffer;
+            string source = "剪贴板";
+            if (!SaveSystem.LooksLikeSaveJson(text))
+            {
+                string fromFile = SaveSystem.ReadExportFile(SaveSystem.CurrentSlot, out string readError);
+                if (string.IsNullOrEmpty(fromFile))
+                {
+                    AddLog($"⚠ 导入失败：剪贴板不是存档 JSON，且{readError}", GameConfig.LogWarn);
+                    ShowBanner("导入失败", "剪贴板与导出文件里都没有可用的存档");
+                    return;
+                }
+                text = fromFile;
+                source = SaveSystem.ExportPathOf(SaveSystem.CurrentSlot);
+            }
+
+            if (!SaveSystem.TryImport(SaveSystem.CurrentSlot, text, out string error))
+            {
+                AddLog($"⚠ 导入失败：{error}", GameConfig.LogWarn);
+                ShowBanner("导入失败", error);
+                return;
+            }
+
+            // 和切档同一套收尾：先结束无尽局，再整个重建 Player 并清会话状态。
+            if (EndlessActive) EndEndlessRun(EndlessEndReason.SlotChanged);
+            Player = new PlayerData();
+            Player.FillHp();
+            _loadedFromSave = SaveSystem.Load(Player);
+            ResetSessionState();
+
+            if (_loadedFromSave)
+            {
+                AddLog($"⇩ 已从{source}导入存档 {SaveSystem.CurrentSlot + 1}：Lv.{Player.level}  {Player.CurrentStage.Title}  金币 {Player.gold:N0}",
+                    GameConfig.LogSuccess);
+                EnsureEquipmentSlotStarters();
+            }
+            else
+            {
+                AddLog("⚠ 导入已写入但读回失败，已按新档开始；坏内容备份在 " + SaveSystem.BackupSuffix + " 键下", GameConfig.LogWarn);
+            }
+            ShowBanner("存档已导入", "当前槽已按导入内容重载");
         }
 
         /// <summary>删除某个存档槽（当前槽被删则回到该槽的新游戏状态）。</summary>
@@ -1795,7 +2007,7 @@ namespace AutoBattle
             if (_autoSaveTimer < GameConfig.AutoSaveInterval) return;
 
             _autoSaveTimer = 0f;
-            SaveSystem.Save(Player);
+            TrySave();
         }
     }
 }

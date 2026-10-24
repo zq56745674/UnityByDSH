@@ -214,8 +214,8 @@ namespace AutoBattle
         /// <summary>品质显示名。</summary>
         public static readonly string[] QualityNames = { "普通", "优秀", "稀有", "史诗", "传说" };
 
-        /// <summary>品质显示色：白 / 绿 / 蓝 / 紫 / 橙。</summary>
-        public static readonly Color[] QualityColors =
+        /// <summary>品质显示色（默认）：白 / 绿 / 蓝 / 紫 / 橙。</summary>
+        private static readonly Color[] QualityColorsNormal =
         {
             new Color(1.00f, 1.00f, 1.00f), // 普通 - 白
             new Color(0.40f, 0.85f, 0.40f), // 优秀 - 绿
@@ -223,6 +223,23 @@ namespace AutoBattle
             new Color(0.75f, 0.45f, 1.00f), // 史诗 - 紫
             new Color(1.00f, 0.65f, 0.20f), // 传说 - 橙
         };
+
+        /// <summary>
+        /// 品质显示色（色弱友好，C11）：Okabe-Ito 风格色板，红绿色弱也能分开。
+        /// 只换颜色、不换含义——品质名（普通/优秀/…）在所有卡片上照旧显示，颜色只是第二编码。
+        /// </summary>
+        private static readonly Color[] QualityColorsColorBlind =
+        {
+            new Color(0.80f, 0.82f, 0.84f), // 普通 - 浅灰
+            new Color(0.00f, 0.62f, 0.45f), // 优秀 - 蓝绿 #009E73
+            new Color(0.34f, 0.71f, 0.91f), // 稀有 - 天蓝 #56B4E9
+            new Color(0.80f, 0.47f, 0.65f), // 史诗 - 紫红 #CC79A7
+            new Color(0.90f, 0.62f, 0.00f), // 传说 - 橙 #E69F00
+        };
+
+        /// <summary>品质显示色，按设置里的「色弱友好」在两张色板间切换。</summary>
+        public static Color[] QualityColors =>
+            DisplaySettings.UseColorBlindPalette ? QualityColorsColorBlind : QualityColorsNormal;
 
         // ==================== 金币（卖装备所得）====================
 

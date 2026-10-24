@@ -14,6 +14,9 @@ namespace AutoBattle
         {
             if (_game == null) return;
 
+            // 键盘快捷键先处理：Esc 关浮层、空格暂停、1/2/4 变速、R 重置（见文件末尾）。
+            TickShortcuts();
+
             // P2：飘字与实时 DPS 都需要按帧推进。
             // 飘字是纯表现层，**不吃速度倍率**：1.15 秒的寿命在 x4 下会被压到 0.29 秒，
             // 肉眼基本抓不到（挂机默认就是 x4，等于飘字白做）。DPS 窗口则按游戏时间走，
@@ -47,264 +50,132 @@ namespace AutoBattle
             if (_resetConfirmUntil > 0f && now >= _resetConfirmUntil)
             {
                 _resetConfirmUntil = 0f;
-                if (_resetLabel != null) { _resetLabel.text = "重置"; _resetLabel.fontSize = 18; }
+                if (_resetLabel != null) { _resetLabel.text = "重置"; _resetLabel.fontSize = 15; }
             }
 
             if (_deleteConfirmUntil > 0f && now >= _deleteConfirmUntil) CancelDeleteConfirm();
         }
 
-        // ==================== P2：伤害飘字 ====================
+        // ==================== 键盘快捷键（2026-10-23 新增） ====================
 
-        /// <summary>预建飘字池，避免战斗中反复创建 GameObject。</summary>
-        private void BuildFloatPool(RectTransform layer)
+        /// <summary>
+        /// 任意浮层开着：这时除了 Esc 之外快捷键一律不响应，否则空格会在设置面板底下把战斗跑起来。
+        /// </summary>
+        private bool AnyOverlayOpen()
         {
-            _floatTexts = new Text[FloatPoolSize];
-            _floatLife = new float[FloatPoolSize];
-            _floatPos = new Vector2[FloatPoolSize];
-            _floatVel = new Vector2[FloatPoolSize];
-            for (int i = 0; i < FloatPoolSize; i++)
-            {
-                RectTransform r = CreateRect(layer, $"Float{i}", 0, 0, 220, 30);
-                Text txt = r.gameObject.AddComponent<Text>();
-                txt.font = _font;
-                txt.fontSize = 20;
-                txt.fontStyle = FontStyle.Bold;
-                txt.alignment = TextAnchor.MiddleCenter;
-                txt.raycastTarget = false;
-                txt.supportRichText = false;
-                txt.horizontalOverflow = HorizontalWrapMode.Overflow;
-                txt.verticalOverflow = VerticalWrapMode.Overflow;
-                txt.text = string.Empty;
-                _floatTexts[i] = txt;
-                _floatLife[i] = 0f;
-            }
+            if (_game == null) return false;
+            return _game.SettingsOpen || _game.MusicPanelOpen || _game.StagePanelOpen || _game.SkillPanelOpen
+                || _game.SavePanelOpen || _game.EnhancePanelOpen || _game.ReforgePanelOpen
+                || _game.CompareOpen || _game.AchievementPanelOpen || _game.EndlessPanelOpen
+                || _game.RebirthPanelOpen || _game.GuideOpen || _game.EndlessResultOpen
+                || _game.AboutOpen || _game.DisplayOpen;
         }
 
-        /// <summary>弹出一条飘字。x / y 是落点（相对飘字层左上角，y 向下为正）。</summary>
-        private void SpawnFloat(string label, Color color, int size, float x, float y)
+        /// <summary>
+        /// Esc：按「最上层」关一个浮层；一个浮层都没有时当作暂停 / 继续。
+        /// 三选一、无尽结算、新手引导不代关——这三层必须由玩家自己做选择。
+        /// </summary>
+        private void OnEscapeShortcut()
         {
-            // 设置里关掉飘字就整条链路短路：伤害仍在结算，只是不再往屏幕上丢数字。
-            if (!GameSettings.DamageFloat) return;
-            if (_floatTexts == null) return;
-            int i = _floatCursor;
-            _floatCursor = (_floatCursor + 1) % FloatPoolSize;
-
-            Text txt = _floatTexts[i];
-            txt.text = label;
-            txt.color = color;
-            txt.fontSize = size;
-
-            // 寿命压到 0.55 秒：攻速 0.27 秒时同屏会叠 3~4 个数字，停留久了就糊成一团。
-            _floatLife[i] = 0.55f;
-            // 三条纵向轨道轮流落点：只靠随机 x 仍会撞字（5 位数的字宽就有 70px），
-            // 分轨后同一时刻最多两层，读得清。
-            int lane = _floatLane;
-            _floatLane = (_floatLane + 1) % 3;
-            // 注意：CreateRect 的坐标系是「y 向下为正」，所以这里存的是向下偏移量。
-            // 上限 690：五位数伤害的字宽约 70px，再往右会被画布右缘切掉。
-            _floatPos[i] = new Vector2(Mathf.Clamp(x, 40f, 690f), Mathf.Clamp(y + lane * 15f, 12f, 450f));
-            _floatVel[i] = new Vector2(GameRandom.Range(-8f, 8f), -58f);
-            _floatTexts[i].rectTransform.anchoredPosition = new Vector2(_floatPos[i].x, -_floatPos[i].y);
-        }
-
-        private void TickFloats(float dt)
-        {
-            if (_floatTexts == null) return;
-            for (int i = 0; i < FloatPoolSize; i++)
-            {
-                if (_floatLife[i] <= 0f) continue;
-
-                _floatLife[i] -= dt;
-                if (_floatLife[i] <= 0f)
-                {
-                    _floatTexts[i].text = string.Empty;
-                    continue;
-                }
-
-                _floatPos[i] += _floatVel[i] * dt;
-                _floatTexts[i].rectTransform.anchoredPosition = new Vector2(_floatPos[i].x, -_floatPos[i].y);
-
-                Color c = _floatTexts[i].color;
-                c.a = Mathf.Clamp01(_floatLife[i] / 0.4f);
-                _floatTexts[i].color = c;
-            }
-        }
-
-        // ==================== P2：Buff 栏 ====================
-
-        private void RefreshBuffBar(PlayerData p, bool textTick)
-        {
-            if (_buffText == null || p == null) return;
-            // 读数按 10Hz 走：逐帧重建只会在「状态：无」和真 Buff 之间反复拼同一份字符串。
-            if (!textTick) return;
-
-            BattleSystem b = _game.Battle;
-            var sb = _buffSb;
-            sb.Clear();
-
-            if (b != null)
-            {
-                if (b.BerserkTimeLeft > 0f)
-                {
-                    sb.Append("<color=#FF9A3C>◆ 狂暴 ");
-                    sb.Append(b.BerserkTimeLeft.ToString("0.0"));
-                    sb.Append("s</color>    ");
-                }
-                if (b.NearDeathTimeLeft > 0f)
-                {
-                    sb.Append("<color=#FF6B9D>◆ 免死 ");
-                    sb.Append(b.NearDeathTimeLeft.ToString("0.0"));
-                    sb.Append("s</color>    ");
-                }
-            }
-
-            if (p.shield > 0)
-            {
-                sb.Append("<color=#7FE8FF>◆ 护盾 ");
-                sb.Append(p.shield);
-                sb.Append("</color>    ");
-            }
-
-            // 这里以前还会把每个技能的冷却/就绪也拼进来，跟下方技能栏重复：
-            // 空状态时整行是「重击 就绪 吸血鬼 就绪 …」，看着像坏掉的日志。
-            _buffText.text = sb.Length == 0
-                ? "<color=#5F6470>状态：无（技能冷却在下方技能栏）</color>"
-                : sb.ToString();
-        }
-
-        // ==================== P2：实时 DPS ====================
-
-        private void RefreshDps(float dt, bool textTick)
-        {
-            if (_dpsText == null) return;
-
-            // 非战斗态把平滑值清掉：否则停在「等待下一只怪」或阵亡界面时，
-            // 胶囊会一直显示上一场战斗的 DPS，看起来像还在输出。
-            bool fighting = _game.CurrentState == GameController.State.Fighting;
-            if (!fighting)
-            {
-                _dpsSmoothed = 0f;
-                _dpsDamageAccum = 0f;
-                _dpsWindowTime = 0f;
-            }
-
-            // DPS 胶囊整个隐藏：只清文本不够，胶囊底与边框还留在日志标题行上。
-            // 日志展开时也一起藏起来——展开面板会盖住舞台顶栏，胶囊留在上面会压住标题。
-            if (!GameSettings.ShowDps || _battleLogOpen)
-            {
-                if (_dpsPill != null && _dpsPill.gameObject.activeSelf) _dpsPill.gameObject.SetActive(false);
-                return;
-            }
-            if (_dpsPill != null && !_dpsPill.gameObject.activeSelf) _dpsPill.gameObject.SetActive(true);
-
-            // 积分必须逐帧做：这是这段时间窗里的真实跳数，和文本节拍不是一个东西。
-            if (fighting && dt > 0f)
-            {
-                _dpsWindowTime += dt;
-                if (_dpsWindowTime >= 0.4f)
-                {
-                    float instant = _dpsDamageAccum / _dpsWindowTime;
-                    _dpsSmoothed = _dpsSmoothed <= 0f ? instant : Mathf.Lerp(_dpsSmoothed, instant, 0.55f);
-                    _dpsDamageAccum = 0f;
-                    _dpsWindowTime = 0f;
-                }
-            }
-
-            if (!textTick) return;
-
-            // 期望 DPS 是纯静态估算（每次要跑两遍 EquipmentScore.Of），
-            // 只随「换了怪 / 角色变强」变化，4Hz 重算足够。
-            bool hasExpect = fighting && _game.Monster != null;
-            if (hasExpect)
-            {
-                _dpsExpectTimer += 0.1f;
-                if (!ReferenceEquals(_dpsExpectMonster, _game.Monster) || _dpsExpectTimer >= 0.25f)
-                {
-                    _dpsExpectMonster = _game.Monster;
-                    _dpsExpectTimer = 0f;
-                    _dpsExpectValue = Mathf.RoundToInt(EquipmentScore.Dps(_game.Player, _game.Monster));
-                }
-            }
-            else
-            {
-                _dpsExpectMonster = null;
-            }
-
-            int shown = _dpsSmoothed > 0.5f ? Mathf.RoundToInt(_dpsSmoothed) : -1;
-            int expect = hasExpect ? _dpsExpectValue : -2;
-            if (shown == _dpsShown && expect == _dpsExpect) return;
-            _dpsShown = shown;
-            _dpsExpect = expect;
-
-            string expectText = hasExpect ? "    期望 " + _dpsExpectValue : string.Empty;
-            _dpsText.text = shown >= 0
-                ? "<color=#7C869D>实时 DPS</color>  <b>" + shown + "</b>" + expectText
-                : "<color=#7C869D>实时 DPS</color>  <color=#5F6779>—</color>" + expectText;
-        }
-
-        // ==================== P2：日志 → 飘字 / DPS ====================
-
-        private static readonly System.Text.RegularExpressions.Regex RxPlayerHit =
-            new System.Text.RegularExpressions.Regex(@"^主角 → 怪物  (?:暴击 )?(\d+) 伤害");
-        private static readonly System.Text.RegularExpressions.Regex RxSkillHit =
-            new System.Text.RegularExpressions.Regex(@"^✦ [^！]+！(\d+) 伤害");
-
-        /// <summary>把新增的日志行翻译成飘字；顺带累计主角造成的伤害给 DPS 用。</summary>
-        private void ParseNewLogs()
-        {
+            HideTooltip();
             if (_game == null) return;
 
-            int count = _game.Log.Count;
-            int total = _game.TotalLogEntries;
+            if (_game.PendingSkillPicks > 0 || _game.CurrentState == GameController.State.SkillChoice
+                || _game.EndlessResultOpen || _game.GuideOpen)
+                return;
 
-            // 用累计条数算新增：Log 被裁到上限后 count 不变，差值法会永远算出 0。
-            int added = total - _lastParsedLogTotal;
-            _lastParsedLogTotal = total;
-            if (added <= 0) return;
-
-            // 一帧内合并太多条（或刚换档清空日志）时只解析还留在缓冲里的这些。
-            if (added > count) added = count;
-
-            for (int i = count - added; i < count; i++)
+            // 关法照抄各面板自己的关闭按钮：有的要顺手清掉确认倒计时（存档 / 无尽 / 轮回）。
+            if (_game.SettingsOpen) { OnSettingsCloseClicked(); return; }
+            if (_game.MusicPanelOpen) { OnMusicCloseClicked(); return; }
+            if (_game.StagePanelOpen) { OnStagePanelCloseClicked(); return; }
+            if (_game.SkillPanelOpen) { OnSkillPanelCloseClicked(); return; }
+            if (_game.CompareOpen) { OnCompareCloseClicked(); return; }
+            if (_game.AchievementPanelOpen) { OnAchievementCloseClicked(); return; }
+            if (_game.EndlessPanelOpen) { OnEndlessCloseClicked(); return; }
+            if (_game.RebirthPanelOpen) { OnRebirthCloseClicked(); return; }
+            if (_game.SavePanelOpen)
             {
-                if (i < 0) continue;
-                string msg = _game.Log[i].message;
-                if (string.IsNullOrEmpty(msg)) continue;
-
-                var mPlayer = RxPlayerHit.Match(msg);
-                if (mPlayer.Success)
-                {
-                    bool crit = msg.Contains("暴击 ");
-                    int dmg = int.Parse(mPlayer.Groups[1].Value);
-                    // 落在怪物血条右半段：血条中央是「260 / 2115」的读数，别压它。
-                    // 普通命中按 1/3 概率丢弃——飘字是节奏感，不是逐条回执，日志里有全量。
-                    if (crit || GameRandom.Value > 0.5f)
-                    {
-                        // 落点跟着怪物走：飘字层压在舞台上方，怪物躯干在层内的 y 约 250~290。
-                        SpawnFloat(crit ? dmg + "!" : dmg.ToString(),
-                            crit ? GameConfig.FloatCrit : GameConfig.TextNormal,
-                            crit ? 19 : 14,
-                            522f + GameRandom.Range(0f, 140f),
-                            250f + GameRandom.Range(0f, 34f));
-                    }
-                    _dpsDamageAccum += dmg;
-                    continue;
-                }
-
-                var mSkill = RxSkillHit.Match(msg);
-                if (mSkill.Success)
-                {
-                    int dmg = int.Parse(mSkill.Groups[1].Value);
-                    SpawnFloat(dmg.ToString(), GameConfig.FloatDamage, 17,
-                        548f + GameRandom.Range(0f, 104f),
-                        246f + GameRandom.Range(0f, 40f));
-                    _dpsDamageAccum += dmg;
-                    continue;
-                }
-
-                // 怪物打主角不飘字：日志里「怪物 → 主角 262 伤害」已经写明，
-                // 左边血条也在掉，飘字只会多一处噪音。
+                CancelDeleteConfirm();
+                _game.CloseSavePanel();
+                GameAudio.PlayUiClose();
+                return;
             }
+            if (_game.EnhancePanelOpen) { _game.CloseEnhancePanel(); GameAudio.PlayUiClose(); return; }
+            if (_game.ReforgePanelOpen) { _game.CloseReforgePanel(); GameAudio.PlayUiClose(); return; }
+            if (_game.AboutOpen) { _game.CloseAboutPanel(); GameAudio.PlayUiClose(); return; }
+            if (_game.DisplayOpen) { _game.CloseDisplayPanel(); GameAudio.PlayUiClose(); return; }
+
+            // 没有浮层：暂停 / 继续。
+            _game.ToggleRunning();
+        }
+
+        /// <summary>
+        /// 快捷键：空格 开始/暂停 · 1/2/4 战斗速度 · Esc 关闭浮层（无浮层则暂停）· R 重置。
+        /// 工程 Active Input Handling = Input System，所以走新输入包；留一条老输入的退路，
+        /// 免得以后切回旧输入系统时这里每帧抛异常。
+        /// </summary>
+        private void TickShortcuts()
+        {
+#if ENABLE_INPUT_SYSTEM
+            UnityEngine.InputSystem.Keyboard kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb == null) return;
+
+            // 先把这一帧所有按键都算出来：这样早退（Esc 关浮层）也不会漏更新边沿状态，
+            // 否则在浮层里按住过某个键，出来时会立刻误触发一次。
+            bool n1 = KeyDown(kb.numpad1Key, ref _kbNumpad1);
+            bool n2 = KeyDown(kb.numpad2Key, ref _kbNumpad2);
+            bool n4 = KeyDown(kb.numpad4Key, ref _kbNumpad4);
+            bool esc = KeyDown(kb.escapeKey, ref _kbEscape);
+            bool space = KeyDown(kb.spaceKey, ref _kbSpace);
+            bool d1 = KeyDown(kb.digit1Key, ref _kbDigit1) || n1;
+            bool d2 = KeyDown(kb.digit2Key, ref _kbDigit2) || n2;
+            bool d4 = KeyDown(kb.digit4Key, ref _kbDigit4) || n4;
+            bool r = KeyDown(kb.rKey, ref _kbR);
+
+            if (esc) { OnEscapeShortcut(); return; }
+            if (AnyOverlayOpen()) return;
+
+            if (space) { OnStartClicked(); return; }
+            if (d1) { OnSpeedShortcut(0); return; }
+            if (d2) { OnSpeedShortcut(1); return; }
+            if (d4) { OnSpeedShortcut(2); return; }
+            if (r) OnResetClicked();
+#else
+            if (Input.GetKeyDown(KeyCode.Escape)) { OnEscapeShortcut(); return; }
+            if (AnyOverlayOpen()) return;
+
+            if (Input.GetKeyDown(KeyCode.Space)) { OnStartClicked(); return; }
+            if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) { OnSpeedShortcut(0); return; }
+            if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2)) { OnSpeedShortcut(1); return; }
+            if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4)) { OnSpeedShortcut(2); return; }
+            if (Input.GetKeyDown(KeyCode.R)) OnResetClicked();
+#endif
+        }
+
+#if ENABLE_INPUT_SYSTEM
+        /// <summary>
+        /// 取「这一帧按下」：wasPressedThisFrame 为主，isPressed 的上升沿兜底。
+        /// 兜底不是为了替代它，而是为了覆盖面：极短按键只有 wasPressedThisFrame 抓得到，
+        /// 而合成事件 / 编辑器未聚焦时它不一定置位，isPressed 那条路反而稳。
+        /// prev 由调用方持有，每帧都会更新；两层同时成立也只返回一次 true。
+        /// </summary>
+        private static bool KeyDown(UnityEngine.InputSystem.Controls.ButtonControl key, ref bool prev)
+        {
+            bool down = key.isPressed;
+            bool edge = down && !prev;
+            prev = down;
+            return key.wasPressedThisFrame || edge;
+        }
+
+        // 上一帧的 isPressed：只给上面的边沿兜底用。
+        private bool _kbEscape, _kbSpace, _kbDigit1, _kbNumpad1, _kbDigit2, _kbNumpad2, _kbDigit4, _kbNumpad4, _kbR;
+#endif
+
+        /// <summary>快捷键变速：已经在这一档就不再调，SetSpeedIndex 每调一次都会写一行 ⚡ 日志。</summary>
+        private void OnSpeedShortcut(int index)
+        {
+            if (_game == null || _game.SpeedIndex == index) return;
+            _game.SetSpeedIndex(index);
         }
 
         // ==================== 刷新实现 ====================
@@ -404,6 +275,7 @@ namespace AutoBattle
             sig.Add(p.armor != null ? p.armor.EnhancedDefense : 0);
             sig.Add(p.Speed);
             sig.Add(p.AttackSpeedBonus, 10000f);
+            sig.Add(p.equippedTitle);
             sig.Add(p.CritChance, 10000f);
             sig.Add(p.CritDamage, 10000f);
             sig.Add(p.ArmorPenetration, 10000f);
@@ -417,6 +289,15 @@ namespace AutoBattle
                 ? $"   <color=#8C99B0>巅峰</color> <color=#C9B6FF><b>{p.paragonLevel}</b></color>"
                 : (p.IsMaxLevel ? "   <color=#8C99B0>满级</color>" : string.Empty);
             _levelText.text = $"<color=#8C99B0>等级</color> <size=24><b>{p.level}</b></size>{lvSuffix}";
+            if (_titleText != null)
+            {
+                string title = string.IsNullOrEmpty(p.equippedTitle)
+                    ? "无名旅人"
+                    : AchievementCatalog.TitleNameOf(p.equippedTitle);
+                if (string.IsNullOrEmpty(title)) title = "无名旅人";
+                _titleText.text = title;
+                _titleText.color = string.IsNullOrEmpty(p.equippedTitle) ? GameConfig.TextMuted : GameConfig.TextGold;
+            }
 
             // 「装备」这一项用强化后的主属性：不然强化完总攻击涨了、括号里的分解却没动，看着像算错了。
             _atkText.text = $"<color=#8C99B0>攻击</color>   <b>{p.Attack}</b>   <color=#5F6779>基础 {p.BaseAttack} + 装备 {(p.weapon != null ? p.weapon.EnhancedAttack : 0)}</color>";
@@ -547,7 +428,8 @@ namespace AutoBattle
             if (p.gold != _cGold)
             {
                 _cGold = p.gold;
-                _goldText.text = $"<color=#8C99B0>金币</color>   <b>{p.gold}</b>";
+                // 金币会涨到七位数，不写千分位读起来要数零（商店那边同一个数也补了）。
+                _goldText.text = $"<color=#8C99B0>金币</color>   <b>{p.gold:N0}</b>";
             }
 
             var sig = new Sig();
@@ -571,7 +453,7 @@ namespace AutoBattle
                 // 压成 2 行：3 行时统计区要占 47px，会和上方的金币行抢位置（曾经重叠）。
                 _statText.text =
                     $"击杀 {_game.TotalKills}（精英 {_game.EliteKills} / BOSS {_game.BossKills}）    掉落 {_game.TotalDrops}    换装 {_game.TotalEquipped}    卖出 {_game.TotalSold}\n" +
-                    $"阵亡 {_game.TotalDeaths}    累计 {_game.TotalGoldEarned} 金币    状态 {StateName(_game.CurrentState)}    速度 x{_game.SpeedMultiplier:0}{paragonNote}";
+                    $"阵亡 {_game.TotalDeaths}    累计 {_game.TotalGoldEarned:N0} 金币    状态 {StateName(_game.CurrentState)}    速度 x{_game.SpeedMultiplier:0}{paragonNote}";
             }
 
             // 存档按钮上的槽号：跟当前槽走，切完槽立刻反映出来。
@@ -616,325 +498,5 @@ namespace AutoBattle
             }
         }
 
-        /// <summary>商店与技能栏走 10Hz 文本，七个浮层各自在内部判脏。</summary>
-        private void RefreshPanels(PlayerData p, bool textTick)
-        {
-            RefreshShop(p, textTick);
-            RefreshSkillBar(p, textTick);
-            RefreshSkillPanel();
-            RefreshSkillChoice();
-            RefreshStagePanel();
-            RefreshSavePanel();
-            RefreshEnhancePanel();
-            RefreshReforgePanel();
-            RefreshSettingsPanel();
-            RefreshMusicPanel();
-            RefreshComparePanel();
-            RefreshEndlessPanel();
-            RefreshRebirthPanel();
-            RefreshAchievementPanel();
-            RefreshGuide();
-            RefreshBanner();
-        }
-
-        /// <summary>
-        /// 日志双写：底部 ticker 只留最新两行（旧在上、新在下，和聊天一样从下往上读），
-        /// 展开面板写最近 180 条。只有 LogVersion 变了才重建，避免每帧拼大字符串。
-        /// </summary>
-        private void RefreshLog()
-        {
-            if (_game.LogVersion == _lastLogVersion) return;
-            _lastLogVersion = _game.LogVersion;
-
-            int count = _game.Log.Count;
-
-            // ---- ticker：两行 ----
-            var ticker = new System.Text.StringBuilder(256);
-            int tickerFrom = Mathf.Max(0, count - 2);
-            for (int i = tickerFrom; i < count; i++)
-            {
-                if (i > tickerFrom) ticker.Append('\n');
-                AppendTickerLine(ticker, _game.Log[i]);
-            }
-            if (_logText != null) _logText.text = ticker.ToString();
-
-            // ---- 展开面板：旧在上、新在下，读完自动跟到底 ----
-            var detail = new System.Text.StringBuilder(16384);
-            int detailFrom = Mathf.Max(0, count - MaxDetailLogLines);
-            for (int i = detailFrom; i < count; i++)
-            {
-                AppendLogLine(detail, _game.Log[i]);
-                detail.Append('\n');
-            }
-            FillBattleLogDetail(detail.ToString(), count);
-        }
-
-        /// <summary>
-        /// ticker 单行：压掉日志自带的换行（掉落类会写第二行「◆ 词条」），过长截断。
-        /// 不压就该占两行，ticker 只留两行时后一条会被挤掉。
-        /// </summary>
-        private static void AppendTickerLine(System.Text.StringBuilder sb, LogEntry entry)
-        {
-            const int MaxChars = 78;
-            sb.Append("<color=#");
-            sb.Append(ColorUtility.ToHtmlStringRGB(entry.color));
-            sb.Append('>');
-
-            string msg = entry.message;
-            int shown = 0;
-            for (int i = 0; i < msg.Length; i++)
-            {
-                char c = msg[i];
-                if (c == '\n' || c == '\r')
-                {
-                    sb.Append("  ");
-                    continue;
-                }
-                if (c == '\t') continue;
-                if (shown >= MaxChars)
-                {
-                    sb.Append('…');
-                    break;
-                }
-                sb.Append(c);
-                shown++;
-            }
-
-            sb.Append("</color>");
-        }
-
-        /// <summary>日志一行（按条目的颜色包裹）。ticker 与展开面板共用，颜色口径不会走岔。</summary>
-        private static void AppendLogLine(System.Text.StringBuilder sb, LogEntry entry)
-        {
-            sb.Append("<color=#");
-            sb.Append(ColorUtility.ToHtmlStringRGB(entry.color));
-            sb.Append('>');
-            sb.Append(entry.message);
-            sb.Append("</color>");
-        }
-
-        /// <summary>
-        /// 五槽装备卡：标题 / 主属性 / 倍率+评分。
-        /// 评分依赖角色属性，但只随「装备 / 等级 / 巅峰 / 强化 / 洗练 / 锁 / 技能」变化，
-        /// 所以把这些值拼成签名，签名没动就不重算——否则每帧会白跑五次 EquipmentScore.Of。
-        /// 洗练会原地改词条数值（引用不变），因此签名必须带上词条字段本身，不能只比引用。
-        /// </summary>
-        private void RefreshEquipmentLines(PlayerData p)
-        {
-            if (_equipTitles == null || _equipStats == null || _equipMetas == null) return;
-
-            var sig = new System.Text.StringBuilder(320);
-            sig.Append(p.level).Append('|').Append(p.paragonLevel).Append('|')
-               .Append(p.ownedSkillMask).Append('|').Append(GameSettings.ShowScore ? 1 : 0);
-            for (int i = 0; i < PlayerData.SkillSlotCount; i++) sig.Append(',').Append(p.GetSkillSlot(i));
-
-            for (int i = 0; i < EquipmentSlots.Count; i++)
-            {
-                Equipment e = p.GetEquipment(EquipmentSlots.All[i]);
-                sig.Append('|');
-                if (e == null) { sig.Append('_'); continue; }
-                sig.Append(e.level).Append(',').Append((int)e.quality).Append(',')
-                   .Append(e.qualityMultiplier).Append(',').Append(e.enhanceLevel).Append(',')
-                   .Append(e.reforgeCount).Append(',').Append(e.locked ? 1 : 0).Append(',')
-                   .Append(e.attack).Append(',').Append(e.defense).Append(',').Append(e.hp).Append(',')
-                   .Append(e.speed).Append(',').Append(e.haste).Append(',').Append(e.armorPen).Append(',')
-                   .Append(e.critChance).Append(',').Append(e.critDamage).Append(',')
-                   .Append(e.affixCritChance).Append(',').Append(e.affixCritDamage).Append(',')
-                   .Append(e.affixAttackSpeed).Append(',').Append(e.affixAllStats).Append(',')
-                   .Append(e.affixArmorPen).Append(',').Append(e.affixScale);
-            }
-
-            string signature = sig.ToString();
-            if (signature == _scoreCacheSignature) return;
-            _scoreCacheSignature = signature;
-
-            for (int i = 0; i < EquipmentSlots.Count; i++)
-            {
-                EquipmentSlot slot = EquipmentSlots.All[i];
-                Equipment e = p.GetEquipment(slot);
-                if (e == null)
-                {
-                    _scoreEquipTitles[i] = $"<color=#5F6779>{EquipmentSlots.Name(slot)} · 空</color>";
-                    _scoreEquipStats[i] = string.Empty;
-                    _scoreEquipMetas[i] = string.Empty;
-                    continue;
-                }
-
-                string hex = ColorUtility.ToHtmlStringRGB(e.QualityColor);
-                // 卡面只有 190 宽：标题只放「槽位 + 等级」，品质靠颜色，锁定用图标补一位。
-                _scoreEquipTitles[i] = $"<color=#{hex}><b>{EquipmentSlots.Name(slot)} Lv.{e.level}</b></color>"
-                    + (e.locked ? " <color=#FFD966>🔒</color>" : string.Empty);
-                _scoreEquipStats[i] = e.StatLine;
-                _scoreEquipMetas[i] = FormatEquipmentMeta(e);
-            }
-
-            for (int i = 0; i < EquipmentSlots.Count; i++)
-            {
-                if (_equipTitles[i] != null) _equipTitles[i].text = _scoreEquipTitles[i];
-                if (_equipStats[i] != null) _equipStats[i].text = _scoreEquipStats[i];
-                if (_equipMetas[i] != null) _equipMetas[i].text = _scoreEquipMetas[i];
-            }
-        }
-
-        /// <summary>装备卡右上角：品质倍率 + 评分（评分可以关，见设置面板）。</summary>
-        private string FormatEquipmentMeta(Equipment e)
-        {
-            if (e == null) return string.Empty;
-
-            if (!GameSettings.ShowScore) return $"×{e.qualityMultiplier:0.00}";
-
-            float score = _game != null && _game.Player != null ? EquipmentScore.Of(_game.Player, e, e.slot) : 0f;
-            return $"<color=#8C99B0>×{e.qualityMultiplier:0.00}</color> <b>{score:0}</b>";
-        }
-
-
-        /// <summary>血条边框颜色：精英金色、Boss 红色、普通怪透明（不显示边框）。</summary>
-        private static Color MonsterBorderColor(MonsterTier tier)
-        {
-            switch (tier)
-            {
-                case MonsterTier.Elite: return new Color(1f, 0.82f, 0.25f);
-                case MonsterTier.Boss: return new Color(1f, 0.25f, 0.2f);
-                default: return GameConfig.Clear;
-            }
-        }
-
-        private static bool IsOpen(RectTransform panel)
-        {
-            return panel != null && panel.gameObject.activeSelf;
-        }
-
-        private static string StateName(GameController.State s)
-        {
-            switch (s)
-            {
-                case GameController.State.Fighting: return "战斗中";
-                case GameController.State.WaitingRespawn: return "等待重生";
-                case GameController.State.Reviving: return "复活中";
-                case GameController.State.Shopping: return "商店中";
-                case GameController.State.SkillChoice: return "选技能";
-                case GameController.State.Ended: return "本局结束";
-                default: return s.ToString();
-            }
-        }
-
-        /// <summary>按比例设置填充条：用 anchorMax.x 实现，不改变父级布局。</summary>
-        private static void SetBar(Image fill, float progress)
-        {
-            if (fill == null) return;
-            RectTransform rt = fill.rectTransform;
-            rt.anchorMin = new Vector2(0f, 0f);
-            rt.anchorMax = new Vector2(Mathf.Clamp01(progress), 1f);
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-        }
-
-        // ==================== 控件工厂 ====================
-
-        private static RectTransform CreateRect(Transform parent, string name, float x, float y, float w, float h)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(0f, 1f);
-            rt.pivot = new Vector2(0f, 1f);
-            rt.anchoredPosition = new Vector2(x, -y); // y 向下为正，写起来更直观
-            rt.sizeDelta = new Vector2(w, h);
-            return rt;
-        }
-
-        private static void Stretch(RectTransform rt)
-        {
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-        }
-
-        private static Image CreateImage(Transform parent, string name, float x, float y, float w, float h, Color color, bool raycast = false)
-        {
-            RectTransform rt = CreateRect(parent, name, x, y, w, h);
-            var img = rt.gameObject.AddComponent<Image>();
-            img.color = color;
-            img.raycastTarget = raycast;
-            return img;
-        }
-
-        /// <summary>
-        /// 浮层面板底板。blockClicks=true 时底板自己吃点击：UGUI 的射线只会落在最上层的
-        /// raycastTarget 上，底板如果不吃，点面板空白处会穿透到下层按钮（选关面板曾因此
-        /// 一点空白就误买药剂、误扣金币）。
-        /// </summary>
-        private RectTransform CreatePanel(Transform parent, string name, float x, float y, float w, float h,
-            Color color, bool blockClicks = false)
-        {
-            Image img = CreateImage(parent, name, x, y, w, h, color, blockClicks);
-            Round(img, RadiusPanel);
-            AddBorder(img, RadiusPanel, GameConfig.Border);
-            return img.rectTransform;
-        }
-
-        private Text CreateText(Transform parent, string name, string content, float x, float y, float w, float h,
-            int fontSize, Color color, TextAnchor anchor, FontStyle style = FontStyle.Normal)
-        {
-            RectTransform rt = CreateRect(parent, name, x, y, w, h);
-            var t = rt.gameObject.AddComponent<Text>();
-            t.font = _font;
-            t.text = content;
-            t.fontSize = fontSize;
-            t.color = color;
-            t.alignment = anchor;
-            t.fontStyle = style;
-            t.horizontalOverflow = HorizontalWrapMode.Wrap;
-            t.verticalOverflow = VerticalWrapMode.Overflow;
-            t.supportRichText = true;
-            t.raycastTarget = false;
-            return t;
-        }
-
-        /// <summary>背景条 + 填充条；返回填充条供刷新时改比例。</summary>
-        private Image CreateBar(Transform parent, string name, float x, float y, float w, float h, Color bgColor, Color fillColor)
-        {
-            Image bg = CreateImage(parent, name, x, y, w, h, bgColor);
-            Round(bg, RadiusBar);
-            Image fill = CreateImage(bg.rectTransform, name + "Fill", 0, 0, w, h, fillColor);
-            Round(fill, RadiusBar);
-            Stretch(fill.rectTransform);
-            AddBarGloss(fill);
-            return fill;
-        }
-
-        private Button CreateButton(Transform parent, string name, string label, float x, float y, float w, float h,
-            Color bgColor, out Text labelText)
-        {
-            Image img = CreateImage(parent, name, x, y, w, h, bgColor, true);
-            Round(img, RadiusButton);
-            AddBorder(img, RadiusButton, new Color(1f, 1f, 1f, 0.10f));
-            var btn = img.gameObject.AddComponent<Button>();
-            btn.targetGraphic = img;
-            // 点完按钮就把悬停名称收掉：否则点开设置时，指针还停在齿轮上，
-            // tooltip 会一直浮在新面板上面。
-            btn.onClick.AddListener(HideTooltip);
-            // 所有 CreateButton 共用点击音；面板入口的开关音另外挂（避免关闭时重复）。
-            btn.onClick.AddListener(GameAudio.PlayUiClick);
-
-            // 注意：这几个颜色是**乘数**，乘在 Image.color（也就是 bgColor）上。
-            // 原来写成 1.18f * bgColor，对深色按钮等于又乘一遍暗色，
-            // 悬停/按下时整块掉到接近纯黑——x4 停在鼠标下面时就是这么变黑的。
-            var colors = btn.colors;
-            colors.highlightedColor = new Color(1.30f, 1.30f, 1.30f, 1f);
-            colors.pressedColor = new Color(0.78f, 0.78f, 0.78f, 1f);
-            colors.selectedColor = new Color(1.10f, 1.10f, 1.10f, 1f);
-            colors.disabledColor = new Color(1f, 1f, 1f, 0.45f);
-            colors.fadeDuration = 0.08f;
-            btn.colors = colors;
-
-            labelText = CreateText(img.rectTransform, name + "Label", label, 0, 0, w, h, 17, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Stretch(labelText.rectTransform);
-
-            return btn;
-        }
     }
 }

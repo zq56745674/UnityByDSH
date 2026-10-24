@@ -162,12 +162,21 @@ namespace AutoBattle
                     ? $"满级：{RebirthCatalog.EffectText(track, RebirthCatalog.MaxRank)}"
                     : $"当前 {RebirthCatalog.EffectText(track, rank)}   →   {RebirthCatalog.EffectText(track, rank + 1)}";
 
-                _rebirthBuyLabels[i].text = max ? "已满级" : $"{cost} 印记";
                 bool affordable = !max && p.rebirthMarks >= cost;
+                // 灰按钮上只写「3 印记」看不出为什么点不动：把差额直接写在按钮上，
+                // 悬停再补当前余额与升级后的效果（和商店「金币不足」那套写法对齐）。
+                _rebirthBuyLabels[i].text = max
+                    ? "已满级"
+                    : affordable ? $"{cost} 印记" : $"缺 {cost - p.rebirthMarks} 印记";
                 _rebirthBuyButtons[i].interactable = affordable;
                 _rebirthBuyLabels[i].color = max
                     ? GameConfig.TextDisabled
                     : affordable ? Color.white : GameConfig.TextMuted;
+                SetTooltip(_rebirthBuyButtons[i], max
+                    ? "这一条已满级。"
+                    : affordable
+                        ? $"{cost} 印记升到 Lv.{rank + 1}：{RebirthCatalog.EffectText(track, rank + 1)}"
+                        : $"印记不足：需要 {cost}，当前 {p.rebirthMarks}。\n轮回一次可以获得印记。");
             }
 
             _rebirthGainText.text =

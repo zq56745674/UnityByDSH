@@ -20,9 +20,13 @@ namespace AutoBattle
         private static AchievementDef[] _all = new AchievementDef[0];
         private static readonly Dictionary<string, AchievementDef> _byId =
             new Dictionary<string, AchievementDef>(StringComparer.Ordinal);
+        private static readonly List<AchievementDef> _titles = new List<AchievementDef>(ExpectedTitles);
 
         /// <summary>按 JSON 数组顺序排列；面板也按这个顺序展示。</summary>
         public static IReadOnlyList<AchievementDef> All => _all;
+
+        /// <summary>带称号的条目（7 条），按表内顺序；成就面板的称号栏与佩戴校验都用它。</summary>
+        public static IReadOnlyList<AchievementDef> Titles => _titles;
 
         public static bool Loaded { get; private set; }
 
@@ -122,7 +126,10 @@ namespace AutoBattle
 
             _all = table.achievements;
             _byId.Clear();
+            _titles.Clear();
             foreach (var pair in byId) _byId[pair.Key] = pair.Value;
+            for (int i = 0; i < _all.Length; i++)
+                if (!string.IsNullOrEmpty(_all[i].title)) _titles.Add(_all[i]);
             TotalPoints = points;
             TotalGold = gold;
             TitleCount = titles;
@@ -135,6 +142,21 @@ namespace AutoBattle
         {
             AchievementDef def;
             return !string.IsNullOrEmpty(id) && _byId.TryGetValue(id, out def) ? def : null;
+        }
+
+        /// <summary>称号对应的显示名；id 无效或该条目没有称号时返回空串。</summary>
+        public static string TitleNameOf(string id)
+        {
+            AchievementDef def = Get(id);
+            return def != null ? def.title : string.Empty;
+        }
+
+        /// <summary>该称号是否已由本档解锁（佩戴校验与读档兜底共用）。</summary>
+        public static bool IsUnlockedTitle(PlayerData player, string id)
+        {
+            if (player == null || player.achievements == null || string.IsNullOrEmpty(id)) return false;
+            AchievementDef def = Get(id);
+            return def != null && !string.IsNullOrEmpty(def.title) && player.achievements.IsUnlocked(id);
         }
 
         public static bool IsCategory(string category) =>

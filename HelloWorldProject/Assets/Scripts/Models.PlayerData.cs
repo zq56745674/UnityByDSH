@@ -92,6 +92,12 @@ namespace AutoBattle
         /// <summary>本存档槽的成就状态（已解锁 id）。跨世保留，不因转生重置。</summary>
         public AchievementState achievements = new AchievementState();
 
+        /// <summary>
+        /// 当前佩戴的称号对应的成就 id（空 = 未佩戴）。只影响角色卡显示，不加战斗属性。
+        /// 新增字段没有提升存档版本：旧档读出来是空串，新字段被旧版本忽略也不影响读档。
+        /// </summary>
+        public string equippedTitle = string.Empty;
+
         // ==================== 转生（存档 v9） ====================
 
         /// <summary>已经完成的转生次数。0 = 还没转过，第 1 世。</summary>

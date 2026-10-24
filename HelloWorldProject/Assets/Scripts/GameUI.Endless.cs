@@ -82,6 +82,11 @@ namespace AutoBattle
                 FontBody + 1, GameConfig.TextInfo, TextAnchor.MiddleLeft);
             _endlessStartText = CreateText(_endlessPanel, "EndlessStartInfo", "", 20, 86, 640, 24,
                 FontSmall + 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            AttachTooltip(_endlessStartText.rectTransform,
+                "起始层 = 本档最高层 − " + GameConfig.EndlessCheckpointOffset +
+                "，最低从第 1 层开始（最高不足 " + (GameConfig.EndlessCheckpointOffset + 1) + " 层时就是第 1 层）。\n" +
+                "例：本档最高 14 层 → 从第 10 层开始；最高 3 层 → 仍从第 1 层开始。\n" +
+                "转生后本世要先重通 11-10 才恢复检查点；中途退出不计成绩，但已清层数会保留。");
 
             // 规则 / 历史榜 两个页签：共用下面 20..300 的内容区，省得再开一层浮层
             // （面板之间是 CloseAllPanels 互斥的，单开一个「历史榜」面板反而回不到无尽面板）。
@@ -249,7 +254,9 @@ namespace AutoBattle
                 }
             }
 
+            int checkpointOffset = Mathf.Max(0, GameConfig.EndlessCheckpointOffset);
             _endlessRulesText.text =
+                $"· 起始层 = 本档最高 − {checkpointOffset} 层；本档最高不足 {checkpointOffset + 1} 层时从第 1 层开始。\n" +
                 $"· 每层清完立刻进入下一层；每 {Mathf.Max(1, GameConfig.EndlessBossEvery)} 层一个 BOSS。\n" +
                 "· 死亡或撤退结束本局；最高层只记「已清除」的层。\n" +
                 "· 每局结束会记进本档历史榜（最多 5 局）；中途退出/换档/重置不算。\n" +
