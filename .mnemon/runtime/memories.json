@@ -119,6 +119,13 @@
       "updated_at": "2026-10-21T18:44:01.033Z",
       "target": "memory",
       "importance": "normal"
+    },
+    {
+      "content": "本机 hosts（C:\\Windows\\System32\\drivers\\etc\\hosts）把 github.com、api.github.com、raw.githubusercontent.com 等解析到 127.0.0.1，git fetch/push 直连会报 Failed to connect to github.com port 443。绕过（不改 hosts）：git -c http.curloptResolve=github.com:443:<当前解析IP> push origin main；2026-10-25 用 20.27.177.113 实测推送成功。IP 可用 Resolve-DnsName github.com -Server 1.1.1.1 取。",
+      "created_at": "2026-10-24T16:08:40.852Z",
+      "updated_at": "2026-10-24T16:08:40.852Z",
+      "target": "memory",
+      "importance": "normal"
     }
   ]
 }
