@@ -15,6 +15,13 @@ namespace AutoBattle
         // 右侧面板构建：怪物区、日志区与底部按钮区
         // ==================== 右侧：怪物 + 日志 + 按钮 ====================
 
+        // B8：按钮行下方的一条常驻「当前目标」。主目标是推图 / 终局 / 轮回，
+        // 右侧副目标是成就目录里「还差最少」的一条。
+        private Text _goalMainText;
+        private Text _goalSideText;
+        private string _goalMainCache = string.Empty;
+        private string _goalSideCache = string.Empty;
+
         private void BuildRightPanel(Transform root)
         {
             RectTransform panel = CreatePanel(root, "RightPanel", RightPanelX, 12, RightPanelW, PanelH, GameConfig.PanelBg);
@@ -84,6 +91,13 @@ namespace AutoBattle
             StyleBar(reset, _resetLabel, "frame_bar_notched", "glyph_reset", 28f, "重置游戏", 15);
             _resetLabel.color = new Color(0.95f, 0.55f, 0.55f);
             reset.onClick.AddListener(OnResetClicked);
+
+            // ---- B8：当前目标条（按钮行下缘 668 → 面板底 696，高 26） ----
+            CreateCard(panel, "GoalCard", 8, 670, 808, 26, GameConfig.InsetBg);
+            _goalMainText = CreateText(panel, "GoalMain", "", 20, 670, 508, 26,
+                13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+            _goalSideText = CreateText(panel, "GoalSide", "", 536, 670, 264, 26,
+                13, GameConfig.TextMuted, TextAnchor.MiddleRight);
         }
 
         /// <summary>商店面板：目前只卖生命药剂（价格随主角等级变化）。</summary>

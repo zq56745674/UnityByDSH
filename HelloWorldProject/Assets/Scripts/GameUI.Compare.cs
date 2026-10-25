@@ -136,8 +136,11 @@ namespace AutoBattle
                     : new Color(0.62f, 0.66f, 0.74f, 1f);
                 _compareSlotLabels[i].color = unlocked ? (selected ? Color.white : GameConfig.TextMuted) : GameConfig.BtnDisabledText;
                 bool has = _game.HasPendingDrop(s);
-                _compareSlotLabels[i].text = EquipmentSlots.Name(s)
-                    + (unlocked ? string.Empty : " · 未解锁") + (has ? " ●" : "");
+                // 转生 v2 会保留一件装备，保留件可能落在尚未解锁的槽位里；
+                // 这时标签不能写「未解锁」，否则和「装备仍生效」自相矛盾。
+                string lockText = unlocked ? string.Empty
+                    : p.GetEquipment(s) != null ? " · 保留件" : " · 未解锁";
+                _compareSlotLabels[i].text = EquipmentSlots.Name(s) + lockText + (has ? " ●" : "");
             }
 
             if (current == null)

@@ -11,6 +11,12 @@ namespace AutoBattle
     {
         public bool RebirthPanelOpen { get; private set; }
 
+        /// <summary>最近一次转生记入榜用的本世秒数（没记入就是 0）；供日志与验收读取。</summary>
+        public int LastRebirthSeconds { get; private set; }
+
+        /// <summary>最近一次转生在最快轮回榜里的名次（1 起；没进榜是 0）。</summary>
+        public int LastRebirthRecordRank { get; private set; }
+
         /// <summary>
         /// 本档是否解锁过轮回：首通 11-10，或已经转过一次。
         /// 转生后 clearedStages 清空，但 rebirthCount > 0 仍保持入口可用。
@@ -125,11 +131,40 @@ namespace AutoBattle
         }
 
         /// <summary>
+        /// 本世评分最低的一件装备（转生时保留）。全空返回 null。
+        /// 评分用 EquipmentScore.Of 的增量口径，和左栏/对比面板同一套算法。
+        /// </summary>
+        private Equipment FindRebirthKeep(out EquipmentSlot slot)
+        {
+            slot = EquipmentSlot.Weapon;
+            Equipment keep = null;
+            float lowest = float.MaxValue;
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                EquipmentSlot candidateSlot = EquipmentSlots.All[i];
+                Equipment candidate = Player.GetEquipment(candidateSlot);
+                if (candidate == null) continue;
+
+                float score = EquipmentScore.Of(Player, candidate, candidateSlot);
+                if (keep == null || score < lowest)
+                {
+                    keep = candidate;
+                    slot = candidateSlot;
+                    lowest = score;
+                }
+            }
+            return keep;
+        }
+
+        /// <summary>
         /// 执行转生。顺序很重要：先卖待选（计入金币），再算印记，最后才重置。
-        /// 重置后本世的金币/等级/装备/技能/关卡全部归零，印记与历史纪录保留。
+        /// 重置后本世的金币/等级/技能/关卡归零，印记、最快轮回榜与保留的一件装备留下。
         /// </summary>
         public bool PerformRebirth()
         {
+            LastRebirthSeconds = 0;
+            LastRebirthRecordRank = 0;
+
             if (!CanRebirth(out string reason))
             {
                 AddLog($"♾ 暂时不能转生：{reason}", GameConfig.LogWarn);
@@ -150,6 +185,9 @@ namespace AutoBattle
                 _pendingDrops[i] = null;
             }
 
+            // 保留件必须在重置等级/巅峰之前挑：评分吃当前配装与当前属性。
+            Equipment kept = FindRebirthKeep(out EquipmentSlot keptSlot);
+
             // 2) 印记按「卖完待选之后」的金币算。
             int marks = PendingRebirthMarks;
             int paragonMarks = RebirthCatalog.ParagonMarks(Player.paragonLevel);
@@ -157,8 +195,25 @@ namespace AutoBattle
             int goldMarks = RebirthCatalog.GoldMarks(Player.gold);
             int oldParagon = Player.paragonLevel;
             int oldBest = Player.rebirthBestParagon;
+            int oldFloor = Player.endlessBestFloor;
+            int completedLife = (int)Math.Min(RebirthHistory.MaxLife, (long)Player.rebirthCount + 1);
 
-            // 3) 先记下本世成绩，再重置。用 long 夹一次，防手改档（int.MaxValue）自增溢出。
+            // 3) 本世计时写进最快轮回榜。不足 1 秒不记：探针/脚本瞬时转生会制造 00:00 假纪录。
+            int lifeSeconds = Mathf.Clamp(Mathf.RoundToInt(Player.lifeSeconds), 0, RebirthHistory.MaxSeconds);
+            if (lifeSeconds >= 1)
+            {
+                LastRebirthSeconds = lifeSeconds;
+                LastRebirthRecordRank = RebirthHistory.Insert(Player.rebirthTop, new RebirthRecord
+                {
+                    life = completedLife,
+                    seconds = lifeSeconds,
+                    paragon = oldParagon,
+                    floor = oldFloor,
+                    marks = marks,
+                });
+            }
+
+            // 4) 先记下本世成绩，再重置。用 long 夹一次，防手改档（int.MaxValue）自增溢出。
             Player.rebirthCount = (int)Math.Min(int.MaxValue, (long)Player.rebirthCount + 1);
             Player.rebirthMarks = (int)Math.Min(int.MaxValue, (long)Player.rebirthMarks + marks);
             Player.rebirthBestParagon = Mathf.Max(oldBest, oldParagon);
@@ -181,12 +236,19 @@ namespace AutoBattle
             if (Player.clearedStages == null) Player.clearedStages = new System.Collections.Generic.List<int>();
             Player.clearedStages.Clear();
 
+            // 保留前面挑好的那一件；其余四件按 v1 规则直接清空（不折金币、不折印记）。
             Player.weapon = null;
             Player.armor = null;
             Player.helmet = null;
             Player.boots = null;
             Player.accessory = null;
             Player.slotStarterMask = 0;
+            if (kept != null)
+            {
+                Player.SetEquipment(kept);
+                // 小件记下「该槽赠礼已用」，解锁时不再补发一件；否则会凭空多一件。
+                if (EquipmentSlots.IsMinor(keptSlot)) Player.slotStarterMask |= 1 << (int)keptSlot;
+            }
 
             Player.ownedSkillMask = 0;
             Player.pendingSkillPicks = 0;
@@ -197,14 +259,16 @@ namespace AutoBattle
             Player.skillTrigger0 = -1;
             Player.skillTrigger1 = -1;
 
-            // 4) 清本局临时状态、统计、浮层与日志；ResetSessionState 会 CloseAllPanels。
+            // 5) 清本局临时状态、统计、浮层与日志；ResetSessionState 会 CloseAllPanels。
+            // 计时归零；rebirthTop 不清（跨世保留）。FillHp 放在保留装备之后，按新上限满血。
+            Player.lifeSeconds = 0f;
             ResetSessionState();
             Player.FillHp();
             Player.shield = 0;
             _loadedFromSave = false;
             _autoSaveTimer = 0f;
 
-            // 5) 落盘后再写日志/横幅：即使这里崩溃，至少新一世已经存好。
+            // 6) 落盘后再写日志/横幅：即使这里崩溃，至少新一世已经存好。
             SaveSystem.Save(Player);
 
             if (pendingGold > 0)
@@ -216,6 +280,16 @@ namespace AutoBattle
                 GameConfig.LogUnlock);
             AddLog($"  起始 Lv.{Player.level} · 金币 {Player.gold:N0} · 药剂 {Player.potionCount} · 印记余额 {Player.rebirthMarks}",
                 GameConfig.LogInfo);
+
+            if (LastRebirthRecordRank > 0)
+            {
+                AddLog($"♾ 本世用时 {RebirthHistory.FormatSeconds(LastRebirthSeconds)}，轮回纪录第 {LastRebirthRecordRank} 名",
+                    GameConfig.LogInfo);
+            }
+            if (kept != null)
+            {
+                AddLog($"♾ 保留装备：{kept.Title}（评分最低槽位）", GameConfig.LogInfo);
+            }
 
             ShowBanner($"✦ 第 {Player.rebirthCount + 1} 世 · 轮回 +{marks} 印记",
                 $"Lv.{Player.level} 开始 · 印记余额 {Player.rebirthMarks} · 无尽纪录会保留");

@@ -30,6 +30,13 @@ namespace AutoBattle.EditorTools
     /// </summary>
     public static class NewGameProgression
     {
+        /// <summary>
+        /// 掉落观察口（仅供探针统计用）：每产出一件掉落就回调一次，先于自动换装。
+        /// 设为 null 时零开销；EndgamePacing 用它统计「五个槽位是否都见过 Lv.110 传说」，
+        /// 因为满强化后自动换装会拒绝 +0 的 Lv.110 件，只看装备槽会把掉落集齐误判成没毕业。
+        /// </summary>
+        internal static System.Action<Equipment> DropObserved;
+
         /// <summary>单关的模拟结果。</summary>
         public class StageLog
         {
@@ -490,6 +497,7 @@ namespace AutoBattle.EditorTools
                     ? LootSystem.CreateEquipmentAtLevel(dropLevel, weights, p)
                     : LootSystem.CreateRandomEquipment(dropLevel, 0f, p);
 
+                DropObserved?.Invoke(dropped);
                 if (TryAutoEquip(p, dropped)) continue;
                 p.AddGold(GameConfig.SellPrice(dropped.level, dropped.quality));
             }

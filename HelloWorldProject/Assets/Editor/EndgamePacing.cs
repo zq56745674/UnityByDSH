@@ -27,12 +27,13 @@ namespace AutoBattle.EditorTools
         /// <param name="targetParagon">要跑到的巅峰目标；默认 200，配置上限现在是 1000。</param>
         /// <param name="maxStages">最多挑战次数；跑 1000 级需要明显调大。</param>
         public static string Run(int seed = 20261018, int maxStages = 20000, bool verbose = false,
-            int targetParagon = 200, float reforgeQuality = ProbePolicy.DefaultReforgeQuality)
+            int targetParagon = 200, float reforgeQuality = ProbePolicy.DefaultReforgeQuality,
+            int rebirthFortuneRank = 0)
         {
             Random.InitState(seed);
             targetParagon = Mathf.Clamp(targetParagon, 1, GameConfig.MaxParagonLevel);
 
-            PlayerData p = BuildFresh100();
+            PlayerData p = BuildFresh100(rebirthFortuneRank);
             var battle = new BattleSystem();
             var milestones = new List<string>();
             var marks = new List<int>();
@@ -55,10 +56,49 @@ namespace AutoBattle.EditorTools
             int enhanceSpent = 0;
             int reforgeSpent = 0;
             int bossFights = 0;
+            int gradAttempts = -1;
+            int gradParagon = -1;
+            float gradSeconds = -1f;
+            bool[] seenSlots = new bool[EquipmentSlots.Count];
+            int seenCount = 0;
+            int collectAttempts = -1;
+            int collectParagon = -1;
+            float collectSeconds = -1f;
 
             // Fight 只返回战斗时间；实际刷图还要等刷怪（每只 0.5s）和 BOSS 前的商店（3s）。
             float WallSeconds() => seconds + kills * GameConfig.MonsterRespawnDelay
                                             + bossFights * GameConfig.ShopDuration;
+
+            bool AllFiveGraduated()
+            {
+                for (int i = 0; i < EquipmentSlots.Count; i++)
+                {
+                    Equipment e = p.GetEquipment(EquipmentSlots.All[i]);
+                    if (e == null || e.level < 110 || e.quality != EquipmentQuality.Legendary) return false;
+                }
+                return true;
+            }
+
+            void CheckGraduation()
+            {
+                if (gradAttempts >= 0 || !AllFiveGraduated()) return;
+                gradAttempts = attempts;
+                gradParagon = p.paragonLevel;
+                gradSeconds = WallSeconds();
+            }
+
+            void OnDrop(Equipment e)
+            {
+                if (e == null || e.level < 110 || e.quality != EquipmentQuality.Legendary) return;
+                int idx = (int)e.slot;
+                if (idx < 0 || idx >= seenSlots.Length || seenSlots[idx]) return;
+                seenSlots[idx] = true;
+                seenCount++;
+                if (seenCount < seenSlots.Length || collectAttempts >= 0) return;
+                collectAttempts = attempts;
+                collectParagon = p.paragonLevel;
+                collectSeconds = WallSeconds();
+            }
 
             void CheckMarks()
             {
@@ -70,6 +110,7 @@ namespace AutoBattle.EditorTools
                 }
             }
 
+            NewGameProgression.DropObserved = OnDrop;
             while (attempts < maxStages)
             {
                 attempts++;
@@ -85,6 +126,7 @@ namespace AutoBattle.EditorTools
                     kills++;
                     totalXp += GameConfig.MonsterExpReward(m.level, m.type, m.tier);
                     NewGameProgression.GrantKill(p, m);
+                    CheckGraduation();
                 }
 
                 if (died)
@@ -120,6 +162,7 @@ namespace AutoBattle.EditorTools
                 kills++;
                 totalXp += GameConfig.MonsterExpReward(boss.level, boss.type, boss.tier);
                 NewGameProgression.GrantKill(p, boss);
+                CheckGraduation();
 
                 if (clearAttempts < 0)
                 {
@@ -136,10 +179,14 @@ namespace AutoBattle.EditorTools
                 if (p.paragonLevel >= targetParagon) break;
             }
 
+            NewGameProgression.DropObserved = null;
+
             var sb = new StringBuilder();
             sb.AppendLine($"[EndgamePacing] seed={seed}  从 Lv.100 巅峰 0 起，在 11-10 循环（5 小怪 + 轮换 BOSS）");
             sb.AppendLine($"目标：巅峰 {targetParagon}（配置上限 {GameConfig.MaxParagonLevel}）");
-            sb.AppendLine($"起始：HP {BuildFresh100().MaxHp}  攻 {BuildFresh100().Attack}  传说五件套  0 技能");
+            sb.AppendLine($"起始：HP {BuildFresh100(rebirthFortuneRank).MaxHp}  攻 {BuildFresh100(rebirthFortuneRank).Attack}  传说五件套  0 技能");
+            if (rebirthFortuneRank > 0)
+                sb.AppendLine($"财运：{rebirthFortuneRank} 级（掉落 +{p.RebirthDropBonus:P0}）");
             sb.AppendLine();
             if (clearAttempts > 0)
                 sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
@@ -148,6 +195,20 @@ namespace AutoBattle.EditorTools
                 sb.AppendLine($"到 {maxStages} 次挑战仍未通关（巅峰 {p.paragonLevel}）");
 
             foreach (string m in milestones) sb.AppendLine("  " + m);
+
+            if (collectAttempts > 0)
+                sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "五槽集齐（Lv.110 传说掉落）：第 {0} 次挑战，巅峰 {1}，含刷怪+商店 {2:0.0}min",
+                    collectAttempts, collectParagon, collectSeconds / 60f));
+            else
+                sb.AppendLine($"五槽集齐：到目标仍只见过 {seenCount}/{seenSlots.Length} 个槽位");
+
+            if (gradAttempts > 0)
+                sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "五槽装备毕业（自动换装）：第 {0} 次挑战，巅峰 {1}，含刷怪+商店 {2:0.0}min",
+                    gradAttempts, gradParagon, gradSeconds / 60f));
+            else
+                sb.AppendLine($"五槽装备毕业（自动换装）：未达成（巅峰 {p.paragonLevel}）");
 
             sb.AppendLine();
             sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
@@ -177,12 +238,18 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>Lv.100 + 传说五件套，0 巅峰 0 技能。</summary>
-        static PlayerData BuildFresh100()
+        static PlayerData BuildFresh100(int rebirthFortuneRank = 0)
         {
             var p = new PlayerData();
             p.level = 100;
+            p.maxChapterUnlocked = GameConfig.ChapterCount;
+            // 饰品槽要 11-10 首通才解锁；终局循环探针从「已首通」的状态起跑，
+            // 否则掉落只在武器/衣服两槽里转，五槽毕业永远测不出来。
+            p.MarkStageFirstCleared(GameConfig.AccessoryUnlockChapter, GameConfig.StagesPerChapter);
             p.paragonLevel = 0;
             p.paragonExp = 0;
+            p.rebirthFortuneRank = Mathf.Clamp(rebirthFortuneRank, 0, 5);
+            if (rebirthFortuneRank > 0) p.rebirthCount = 1;
             for (int i = 0; i < EquipmentSlots.Count; i++)
                 p.SetEquipment(LootSystem.CreateEquipment(EquipmentSlots.All[i], 100, EquipmentQuality.Legendary));
             p.FillHp();

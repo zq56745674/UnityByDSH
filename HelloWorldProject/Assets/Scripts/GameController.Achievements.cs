@@ -57,6 +57,26 @@ namespace AutoBattle
             TrySave();
         }
 
+        /// <summary>
+        /// 用成就点兑换一级无尽起始层（100 点/级，最多 +3 层）。
+        /// 成就点只换非战斗便利，不提供任何战斗属性。
+        /// </summary>
+        public bool BuyEndlessStartRank()
+        {
+            if (Player == null) return false;
+
+            string message;
+            if (!AchievementSystem.TryBuyEndlessStartRank(Player, out message))
+            {
+                AddLog("<color=#FF8080>✖ " + message + "</color>", GameConfig.LogWarn);
+                return false;
+            }
+
+            AddLog("<color=#FFD966>✦ " + message + "</color>", GameConfig.LogGold);
+            TrySave();
+            return true;
+        }
+
         // ==================== 无阵亡挑战（不存档） ====================
 
         private void ClearNoDeathAttempt()

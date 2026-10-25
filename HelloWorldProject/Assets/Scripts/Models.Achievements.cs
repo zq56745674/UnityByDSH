@@ -22,7 +22,7 @@ namespace AutoBattle
         /// <summary>达成阈值；指标值大于等于它即解锁。</summary>
         public int target;
 
-        /// <summary>成就点数（只展示，不提供战斗属性）。</summary>
+        /// <summary>成就点数（可兑换无尽起始层，不提供战斗属性）。</summary>
         public int points;
 
         /// <summary>解锁时发放的固定金币（不吃转生财运）。</summary>

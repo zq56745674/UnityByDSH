@@ -5,7 +5,8 @@
 .DESCRIPTION
   Editor 已经在跑 → 逐条走 `unity command eval`，秒级返回；
   Editor 没开 或 传 -Batch → 退回 batchmode，重新打开工程再跑（分钟级）：
-      unity run <Project> -- -executeMethod AutoBattle.EditorTools.QuickRegression.RunAllQuickBatch -quit
+      unity run <Project> -- -executeMethod AutoBattle.EditorTools.QuickRegression.RunAllQuickBatch
+      （-quit 由 CLI 管理，不要写在 -- 之后；RunAllQuickBatch 自己会 Exit）
 
   任何一条输出里出现 FAIL 或调用异常，脚本退出码为 1；全过为 0。
   这条路径不依赖 Play 模式，也不写任何工程文件，可以在提交前随手跑。
@@ -56,7 +57,7 @@ $useBatch = $Batch -or -not (Test-EditorReady)
 
 if ($useBatch) {
     Write-Host "[quick-regression] Editor 未运行（或指定了 -Batch），走 batchmode：$Project" -ForegroundColor Cyan
-    & unity run $Project -- -executeMethod AutoBattle.EditorTools.QuickRegression.RunAllQuickBatch -quit
+    & unity run $Project -- -executeMethod AutoBattle.EditorTools.QuickRegression.RunAllQuickBatch
     $code = $LASTEXITCODE
     Write-Host "[quick-regression] batchmode 退出码：$code"
     exit $code

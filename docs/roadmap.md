@@ -1,6 +1,6 @@
 # 项目整体梳理与待办清单（Roadmap）
 
-> 生成日期：2026-10-23　最近更新：2026-10-24 晚（A2–A6、C1–C11、B3 落地回填，含 C10 存档卡按钮间距微调，见 §11）。依据：`HEAD = e47597e` + 当前未提交工作区（72 项改动：B7 压迫 5.5%/4%、终局倍率定格 1.6、GameUI 28 文件拆分、A2–A6（含 A5 asmdef/NUnit）、C1–C11、B3）。
+> 生成日期：2026-10-23　最近更新：2026-10-25 晚（B2 成就点兑换无尽起始层、B4c P100 门槛复评保持 100、D3 财运掉落量化保持 +2%/级、D2 无尽口径收紧到 3.4、E4 一次性产物归并、A8 Windows 构建与 CI）。依据：`HEAD = de8c038` + 当前未提交工作区（**33 个 `M` + 3 个未跟踪**：`.github/workflows/unity-ci.yml`、`_art/README.md`、`tools/build-windows.ps1`；`git diff --stat` 为 33 files / +1,229 / −216，未含新文件。含 B4/B8、B2、B4c/D3、D2、E4、A8 的代码、探针、构建脚本与文档）。
 > 本文替代「凭记忆列待办」：每条都标了现状证据与验收口径，改完打勾并把实测数字写回对应小节。
 > 与 `README.md` 的关系：README 记「已完成什么」，本文记「还差什么、为什么、按什么顺序」。README「已知问题」里的旧条目与本文交叉引用。
 
@@ -11,22 +11,22 @@
 3. **数字要落到文档**：改完数值/行为，同时更新 README 与对应 `docs/` 文件；只改代码不回填文档视为未完成。
 4. **不擅自提交**：本地 commit 需用户明确说「提交」，push 另需明确同意（USER.md 规矩）。
 
-## 1. 现状快照（2026-10-24 实测）
+## 1. 现状快照（2026-10-25 实测）
 
 ### 1.1 规模
 
 | 维度 | 实测 | 说明 |
 |---|---|---|
-| 运行时脚本 | **59 个文件 / 15,620 行** | `HelloWorldProject/Assets/Scripts/`（2026-10-24 实测），其中 `GameUI*` 28 个 partial / 6,749 行（2026-10-23 拆分） |
-| 编辑器工具 | **10 个文件 / 4,048 行** | 回归与探针（2026-10-24）：AchievementRegression 1020、AutoBattle.CI 106、BalanceRegression 628、EndgamePacing 171、EndlessPacing 471、GameConfigReloader 50、LateGameProbe 686、NewGameProgression 502、ProbePolicy 310、SkillTableVerify 104 |
+| 运行时脚本 | **59 个文件 / 17,253 行** | `HelloWorldProject/Assets/Scripts/`（2026-10-25 实测），其中 `GameUI*` 28 个 partial / 7,664 行（2026-10-23 拆分） |
+| 编辑器工具 | **10 个文件 / 4,138 行** | 回归与探针（2026-10-25）：AchievementRegression 1020、AutoBattle.CI 106、BalanceRegression 628、EndgamePacing 232、EndlessPacing 493、GameConfigReloader 50、LateGameProbe 686、NewGameProgression 509、ProbePolicy 310、SkillTableVerify 104 |
 | 资源体积 | **44.4 MB** | `Assets/` 全量（不含被 gitignore 的 Music/ 与 Screenshots/） |
 | 图片 | **70 PNG + 4 JPG** | Sprites：Monsters 33 / Bosses 11 / Fx 20 / Auras 5 / Hero 1；Backgrounds 4 张 JPG |
 | 音频 | **14 SFX + 4 BGM** | SFX 在 `Resources/Sfx/*.ogg`；BGM 在 `Resources/Music/`（已 gitignore，换机需自备） |
 | 配置 | `game_config.json` **149 键**、`skills.json` **15 技能**、`achievements.json` **42 条 / 805 点 / 7 称号 / 43,400 金币** | 三方必须与 `GameConfigData` 等字段一一对应 |
 | 文档 | **11 份** | README、AGENTS、achievements、audio-credits、endless-mode、equipment-reforge、rebirth、sprites-and-fx、roadmap（本文）、balance-analysis、_balance/README；行数随回填变化，以各文件为准 |
-| 存档 | **v11 / 3 槽 / 可导出导入、改名、跨槽复制** | `SaveSystem.cs:27`；PlayerPrefs（Windows 为注册表）+ `Documents/AutoBattle/slotN.json` 导出/导入（2026-10-24）；名字 ≤12 字，覆盖目标槽需 3 秒内二次确认 |
+| 存档 | **v13 / 3 槽 / 可导出导入、改名、跨槽复制** | `SaveSystem.cs:29`；PlayerPrefs（Windows 为注册表）+ `Documents/AutoBattle/slotN.json` 导出/导入（2026-10-24）；名字 ≤12 字，覆盖目标槽需 3 秒内二次确认；v13 加 `endlessStartRank` |
 | 工程 | Unity **6000.6.5f1**，单场景 `SampleScene` | 2026-10-24 起 `productName = AutoBattle`、`companyName = UnityByDSH`、`bundleVersion = 1.0.0`（PlayerSettings；改名前是 My project / DefaultCompany / 1.0） |
-| 自动化测试 | **一条命令的快速回归 + EditMode NUnit 8 条**；仍无 CI | `AutoBattle.CI.cs` + `tools/quick-regression.ps1`（静态哨兵 + 成就核心 + 无尽冒烟）；`AutoBattle.Tests.asmdef` + `tools/run-editmode-tests.ps1`（8 条）；test-framework 1.8.0 已启用，3 个 asmdef |
+| 自动化测试 | **快速回归 + EditMode NUnit 8 条 + Windows 构建脚本 + CI workflow**；CI 待 GitHub 首跑 | `AutoBattle.CI.cs` + `tools/quick-regression.ps1`（静态哨兵 + 成就核心 + 无尽冒烟）；`AutoBattle.Tests.asmdef` + `tools/run-editmode-tests.ps1`（8 条）；`tools/build-windows.ps1` + `.github/workflows/unity-ci.yml`；test-framework 1.8.0 已启用，3 个 asmdef |
 
 ### 1.2 已经成型的系统（不是缺口，先确认共识）
 
@@ -37,89 +37,115 @@
 | 装备 | 5 槽（武器/衣服/头盔/鞋/饰品），4 品质，强化 +1~+15，洗练 4 词条最多锁 3（锁后 ×3^n 价） | `GameConfig.cs:391-465`；docs/equipment-reforge.md |
 | 技能 | 15 个，三选一，技能推荐分 | `skills.json`；`SkillAdvice.cs` |
 | 无尽 | 起始层 = max(1, 本档最高−4)；每 5 层 BOSS；掉落等级封顶 150；本档 Top-5 历史榜 + 清空；全局最高 | docs/endless-mode.md §6.5/§13.1；P200 首死中位 45 层 |
-| 转生 | 5 轨 × 5 级 = 110 印记；战斗 +5% 封顶；Exp +60%/级、起始等级 +3/级（满轮回 Lv16） | `GameConfig.cs:697`；实测第 2 世 82.6% / 满轮回 47.1%（docs/rebirth.md §14.4） |
-| 成就 | 42 条 / 6 类 / 805 点 / 7 称号 / 43,400 金币；按槽独立；toast 队列；称号可佩戴并显示在左栏 | docs/achievements.md；回归 644 通过；B3 验收 2026-10-24 |
-| UI | 28 partial 文件；设置 5 开关 + 3 音量 + 关于页 + 显示页（全屏/分辨率/缩放/色弱）；战斗速度记忆；强化「+5/满级」批量；属性/技能/无尽/洗练 tooltip；音乐进度条；称号佩戴与左栏展示；存档改名/复制；成就/无尽/转生/存档/对比/强化/洗练/选关面板 | 2026-10-23 拆分、2026-10-24 C1–C11 + B3 验收截图 |
+| 转生 | 5 轨 × 5 级 = 110 印记；战斗 +5% 封顶；Exp +60%/级、起始等级 +3/级（满轮回 Lv16）；保留评分最低 1 件、本档最快轮回 Top-5（v12） | `GameConfig.cs:697`、`RebirthCatalog.cs`；实测第 2 世 82.6% / 满轮回 47.1%（docs/rebirth.md §14.4 / §14.6） |
+| 成就 | 42 条 / 6 类 / 805 点 / 7 称号 / 43,400 金币；按槽独立；toast 队列；称号可佩戴并显示在左栏；100 点/级兑换无尽建议起始层（最多 +3） | docs/achievements.md §15.5；B2 验收 2026-10-25；回归 644 通过 |
+| UI | 28 partial 文件；设置 5 开关 + 3 音量 + 关于页 + 显示页（全屏/分辨率/缩放/色弱）；战斗速度记忆；强化「+5/满级」批量；属性/技能/无尽/洗练 tooltip；音乐进度条；称号佩戴与左栏展示；存档改名/复制；右栏当前目标条（B8）；成就/无尽/转生/存档/对比/强化/洗练/选关面板 | 2026-10-23 拆分、2026-10-24 C1–C11 + B3、2026-10-25 B8 验收截图 |
 | 终局 | 终局 BOSS ×1.6 定格（再往上抬会同时抬新档通关率） | `GameConfig.cs:312`；docs/balance-analysis §3.5.4a |
 
 ### 1.3 一句话判断
 
-**玩法闭环是完整的，缺的不是「系统数量」，而是三件事：**
-1. **长线出口**——满级之后金币 8.6 亿没处花、成就 330 点没有用途（称号 7 个已于 2026-10-24 补上佩戴与展示位）；
-2. **目标感**——新手知道按钮在哪，但不知道「现在该追什么」；转生 P100 门槛当前首通中位 P31，等于门槛被绕过；
-3. **工程化**——版本号 / 关于页 / 一条命令的快速回归 / asmdef + NUnit 已于 2026-10-24 补上，但仍没有构建流程与 CI，验收仍以本机 Editor 为主。
+**玩法闭环完整，B8 已补上「现在该追什么」的投影，B2 已给成就点一个非战斗出口，D2 已把无尽理想配装的首死中位从 290 收到 240；剩下的缺口是：**
+1. **长线出口**——P1000 兜里 8.593 亿花不掉；成就点现在能换无尽起始层，但金币仍是唯一没有硬出口的终局资源；
+2. **终局内容**——B4c 已量到首通后到 P100 还要约 29 分钟，结论是保持 100；缺的不是门槛数值，而是 P100 之后的新玩法；
+3. **工程化**——快速回归 + 8 条 NUnit + 3 个 asmdef 已补；Windows 构建脚本与 CI workflow 已落地（本机 8/8 + 出包成功），但 GitHub 首跑与分支保护还没配，验收仍有一半靠本机 Editor。
 
 ## 2. 待办总览（按优先级）
 
+> 只列未收口条目；已完成编号保留在 §2.2，详细证据见各小节。
+
+### 2.1 未完成
+
 | 编号 | 事项 | 类 | 优先级 | 量级 |
 |---|---|---|---|---|
-| A1 | 提交当前 72 项改动（30 改 + 42 新） | 收尾 | **P0** | 10 min（需用户发话） |
-| A2 | 治理 `_tmp_verify/`、`_art/ui-audit/` 未跟踪目录 — ✅ 2026-10-24 | 收尾 | **P0** | 10 min |
-| A3 | README「项目结构」段落与代码严重漂移 — ✅ 2026-10-24 | 文档 | **P0** | 30 min |
-| C1 | 战斗速度不记忆 — ✅ 2026-10-24 | UI | P1 | 0.5 h |
-| C5 | 无尽起始层规则没写进规则区 — ✅ 2026-10-24 | UI | P1 | 15 min |
-| C6 | 音量条空格太暗 — ✅ 2026-10-24 | UI | P1 | 15 min |
-| C7 | 音乐没有播放进度 — ✅ 2026-10-24 | UI | P1 | 1 h |
-| C2 | 强化没有批量/连点 — ✅ 2026-10-24 | UI | P1 | 2~4 h |
-| C3 | 强化/洗练面板大量留白 — ✅ 2026-10-24 | UI | P1 | 2 h |
-| C4 | tooltip 只覆盖 14 个键 — ✅ 2026-10-24 | UI | P1 | 3 h（碎） |
-| A4 | 产物名/版本号/关于页缺失 — ✅ 2026-10-24 | 工程 | P1 | 2 h |
+| A7 | 提交 B4/B8 + B2/B4c/D3 + D2/E4 + A8 的 33 个 `M` + 3 个新文件（当前唯一未提交批次，已获授权） | 收尾 | **P0** | 10 min |
 | B1 | 金币出口（商店 2.0）只有构想、无设计稿 | 玩法 | P2 | 2~3 天（含设计） |
-| B2 | 成就点 330 没有出口 | 玩法 | P2 | 1 天（先定用途） |
-| B3 | 称号缺少佩戴与展示位 — ✅ 2026-10-24 已补 | 玩法 | P2 | 0.5 天 |
-| D1 | 转生加速 — ✅ 2026-10-22 调参后达标（82.6% / 47.1%） | 平衡 | P2 | 已收口 |
-| D2 | 无尽理想配装中位 290 vs 目标 235~250 | 平衡 | P2 | 1 天（设计决策） |
-| D3 | 掉落 +10% 对五槽毕业时间未量化 | 平衡 | P2 | 0.5 天 |
-| B4 | 转生 v2：保留一件装备 / 转生排行榜 / P100 门槛复评 | 内容 | P3 | 2~3 天 |
-| C8 | 无关于页/致谢/版本信息 — ✅ 2026-10-24（并入 A4） | UI | P3 | 1 天 |
-| C9 | 无分辨率/全屏/窗口模式设置 — ✅ 2026-10-24 | UI | P3 | 1 天 |
-| C10 | 只有 3 个存档槽且无导入导出 — ✅ 2026-10-24（导出/导入/改名/跨槽复制；槽数仍 3） | 工程 | P3 | 1 天 |
-| A5 | 无自动化回归入口、无 asmdef、test-framework 闲置 — ✅ 2026-10-24（快速回归 + EditMode NUnit 8 条 + 3 个 asmdef） | 工程 | P3 | 2 天 |
-| A6 | `SaveSystem.Save` 无返回值；存档不可迁移/备份 — ✅ 2026-10-24 | 工程 | P3 | 0.5 天 |
-| B8 | 缺少「下一步做什么」的短中期目标展示 | 玩法 | P3 | 2 天（需设计） |
+| A8 | 构建与 CI：本机脚本/workflow 已写，GitHub 首跑 + 分支保护未做 | 工程 | P3 | 剩余约 30 min（需仓库 Secrets 权限） |
 | B9 | 技能只有三选一，无 reroll/构筑协同 | 玩法 | P4 | 设计题 |
-| C11 | 可访问性（字号固定、色弱、UI 缩放） — ✅ 2026-10-24（色弱配色；不做自由缩放） | UI | P4 | 设计题 |
+
+### 2.2 已完成（保留编号）
+
+| 编号 | 事项 | 收口 |
+|---|---|---|
+| A1 | 提交 2026-10-24 的 72 项改动 | ✅ 2026-10-25（12d230a、de8c038，已推送） |
+| A2 | 治理 `_tmp_verify/`、`_art/ui-audit/` 未跟踪目录 | ✅ 2026-10-24 |
+| A3 | README「项目结构」段落与代码漂移 | ✅ 2026-10-24 |
+| A4 | 产物名/版本号/关于页缺失 | ✅ 2026-10-24 |
+| A5 | 无自动化回归入口、无 asmdef、test-framework 闲置 | ✅ 2026-10-24（快速回归 + 8 条 NUnit + 3 asmdef） |
+| A6 | `SaveSystem.Save` 无返回值；存档不可迁移/备份 | ✅ 2026-10-24（TrySave + 导出导入） |
+| B3 | 称号缺少佩戴与展示位 | ✅ 2026-10-24 |
+| B4 | 转生 v2：保留一件装备 / 转生排行榜 | ✅ 2026-10-25（a+b；c 见 B4c） |
+| B8 | 缺少「下一步做什么」的短中期目标展示 | ✅ 2026-10-25 |
+| B2 | 成就点没有出口（称号佩戴之外） | ✅ 2026-10-25（兑换无尽建议起始层，100 点/级，最多 +3） |
+| B4c | P100 转生门槛复评 | ✅ 2026-10-25（50 种子实测，保持 100） |
+| D3 | 财运掉落 +10% 对五槽毕业时间的量化 | ✅ 2026-10-25（50 种子三组对照，保持 +2%/级） |
+| D2 | 无尽理想配装中位 290 vs 目标 235~250 | ✅ 2026-10-25（`EndlessBaseFactor` 2.8→3.4；理想 240 / 随机 181） |
+| E4 | 一次性产物路径统一 | ✅ 2026-10-25（`_tmp_verify/` → `_art/tmp-verify/`；索引见 `_art/README.md`） |
+| C1–C11 | 11 项 UI/UX（速度记忆、批量强化、tooltip、音乐进度、显示设置、存档改名/复制等） | ✅ 2026-10-24 |
+| D1 | 转生加速 | ✅ 2026-10-22（82.6% / 47.1%） |
+| D4/D5 | 章节压迫 5.5%/4%；终局 BOSS ×1.6 定格 | ✅ 2026-10-23 |
 
 ## 3. 收尾与工程（A）
 
-### A1 提交当前改动（P0）
+### A1 提交 2026-10-24 的 72 项改动（P0）— ✅ 2026-10-25
 
-- **现状（2026-10-24 复核）**：工作区 30 个 `M` + 42 个 `??`，合计 72 项；`git diff --stat HEAD` = +1,854 / −2,978。含：压迫 5.5%/4% 与终局倍率注释/文档、GameUI 28 文件拆分、六项 UI 修复与重置按钮字号 18→15、A2–A6（`.gitignore` 治理、README 结构重写、元信息/关于页、快速回归、存档 TrySave 与导出导入、asmdef + 8 条 EditMode NUnit）、C1–C11（速度记忆、批量强化、洗练双列、tooltip、起始层、音量格、音乐进度、显示设置、存档改名/复制、色弱配色）、B3 称号佩戴。
-- **要做什么**：`git add` 显式列出路径（`'!path'` 排除语法在本机 git 报 `Unimplemented pathspec magic '_'`），`git commit -F <文件>`（pwsh 无 heredoc）；提交信息建议分三段：B7 数值与终局定格 + GameUI 拆分与 UI 修复 + A2–A6 / C1–C11 / B3。
-- **验收**：`git status --short` 干净（`_tmp_verify/`、`_art/` 除外）；提交后跑一次 `BalanceRegression.RunStaticOnly()` 与 `AchievementRegression.RunCore()`。
-- **依赖**：用户明确说「提交」。**push 不在本条范围内。**
+- **结果**：已提交 `12d230a`「章节压迫重调与 GameUI 拆分；A2–A6、C1–C11、B3 落地」与 `de8c038`「记忆：记录 GitHub hosts 解析被劫持时的推送绕过」，并已推送；`git rev-list --count origin/main..HEAD` = 0。
+- **提交前现状（历史）**：工作区 30 个 `M` + 42 个 `??`，合计 72 项；`git diff --stat HEAD` = +1,854 / −2,978。含：压迫 5.5%/4% 与终局倍率注释/文档、GameUI 28 文件拆分、六项 UI 修复与重置按钮字号 18→15、A2–A6（`.gitignore` 治理、README 结构重写、元信息/关于页、快速回归、存档 TrySave 与导出导入、asmdef + 8 条 EditMode NUnit）、C1–C11（速度记忆、批量强化、洗练双列、tooltip、起始层、音量格、音乐进度、显示设置、存档改名/复制、色弱配色）、B3 称号佩戴。
+- **当时的提交方式**：`git add` 显式列出路径（`'!path'` 排除语法在本机 git 报 `Unimplemented pathspec magic '_'`），`git commit -F <文件>`（pwsh 无 heredoc），提交信息写在文件里由 `-F` 读取。
+- **验收（已过）**：提交前快速回归 3/3 PASS；提交后 `git status --short` 干净，`BalanceRegression.RunStaticOnly()` 与 `AchievementRegression.RunCore()` 通过。
+- **后续**：B4/B8 + B2/B4c/D3 的 25 个文件当时未提交，现已连同 D2/E4 并入 A7 的 32 个文件 + `_art/README.md`；本条不再重复处理。
 
 ### A2 临时产物治理（P0）— ✅ 2026-10-24
 
 - **做法**：`.gitignore` 追加 `_art/ui-audit/`（逐面板审计截图）与 `_tmp_verify/`（探针脚本、UI dump、提交信息草稿）；两目录保留在本地，不删内容。
 - **验收**：`git status --short` 的未跟踪噪声从 59 项降到 48 项，两目录不再出现；证据图仍在 `_art/ui-audit/`（gitignore 内）。
+- **2026-10-25 E4 收口**：`_tmp_verify/` 已整体迁到 `_art/tmp-verify/`，`.gitignore`、脚本与文档引用同步；A2 当时追加的根目录规则随之作废。
 
 ### A3 README 项目结构漂移（P0，文档）— ✅ 2026-10-24
 
 - **旧证据（历史）**：`README.md:121` 写「45 个文件，17,372 行」，实测 59 个 / 15,620 行；`GameController.cs` 写 1,796（实测 1,589）、`GameUI.cs` 758（300）、`GameUI.Panels.cs` 1,342（212）、`GameUI.Core.cs` 940（434），拆分出的 14 个新文件未列出。
 - **已完成**：结构块按 2026-10-24 实测重写为 6 组 + UI 汇总——入口与状态机 5 / 2,259、战斗关卡掉落技能 9 / 1,972、数据模型 4 / 1,313、配置层 5 / 1,411、存档设置音频 5 / 1,361、成就转生目录 3 / 555、UI 28 / 6,749；`Scripts` 合计 59 / 15,620。`Editor` 段改为 10 个文件 / 4,048 行（补 `AutoBattle.CI.cs` 106）。根目录资产补 `tools/` 与 `docs/roadmap.md`，并新增「自动化回归」一节。
 - **验收**：分组小计逐项相加与总量吻合（2,259+1,972+1,313+1,411+1,361+555+6,749 = 15,620）；「已知问题」第 2 条的 28 文件明细同步改成 6,749 口径（旧的 7,560 是拆分时含文件头重复的粗口径，已作废）。
+- **2026-10-25 更新**：B4/B8 落地后 Scripts 实测 59 / **17,109** 行、GameUI 28 partial / **7,611** 行，README 已按新口径重写；上面的 15,620 / 6,749 是 A3 当时（2026-10-24）的数字，保留作历史记录。
 
 ### A4 产品元信息与关于页（P1）— ✅ 2026-10-24
 
-- **已完成**：PlayerSettings `productName = AutoBattle`、`companyName = UnityByDSH`、`bundleVersion = 1.0.0`（用编辑器 API 写，不手改 ProjectSettings.asset，遵守 AGENTS.md）；设置面板底部「恢复默认｜关于」并排；关于页 680×520 显示版本号、存档 v11 / 3 槽 / 当前槽、Unity 版本与平台、设计分辨率、导出目录、AI 素材与 BGM 署名、回归入口提示；Esc 关闭、其它浮层互斥都已接好。
+- **已完成**：PlayerSettings `productName = AutoBattle`、`companyName = UnityByDSH`、`bundleVersion = 1.0.0`（用编辑器 API 写，不手改 ProjectSettings.asset，遵守 AGENTS.md）；设置面板底部「恢复默认｜关于」并排；关于页 680×520 显示版本号、存档 v11（当时口径；2026-10-25 晚起 v13）/ 3 槽 / 当前槽、Unity 版本与平台、设计分辨率、导出目录、AI 素材与 BGM 署名、回归入口提示；Esc 关闭、其它浮层互斥都已接好。
 - **验收证据**：Play 截图 `HelloWorldProject/Assets/Screenshots/a4_about_panel.png`、`a4_settings_about.png`；读回 meta = AutoBattle / UnityByDSH / v1.0.0。
-- **坑（已处理）**：改产品名等于给 PlayerPrefs 换命名空间，旧档会「消失」。本次已把 `HKCU\Software\Unity\UnityEditor\DefaultCompany\My project` 的 25 个值迁到 `UnityByDSH\AutoBattle`（备份在 `_tmp_verify/playerprefs_backup/`，gitignore 内），迁移后 slot0 回读 lv100 11-10、slot2 v10 均一致；3 个音量键因 PowerShell 读成 Int64 没迁成功，游戏读到的就是 0.8 默认值。
+- **坑（已处理）**：改产品名等于给 PlayerPrefs 换命名空间，旧档会「消失」。本次已把 `HKCU\Software\Unity\UnityEditor\DefaultCompany\My project` 的 25 个值迁到 `UnityByDSH\AutoBattle`（备份在 `_art/tmp-verify/playerprefs_backup/`，gitignore 内），迁移后 slot0 回读 lv100 11-10、slot2 v10 均一致；3 个音量键因 PowerShell 读成 Int64 没迁成功，游戏读到的就是 0.8 默认值。
 
 ### A5 自动化回归入口（P3）— ✅ 2026-10-24
 
 - **已完成（方案 a）**：`Assets/Editor/AutoBattle.CI.cs` 的 `QuickRegression`——菜单「工具/回归/跑一遍快速回归」、`RunAllQuick()` 返回三段 PASS/FAIL 报告与耗时、`RunAllQuickBatch()` 供 batchmode 用退出码 0/1。`tools/quick-regression.ps1` 自动判断 Editor 是否 ready：ready 走 `unity command eval --timeout 180000`，否则 `unity run -executeMethod ... -quit` 并透传退出码。
 - **实测**：3 通过 / 0 失败（静态哨兵 / 成就 644 项 / 无尽冒烟 2 种子×40 层），脚本 exit=0，总耗时约 0.1 秒。
 - **NUnit 化（2026-10-24 补完）**：新增 `Assets/Scripts/AutoBattle.Runtime.asmdef`、`Assets/Editor/AutoBattle.Editor.asmdef`、`Assets/Tests/AutoBattle.Tests.asmdef` 与 `Assets/Tests/EditMode/AutoBattle.Tests.EditMode.cs`（133 行 / 8 条用例）。测试程序集仅 Editor 平台、`UNITY_INCLUDE_TESTS`、显式引用 `nunit.framework.dll`，并引用 Runtime / Editor / TestRunner；运行时程序集补了 `UnityEngine.UI` 与 `Unity.InputSystem` 显式引用（asmdef 不会继承预定义程序集的自动引用）。
-- **NUnit 验收**：`unity test HelloWorldProject --mode EditMode --output _tmp_verify/test-results.xml` → `test-run result=Passed total=8 passed=8 failed=0 skipped=0 duration=0.108s`；封装脚本 `tools/run-editmode-tests.ps1` exit=0。覆盖章节压迫公式/单调性、强化费用、无尽起始层、装备评分增量、存档 JSON 往返、成就目录、静态平衡哨兵。
+- **NUnit 验收**：`unity test HelloWorldProject --mode EditMode --output _art/tmp-verify/test-results.xml` → `test-run result=Passed total=8 passed=8 failed=0 skipped=0 duration=0.108s`；封装脚本 `tools/run-editmode-tests.ps1` exit=0。覆盖章节压迫公式/单调性、强化费用、无尽起始层、装备评分增量、存档 JSON 往返、成就目录、静态平衡哨兵。
 - **运行方式**：Editor 关闭时用 `pwsh tools/run-editmode-tests.ps1`；Editor 开着时用 Test Runner 窗口（batchmode 会抢工程锁，脚本检测到 ready 的 Editor 会提示并 exit 2）。
 - **备注**：文末附录 B 原写「eval 有 5000ms 主线程上限」，现在可用 `--timeout` 覆盖，README 与附录已改；test-framework 1.8.0 已启用。
 
 ### A6 存档健壮性（P3）— ✅ 2026-10-24
 
 - **现状修正**：`SaveSystem.Save` 早在本次之前就是 `bool`（`SaveSystem.cs:254`；失败 catch → `AchievementSystem.NotifySaveResult(false)` + `LogWarning` + `return false`），真正缺的是「调用方没把失败告诉玩家」与导出/导入。
-- **已完成**：`GameController.TrySave` 统一出口 + `_saveWarnCooldown`（10 秒冷却）把失败转成横幅提示，11 个调用点改用 TrySave；存档面板新增「导出」「导入」（导出到 `Documents/AutoBattle/slotN.json`，成功横幅带路径；导入优先读剪贴板，读不到再读同名文件）；导入走 `SaveSystem.TryImport`，版本 > 11 在写盘前拒绝。
-- **验收实测（Play）**：`ExportSlot(0)` → `slot1.json` 3,977 字节；把 version 11 篡改成 12 被拒，提示「存档版本 v12 比当前支持的 v11 新，请先升级游戏」；原样导入回读 lv100 / 11-10 / gold 2,807,913 / cleared 110，前后一致。
+- **已完成**：`GameController.TrySave` 统一出口 + `_saveWarnCooldown`（10 秒冷却）把失败转成横幅提示，11 个调用点改用 TrySave；存档面板新增「导出」「导入」（导出到 `Documents/AutoBattle/slotN.json`，成功横幅带路径；导入优先读剪贴板，读不到再读同名文件）；导入走 `SaveSystem.TryImport`，版本高于当前存档版本（v13）在写盘前拒绝。
+- **验收实测（Play，2026-10-24 v11 口径）**：`ExportSlot(0)` → `slot1.json` 3,977 字节；把 version 11 篡改成 12 被拒，提示「存档版本 v12 比当前支持的 v11 新，请先升级游戏」；原样导入回读 lv100 / 11-10 / gold 2,807,913 / cleared 110，前后一致。2026-10-25 先后升 v12、v13，版本上界用例由成就回归覆盖（现拒 v14）。
+
+### A7 提交 B4/B8 + B2/B4c/D3 + D2/E4 + A8 改动（P0，用户已授权 commit + push）
+
+- **现状（2026-10-25 晚）**：`HEAD = de8c038`；工作区 **33 个 `M` + 3 个未跟踪**（`.github/workflows/unity-ci.yml`、`_art/README.md`、`tools/build-windows.ps1`）。分五批：B4/B8 的 16 个（11 个 `.cs` + 5 个文档），B2/B4c/D3 的 9 个，D2 的 5 个，E4 的 2 个（`.gitignore`、`tools/run-editmode-tests.ps1`），A8 的 3 个新文件 + `tools/quick-regression.ps1`（去掉与 CLI 保留 flag 冲突的 `-quit`）。`README.md` / `docs/roadmap.md` 同时含 A8 段。
+- **要做什么**：`git add` 显式列这 36 个路径（33 个 `M` + 3 个未跟踪）→ `git commit -F <文件>` → `git push origin main`。push 前先取 GitHub 可用 IP（本机 hosts 把 github.com 指向 127.0.0.1），用 `git -c http.curloptResolve=github.com:443:<IP> push origin main`。
+- **验收**：`git status --short` 干净；提交后跑 quick-regression 3/3、`AchievementRegression.RunCore()` 644/0、`console_status` 0 error；推送后 `git rev-list --count origin/main..HEAD` = 0；提交哈希写回本条。
+- **依赖**：用户已明确说「commit and push」（m05886）。
+
+### A8 构建流程与 CI（P3，本机链路 ✅ / GitHub 首跑 ◐）
+
+- **现状（2026-10-25）**：`tools/quick-regression.ps1`（静态哨兵 + 成就核心 + 无尽冒烟）与 `tools/run-editmode-tests.ps1`（8 条 NUnit）已可用，但此前没有 Player build 脚本，也没有 CI。
+- **已完成（本机）**：
+  - `tools/build-windows.ps1`：包装 `unity build --target StandaloneWindows64`，默认输出 `Build/Windows/AutoBattle.exe`；支持 `-OutputPath`、`-RequireClean`、`-TimeoutSeconds`。场景列表仍由 `ProjectSettings/EditorBuildSettings.asset` 决定，不自写 `BuildPipeline`。
+  - `.github/workflows/unity-ci.yml`：`runs-on: windows-latest`（Ubuntu runner 没有 Windows Mono 模块），16 步，含 Unity CLI 安装、downloads/Library 缓存、许可证激活、`quick-regression`（3 项）、EditMode NUnit（8 条）、Windows 构建与产物上传；缺 `UNITY_LICENSE_SERIAL` 会明确失败。
+  - 本机实测：NUnit **8/8 通过（0 失败、0 跳过，0.11s）**；`build-windows.ps1` 构建成功，`AutoBattle.exe` 0.6 MB / 整目录 171.6 MB，SHA256 `001AEEBFB92718F8B49F0C0E0A03E313C54669552B08E952B2FEE3DDD143683A`；`AutoBattle_Data`、`UnityPlayer.dll`、`MonoBleedingEdge`、`D3D12` 齐全。
+  - 顺手修掉一个真 bug：`unity run` 的 batchmode 参数里不能再带 `-quit`（CLI 保留 flag，报 `Forwarded argument '-quit' conflicts with a reserved Unity flag`）；`tools/quick-regression.ps1` 与 CI 都已去掉，退出码由 `RunAllQuickBatch` 自己 `EditorApplication.Exit` 决定。
+- **仍未完成（必须在 GitHub 侧做）**：① 在仓库 Secrets 配 `UNITY_LICENSE_SERIAL`（可选 service account）；② 首次 push 后看 `Unity CI / verify` 实际跑通 3/3 + 8/8；③ 在分支保护里把 `Unity CI / verify` 设为 required check（「失败阻止合并」不能由仓库文件单独保证）。
+- **验收边界**：本机「一条命令出包」与 NUnit 已过；**全新 clone 出包**与 **GitHub 首跑**尚未执行，因此 A8 暂记 ◐，不并入 §2.2 的已完成。
+- **依赖**：§8 决策 #5 已按「先落发行向工程化」处理；正式上架/发版仍另说。
 
 ## 4. UI / UX（C）
 
@@ -184,9 +210,9 @@
 ### C8 关于/致谢/版本（P3，与 A4 合并）— ✅ 2026-10-24
 
 - **现状**：无关于入口；设置面板底部只有快捷键提示。
-- **要做什么**：设置面板加「关于」分区：版本、存档版本 v11、Unity 版本、四首 BGM 来源（`docs/audio-credits.md`）、AI 生成声明。
+- **要做什么**：设置面板加「关于」分区：版本、存档版本（现值 v13）、Unity 版本、四首 BGM 来源（`docs/audio-credits.md`）、AI 生成声明。
 - **验收**：与 A4 一起验收。
-- **已完成（2026-10-24）**：设置面板底部新增「关于」按钮，弹出 680×520 关于页：`AutoBattle v1.0.0`、存档 v11 · 3 槽 · 当前存档、Unity 6000.6.5f1 · 平台 · 设计分辨率 1280×720；数据段写导出目录 `Documents\AutoBattle\slotN.json` 与导入规则；素材段声明立绘/怪物/Boss/背景为 AI 生成、BGM 四首来自「星落落oi」并指向 `docs/audio-credits.md`；工程段说明离线单机。
+- **已完成（2026-10-24）**：设置面板底部新增「关于」按钮，弹出 680×520 关于页：`AutoBattle v1.0.0`、存档 v11（当时口径；现为 v13）· 3 槽 · 当前存档、Unity 6000.6.5f1 · 平台 · 设计分辨率 1280×720；数据段写导出目录 `Documents\AutoBattle\slotN.json` 与导入规则；素材段声明立绘/怪物/Boss/背景为 AI 生成、BGM 四首来自「星落落oi」并指向 `docs/audio-credits.md`；工程段说明离线单机。
 - **验收（已过）**：Play 截图 `HelloWorldProject/Assets/Screenshots/a4_about_panel.png` 无裁切；`AboutOpen` 已接入浮层互斥、Esc 关闭与 `CloseAllPanels`。
 
 ### C9 分辨率/窗口设置（P3）— ✅ 2026-10-24
@@ -201,8 +227,8 @@
 
 - **现状（原始）**：3 个槽（`SaveSystem.KeyOf(slot)`），只在 PlayerPrefs；无导入导出，重装即丢。
 - **要做什么**：槽位面板加「导出/导入」按钮；导出 JSON 带版本号，导入时校验 schema 并拒绝更高版本。
-- **验收**：导出→删槽→导入→回读一致；导入 v12 档被拒并提示。
-- **已完成（2026-10-24）**：导出/导入见 A6——存档面板「导出」「导入」按钮，导出到 `Documents/AutoBattle/slotN.json`，导入优先读剪贴板、读不到再读同名文件，v12 档在写盘前拒绝；截图 `a6_save_panel2.png`。
+- **验收**：导出→删槽→导入→回读一致；导入高版本档被拒并提示。
+- **已完成（2026-10-24）**：导出/导入见 A6——存档面板「导出」「导入」按钮，导出到 `Documents/AutoBattle/slotN.json`，导入优先读剪贴板、读不到再读同名文件，当时 v12 档在写盘前拒绝（当前 v13，拒 v14）；截图 `a6_save_panel2.png`。
 - **本轮补完（2026-10-24）**：槽位重命名与跨槽复制。`SaveSystem` 新增 `SlotNameKey` / `DefaultSlotName` / `DisplayNameOf` / `RenameSlot` / `CopySlot`（名字存 `GameConfig.SaveKey + "_name" + slot`，最长 12 字，空名或默认名回退「存档 N」；清槽同时删名字）；`GameController.ReloadCurrentSlotFromDisk()` 让「复制到当前槽」立即重读。存档卡底部按钮改为「改名 / 复制 / 删除」（60/60/64 宽，文字不再被挤成竖排）；2026-10-24 晚又整体下移 4px、摘要文字上移 2px，按钮不再压住最后一行「第 N 世 · 印记」；改名弹层用 InputField（Enter 提交、默认名 / 确定 / 取消），复制弹层按非源槽可视数量重排两个目标按钮，覆盖已有档要求 3 秒内二次点击。
 - **验收（已过）**：改名「鲸鱼娘」后 `DisplayNameOf(0)` 生效；13 字被拒并提示「名字最多 12 个字」，空串恢复「存档 1」。复制 0→1 后目标槽 `level=3 cleared=1` 与源一致，名字一并复制；复制到当前槽后角色立即重读（`playerLv=3`）。截图 `c10_save_panel.png`（三卡按钮完整）、`c10_save_rename.png`、`c10_save_copy.png`（两目标并排 + 覆盖确认倒计时）。
 - **未做**：槽数仍是 3；没有云同步（本轮明确不做）。
@@ -226,11 +252,17 @@
 - **要做什么**：写一份「商店 2.0」设计稿（目前只有构想）：可买什么（药水上限/初始层/词条锁定券/外观）、定价锚点（与 P1000 收入比）、是否与转生印记互通（`docs/rebirth.md` §9.4 建议**不互通**，避免双重折算）。
 - **验收**：设计稿评审通过 → 实现 → 探针复跑 P1000 余额显著下降且不影响 235~250 层目标。
 
-### B2 成就点出口（P2）
+### B2 成就点出口（P2）— ✅ 2026-10-25
 
-- **现状**：330 点只展示；`docs/achievements.md:32` 明确「不提供战斗属性」（否则推翻 P200/无尽基线）。
+- **现状（做之前）**：330 点只展示；`docs/achievements.md:32` 明确「不提供战斗属性」（否则推翻 P200/无尽基线）。
 - **要做什么**：在**非战斗**方向选出口：称号佩戴（与 B3 合并）/ 头像框 / 开局初始金币 / 存档栏位 / 无尽初始层 +1。先做 1 个，别全上。
 - **验收**：花点后数值不影响任何平衡探针（静态哨兵 PASS）。
+- **已完成（2026-10-25，选「无尽建议起始层」）**：
+  - 规则：100 点/级，最多 +3 级（300 点）；`EndlessSuggestedStartFloor = Min(best, StartFloorFor(best)+rank)`，不改 `endlessBestFloor`、不改全局最高、不越本档最高层；本世未重通 11-10 时仍只从第 1 层开始。
+  - 代码：`AchievementSystem` 的 `MaxEndlessStartRank=3` / `EndlessStartPointCost=100` / `EarnedPoints` / `SpentPoints` / `AvailablePoints` / `TryBuyEndlessStartRank`；`GameController.BuyEndlessStartRank`；`GameController.EndlessSuggestedStartFloor`；成就面板底部兑换按钮与「可用点数」显示。
+  - 存档 v13：`PlayerData.endlessStartRank` ↔ `SaveData` 同名字段；`CurrentSaveVersion` 12→13；旧档读入 0，v12 手写带该字段也读 0。
+  - 验收：纯逻辑连买 3 次成功、第 4 次「无尽起始层已兑换满（+3 层）。」，spent=300 / available=505；建议层 best=14 rank=3 → 13、rank=0 → 10、best=12 rank=3 → 11、best=3 rank=3 → 3；Play 中 805 点买 1 级 rank=1 / 可用 705；Save→Load version=13 rank=2。截图 `b2_achievement.png`、`b2_achievement_full.png`、`b2_achievement_bought.png`。
+  - 平衡：只改「从哪层开始」，不碰怪物数值；`BalanceRegression.RunStaticOnly()` PASS、`AchievementRegression.RunCore()` 644/0。详见 `docs/achievements.md` §15.5 与 `docs/endless-mode.md` §7.5。
 
 ### B3 称号展示（P2）— ✅ 2026-10-24
 
@@ -240,17 +272,42 @@
 - **已完成（2026-10-24）**：`PlayerData.equippedTitle`（空 = 未佩戴）与 `SaveData.equippedTitle` 一并落盘；`SaveSystem.Load` 用 `AchievementCatalog.IsUnlockedTitle` 校验，伪造/已失权的称号自动清空。`AchievementCatalog` 暴露 `Titles` / `TitleNameOf` / `IsUnlockedTitle`（7 个：通关者、巅峰、踏破者、不屈、传说、博学、无尽）。成就面板 560→620 高，底部加「称号（解锁后可佩戴，再点一次卸下）」与 7 个 104×26 按钮（y=566），提示 y=542、脚注 y=596，不再与翻页行重叠；锁定称号灰显不可点，已佩戴按钮显示「✓ 通关者」。左栏立绘底部 (16,196,140,24) 加深色条与 `_titleText`，未佩戴「无名旅人」用弱色，佩戴后转金色。`GameController.SetEquippedTitle` 负责佩戴/卸下、拒绝未解锁、写日志并 `TrySave`。
 - **验收（已过）**：Play 中临时解锁 clear_ch11 → 称号按钮可点，点击后 `Player.equippedTitle=clear_ch11`、`_titleText.text=通关者`、颜色 `RGBA(1,0.8,0.35,1)`、按钮「✓ 通关者」；再点一次卸下回「无名旅人」。切到存档 2 后称号为空，切回存档 1 恢复「通关者」（`backTitle=clear_ch11`）；测试后已还原槽 0 原始 JSON。截图 `b3_achievement_titles.png`。
 
-### B4 转生 v2（P3）
+### B4 转生 v2（P3）— ✅ 2026-10-25
 
-- **现状**：v1 转生清空全部装备（docs/rebirth.md §13.2 留了「保留一件」的备选）；无转生排行榜；P100 门槛实际首通中位 P31（门槛被绕过）。
+- **现状（做之前）**：v1 转生清空全部装备（docs/rebirth.md §13.2 留了「保留一件」的备选）；无转生排行榜；P100 门槛实际首通中位 P31（门槛被绕过）。
 - **要做什么**：三件里选做——(a) 保留评分最低槽位的一件；(b) 转生次数/最快轮回排行榜（存档内）；(c) P100→P50 门槛重算经济。
 - **验收**：改门槛必须重跑 50 种子转生加速与印记产出，并回填 §14.4。
+- **已完成（2026-10-25，做 a + b，刻意不做 c）**：
+  - **(a) 保留最低分一件**：`GameController.Rebirth.FindRebirthKeep` 在重置等级/巅峰**之前**遍历五槽，用 `EquipmentScore.Of`（增量期望 DPS 口径）挑分数最低的一件；清空其余四件（不退款、不折印记）后 `SetEquipment` 放回保留件。保留件若在小件槽（头盔/鞋/饰品），同步置 `slotStarterMask` 对应位，等于该槽解锁赠礼已用，避免再发一件。轮回面板左卡加第三行「本世用时 · 保留最低分 1 件」，keep 行改「成就 / 纪录 / 1 件装备」，reset 行改「装备只清 4 件」。对比 / 强化 / 洗练三个面板的槽位页签在「有装备但槽位未解锁」时显示 **「 · 保留件」**，不再显示「 · 未解锁」。
+  - **(b) 最快轮回 Top-5**：`RebirthCatalog.cs` 追加 `[Serializable] RebirthRecord`（life/seconds/paragon/floor/marks）与 `RebirthHistory`（Capacity=5；排序 seconds 升序 → marks 降序 → life 升序；`Insert` 返回名次，掉榜 0；`CopyTop` 清洗 null/越界，`FormatSeconds` 输出 mm:ss 或 h:mm:ss）。转生时若本世 ≥1 秒才记一条（防探针 00:00 假纪录）；本世用时只在「运行中且无浮层」时按 `Time.unscaledDeltaTime` 累加，暂停/开面板不计、速度倍率不影响；转生后清零。轮回面板从 680×540 抬到 **680×680**（y=20，底 700），底部新增标题与 5 行纪录，第 1 名金色。控制器暴露 `LastRebirthSeconds` / `LastRebirthRecordRank`，转生日志写「本世用时 mm:ss，轮回纪录第 N 名」与「保留装备：…」。
+  - **(c) 没做**：`RebirthUnlockParagon` 仍为 100。P100→P50 会直接作废 §14.4 的 82.6% / 47.1% 门槛基线，而 roadmap 原文是「三件里选做」，所以本次明确记为**推迟的平衡决策**，不假装已做。
+  - **存档 v12**：`PlayerData.lifeSeconds` + `PlayerData.rebirthTop` ↔ `SaveData` 同名字段；`CurrentSaveVersion` 11→12；旧档读入给 0 / 空；`rebirthCount<=0` 时清空榜单，防手改档伪造。`SaveSystem.SaveVersion` 自动变 12，关于页与导出面板动态读取，无需改文案。
+  - **验收实测（Play，真实 `PerformRebirth`）**：五件评分 7320.8 / 2896.8 / 751.7 / 995.3 / **306.2**，保留普通饰品，其余四槽清空，`slotStarterMask=16`；`lifeSeconds=123.4` → 纪录 `第1世 · 02:03 · P100 · 无尽0层 · +2印记`、名次 1；读档回读 `v=12 top=1 lvl=1 acc=普通饰品` 一致。纯逻辑插入 7 条验证 5 条容量、100 秒并列按 marks 排序、`FormatSeconds(3723)=1:02:03`。截图 `HelloWorldProject/Assets/Screenshots/b4_rebirth_records.png`。
+  - **平衡**：本次只改「转生后保留什么 / 记录什么」，没有改任何战斗、经验、金币、掉落或门槛数值，所以**未重跑 50 种子转生加速**；§14.4 的 82.6% / 47.1% 结论仍适用。保留一件只在转生瞬间生效，不进入探针的起始构造（探针仍从空身起），因此探针基线也无需重做。
 
-### B8 短中期目标展示（P3）
+### B4c P100 转生门槛复评（P3，从 B4 拆出）— ✅ 2026-10-25
 
-- **现状**：成就是「目标清单」，但只在成就面板里；主界面没有「下一步」。新手引导讲界面位置，不讲目标。
+- **现状**：`RebirthUnlockParagon = 100`（`GameConfig.cs`）；B4 做 a+b 时刻意把 (c) P100→P50 推迟到本条。首通中位 P31 意味着门槛当前基本被绕过；但降门槛会直接作废 `docs/rebirth.md` §14.4 的 82.6% / 47.1% 门槛基线，不能只改常量。
+- **要做什么**：先用真实推进量「到 P100 的耗时/挑战数」（`NewGameProgression` / `EndgamePacing`，50 种子，记录 P50/P100 两个断面），再决定保持 100 或降到 50；若改，重跑 50 种子转生加速与印记产出，回填 §14.4 与 §8 决策 #4。
+- **验收**：给出 P50/P100 两套实测数据与推荐；若改门槛，必须同时更新基线，不能只改常量。
+- **依赖**：§8 决策 #4；先有真实推进数据再拍板。
+- **已完成（2026-10-25，结论保持 100）**：`EndgamePacing.Run(seed, 20000, false, 100, 0.8f)`，50 种子 20261018..20261067，`BuildFresh100` 已解锁全章与饰品：
+  - 首次通关 11-10：挑战中位 12（IQR 5..21.5），含刷怪+商店 1.75min（0.8..2.58）。
+  - P50：挑战中位 34.5（31.25..37），7.7min（6.83..8.57）。
+  - P100：挑战中位 159（152..165），30.7min（28.32..32.08，min 25 / max 41.6）。
+  - 首通到 P50 约 +6min、到 P100 约 +29min；门槛降到 50 会把转生循环提速约 4 倍并作废 §14.4，当前没有证据表明 P100 不可接受。**保持 `RebirthUnlockParagon=100`，未改代码/存档/探针默认值**。详见 `docs/rebirth.md` §14.7、`_balance/balance-analysis.md` §3.5.4b。
+
+### B8 短中期目标展示（P3）— ✅ 2026-10-25
+
+- **现状（做之前）**：成就是「目标清单」，但只在成就面板里；主界面没有「下一步」。新手引导讲界面位置，不讲目标。
 - **要做什么**：右侧或左栏加一个「当前目标」行：下一件可达成成就 / 下一章解锁条件 / 转生还差多少。不要新增系统，只做投影。
 - **验收**：新档第 1 分钟内能看到至少一条随进度变化的目标。
+- **已完成（2026-10-25）**：
+  - 右栏按钮行下方（y=670，808×26）新增常驻 `GoalCard`：左「目标」508 宽、右「成就」264 宽，13 号字；不新增系统，只读现有进度。
+  - **主目标优先级**：待选技能（剩 N 次）→ 下一关首通（从 `maxChapterUnlocked` 起找第一个未首通；章末且非 11 章写「解锁第 N 章」；11-10 写「终局：首通 11-10，解锁轮回与无尽」；带首通金币）→ 已全清且轮回解锁时写「轮回：预计 +N 印记」或 `CanRebirth` 的原因 → 兜底无尽最高层。主目标直接复用 `PlayerData.IsStageFirstCleared`、`StageCatalog.FirstClearGold`、`GameController.PendingRebirthMarks`。
+  - **副目标**：遍历 `AchievementCatalog.All`，跳过已解锁，按 **还差多少**（`target - Metric`）选最近的一条，剩余相同再按完成率高者；显示「成就 名称 当前/目标」，大数用 k/M 紧凑格式；全达成显示「成就 N/N 全达成」。为什么按剩余而不是按百分比：新档 `0/1` 的小成就应排在 `1/100` 的「满级」前面。
+  - **刷新**：挂在 `GameUI.Refresh.Log.RefreshPanels(p, textTick)` 的 10Hz 节拍上，文本与缓存不同才赋值，不额外每帧分配。
+  - **验收实测（Play）**：新档 `目标 推图：首通 1-1 · +120 金币 || 成就 初出茅庐 0/1`；加首通 1-1 后 0.7s 变 `首通 1-2`；清完 1~11 章、Lv100/P100 后变 `目标 轮回：预计 +2 印记（存档 → 轮回）`。最长分支「首通 10-10（章末），解锁第 11 章 · +1,440 金币」`preferredWidth=308.7`（容器 508），副文本 113.3（容器 264），不裁切。截图 `HelloWorldProject/Assets/Screenshots/b8_goal_fresh_final.png`。
 
 ### B9 技能构筑深度（P4，设计题）
 
@@ -262,8 +319,8 @@
 | 编号 | 问题 | 数字 | 建议 |
 |---|---|---|---|
 | D1 | 转生加速 — ✅ 2026-10-22 达标 | `RebirthExpPerRank=0.60` + `RebirthLegacyLevelPerRank=3` 落地后，第 2 世 82.6% / 满轮回 47.1%（目标 85% / 50%）；旧数据 92.4% / 63.5% / 61.8% 按日期保留作历史 | 已收口，不再调参。战斗 +5% 偏强、满轮回无尽首死中位 315 是另一件事（见 README「转生加速已落地，无尽仍偏强」） |
-| D2 | 无尽理想配装偏强 | 理想配装首死中位 290 层 vs 目标 235~250；随机词条 242 达标 | 二选一：压完美词条乘算收益（改洗练上限）或收紧 `EndlessBaseFactor`；**先做设计决策再动数** |
-| D3 | 掉落 +10% 未量化 | 转生「财运」掉落 +2%/级 | 用 50 种子测五槽毕业时间（首次五件全传说 Lv110 的用时），决定是否降到 +1%/级 |
+| D2 | 无尽理想配装偏强 — ✅ 2026-10-25 已收紧 | 理想配装 50 种子首死中位 290（P10 272 / P90 305 / max 320）vs 目标 235~250；随机五槽 50 种子实际 220（旧「242」是 3 种子） | 已选「保留 235~250 理想配装口径，收紧 `EndlessBaseFactor` 2.8→3.4」：3.4 下理想 240（P10 227 / P90 250 / max 261），随机 181（P10 161 / P90 195 / max 205）。压词条上限（×0.85 只到 280）与压暴击上限（0.70 仍 277）都不够；详见 `_balance/balance-analysis.md` §10.3、`docs/endless-mode.md` §12.5.4 |
+| D3 | 掉落 +10% — ✅ 2026-10-25 已量化 | 固定财运 rank5，只改 `RebirthDropPerRank` 做 0% / +5% / +10% 三组 50 种子：五槽集齐中位 60.5 / 65 / 55.5 次，+10% vs 0% 配对中位 7.5 次、95% CI −7..+16、p=0.39；非单调、无显著效果 | **保持 +2%/级**；BOSS 固定掉 2 件不吃 drop bonus、普通怪 Lv100 不出 Lv110，所以掉落不是终局毕业的有效杠杆。详见 `docs/rebirth.md` §14.8、`_balance/balance-analysis.md` §3.5.4c |
 | D4 | 章节压迫已重调 | 5.5%/4%，300 套 98%→21.8%，真实推进 25/30 通关 | 已收口，无需再动；仅当改 `ChapterStatBias` 时复跑 |
 | D5 | 终局倍率 | 1.6 定格；抬到 5.0 → 通关 3/30 | 已收口；若要 P80~90 目标需重开设计，别当 bug 修 |
 | D6 | 金币软出口 | 见 B1 | 与 B1 合并 |
@@ -275,53 +332,64 @@
 | E1 | README 结构段漂移 — ✅ 2026-10-24 | 见 A3 |
 | E2 | 缺文档总索引 — ✅ 2026-10-24 | 已在本文件附录 C 维护 11 份文档索引；README 项目结构段与「文档」列表已指向本文 |
 | E3 | 旧口径并存 — ✅ 2026-10-24 | `balance-analysis.md` §3.5.2 已标「4%/3% 口径（2026-10-19），新表见 §3.5.2a」，§3.5.4a 为终局复测；`rebirth.md` 的 63.5% / 61.8% / 82.6% 均带日期，README 同步。旧表保留作历史，不再混读 |
-| E4 | 一次性产物路径 — ◐ 2026-10-24 | A2 已把 `_tmp_verify/`、`_art/ui-audit/` 纳入 `.gitignore`，未跟踪噪声从 59 项降到 48 项；目录尚未合并到统一的 `_art/<主题>/`，README 也未逐条注明 |
+| E4 | 一次性产物路径 — ✅ 2026-10-25 | 根目录 `_tmp_verify/` 整体迁到 `_art/tmp-verify/`；`.gitignore`、`tools/run-editmode-tests.ps1`、README 与 docs 引用同步；新增 `_art/README.md` 逐条说明 `ui-audit/`、`topn/`、`sprites/`、`stage/`、`tmp-verify/`、`fish/` 的用途与忽略状态 |
 
 ## 8. 需要拍板的决策点（按阻塞程度排序）
 
 | # | 问题 | 选项 | 影响 | 我的建议 |
 |---|---|---|---|---|
 | 1 | 金币出口做成什么 | 商店 2.0 / 转生印记商店 / 装备赌注 / 外观 | 决定 B1 的设计稿方向 | 先写设计稿再选；印记不与金币互通 |
-| 2 | 成就点换什么 | 称号/头像框/初始层/存档位 | 决定 B2/B3 是否合并 | 先做「称号佩戴」一个出口 |
-| 3 | 无尽目标口径还算不算 | 235~250 层是否仍是目标 | 决定 D2 要不要动数 | 保留口径，压完美词条收益（随机词条已达标） |
-| 4 | P100 转生门槛 | 保持 / 降到 P50 | 影响转生经济与排行榜 | 先量玩家到 P100 的耗时再定 |
-| 5 | 是否面向发行 | 是则 A4/C8/C9/A5 提前 | 决定工程项优先级 | 若不发行，A4/C9 可降级 |
+| 2 | 成就点换什么 — ✅ 已决（2026-10-25） | 已选「无尽建议起始层 +1/级」，100 点/级、最多 +3；称号佩戴由 B3 完成 | B2 已落地并存档 v13 | 不换战斗属性/装备/掉落；后续若加第二个出口，先看无尽起始层是否够用 |
+| 3 | 无尽目标口径 — ✅ 已决（2026-10-25） | 保留 235~250 层「理想配装」口径，收紧 `EndlessBaseFactor` 2.8→3.4 | 3.4 下 50 种子理想配装中位 240、随机 181；随机配装接受更早死 | 已落地；旧「随机 242 达标」是 3 种子误读，50 种子随机实际 220。后续若再动无尽，先看 `docs/endless-mode.md` §12.5.4 |
+| 4 | P100 转生门槛 — ✅ 已决（2026-10-25） | 50 种子实测 P100 首通后约 30.7min，保持 100 | 不改 `RebirthUnlockParagon`，作废 §14.4 的风险归零 | 若以后要更早转生，改 50 必须重跑 50 种子加速与印记产出 |
+| 5 | 是否面向发行（决定 A8）— ✅ 已按发行向推进（2026-10-25） | 已落 Windows 构建脚本 + GitHub Actions（`windows-latest`）；正式上架/发版另说 | 本机 8/8 与出包已验；GitHub 侧仍需配 `UNITY_LICENSE_SERIAL` 与 required check | 不再等发行决策；剩余是仓库配置，不是代码 |
 | 6 | 是否做多语言 | v1 中文 | 影响文案抽取方式 | 暂不做，但新文案别硬编码到 C# 字符串拼接里 |
 
 ## 9. 建议执行顺序（三个批次，每批独立可验收）
 
-**第一批（半天，清账）**：A1 提交 → A2 治理 → A3 README 结构重写 → C1、C5、C6、C7（四个小 UI 修）→ 回归三连 + console_status。
+**第一批（已完成，2026-10-24~25）**：A1 提交 → A2 治理 → A3 README 结构重写 → C1、C5、C6、C7（四个小 UI 修）→ 回归三连 + console_status。
 
-> 进展（2026-10-24）：A2、A3、A4、A5、A6 已完成（A5 的 asmdef/NUnit 同日补完）；C1–C11 已完成并 Play 验收（C10 槽数仍 3、C11 为设计题结论 + 色弱配色；证据见 §4）；B3 已完成；A1 等用户发话再提交。
-**第二批（2~3 天，可用性）**：C2 批量强化、C3 面板密度、C4 tooltip 补齐、C8+C9（关于页/分辨率）、A4 元信息。
+> 进展（2026-10-25）：A1 的 72 项已于 `12d230a` / `de8c038` 提交并推送；A2–A6、C1–C11、B3 全部完成。
 
-> 进展（2026-10-24）：C2、C3、C4 已完成并 Play 验收；C8 已随 A4 并入关于页完成；C9（分辨率/全屏/窗口模式）、C10（改名/跨槽复制）、C11（色弱配色）同日补完。
-**第三批（按决策点推进）**：B2（成就点出口）、B1 商店设计稿、D2/D3（平衡决策 + 复跑）、A6（工程化）。B3 已随称号佩戴/展示先行完成（2026-10-24）。
+**第二批（已完成，2026-10-24）**：C2 批量强化、C3 面板密度、C4 tooltip 补齐、C8+C9（关于页/分辨率）、A4 元信息。
+
+> 进展：C2、C3、C4、C8、C9、C10、C11 已完成并 Play 验收。
+
+**第三批（当前，按决策点推进）**：A7 提交 33 个 `M` + 3 个新文件 → B1 设计稿（金币出口/商店 2.0）→ B9 设计题。本批已完成 B4（a+b）、B8、B2（成就点换无尽起始层）、D3（财运掉落量化，保持 +2%/级）、B4c（P100 门槛复评，保持 100）、D2（无尽口径 2.8→3.4）、E4（一次性产物归并到 `_art/`）、A8（Windows 构建脚本 + CI workflow；本机 8/8 与出包已验，GitHub 首跑待配置）。
 
 每批结束的固定动作：`BalanceRegression.RunStaticOnly()` → PASS；`AchievementRegression.RunCore()` → 644/0；`console_status` → compilationFailed=false、consoleErrors=0；新增数字回填本文与对应 docs。
 
 ## 10. 明确不做（范围守则，防止无限扩张）
 
 1. 不做「成就点 +攻击」这类战斗属性（会推翻现有 P200 / 无尽基线，docs/achievements.md:32 已定）。
-2. 不为拆而拆：`Models.PlayerData.cs`（588 行）职责单一，不再拆（README:252 已定）。
-3. 不改存档格式除非必须；每次升版本都要写迁移 + 回归（v5/v6/v7/v9/v10/v11 都这么过来的）。
+2. 不为拆而拆：`Models.PlayerData.cs`（604 行）职责单一，不再拆（README:252 已定）。
+3. 不改存档格式除非必须；每次升版本都要写迁移 + 回归（v5/v6/v7/v9/v10/v11/v12/v13 都这么过来的）。
 4. 不重做美术：11 族怪物 + 11 Boss + 20 特效 + 4 背景已成体系，缺的是「用起来」不是「更多」。
 5. 不引入第三方框架/插件（除 Unity 官方包）；已有 3 个 asmdef（Runtime / Editor / Tests），新增依赖要把编译时间算进去。
 
 ## 11. 变更记录（本轮已改）
 
-> 2026-10-24 晚回填。✅ = 已完成并验收；◐ = 部分完成。逐条证据见对应小节与 README。
+> 2026-10-24 晚首版，2026-10-25 补 B4/B8 与提交记录。✅ = 已完成并验收；◐ = 部分完成。逐条证据见对应小节与 README。
 
 | 条目 | 结果 | 落点 / 证据 |
 |---|---|---|
+| A1 ✅ | 2026-10-24 的 72 项已提交并推送：`12d230a` + `de8c038` | `HEAD=de8c038`；`origin/main..HEAD` = 0 |
+| A7 ◐ | 32 个文件 + `_art/README.md` 仍未提交：B4/B8 16 个 + B2/B4c/D3 9 个 + D2 5 个 + E4 2 个 | `git status --short`；等用户说「提交」 |
+| B4 ✅ | 转生 v2：保留最低分 1 件 + 本档最快轮回 Top-5；存档 v12 | `GameController.Rebirth.cs`、`RebirthCatalog.cs`、`SaveSystem.cs`；docs/rebirth.md §14.6；`b4_rebirth_records.png` |
+| B8 ✅ | 右栏常驻「当前目标」条（主目标 + 最近成就） | `GameUI.Build.Right.cs`、`GameUI.Refresh.Log.cs`；`b8_goal_fresh_final.png` |
+| B2 ✅ | 成就点出口：100 点/级兑换无尽建议起始层，最多 +3，不越本档最高；存档 v13 | `AchievementSystem.cs`、`GameController.Achievements.cs`、`GameUI.Achievements.cs`；docs/achievements.md §15.5 |
+| B4c ✅ | P100 门槛 50 种子复评：首通 12 次 / P50 34.5 / P100 159，保持 100 | docs/rebirth.md §14.7；balance-analysis §3.5.4b |
+| D3 ✅ | 财运掉落 50 种子三组对照：无显著效果，保持 +2%/级 | docs/rebirth.md §14.8；balance-analysis §3.5.4c |
+| D2 ✅ | `EndlessBaseFactor` 2.8→3.4：理想配装 50 种子中位 290→240（P10 227 / P90 250 / max 261），随机 220→181 | `GameConfig.cs:675`、`GameConfigData.cs:146`、`game_config.json:128`；docs/endless-mode.md §12.5.4；balance-analysis §10.3 |
 | B7（D4） | 章节压迫 4%/3% → **5.5%/4%**；300 套抽样 98%→21.8%，真实推进 25/30 通关 | `GameConfig.cs:206/:212`；balance-analysis §3.5.2a |
 | D5 | 终局 BOSS 倍率**定格 1.6**，注释按实测改写 | `GameConfig.cs:312`、`Models.cs:698`；§3.5.4a |
-| — | GameUI 由 4 个胖文件拆成 **28 个 partial / 6,749 行** | README 项目结构；A3 |
+| — | GameUI 由 4 个胖文件拆成 **28 个 partial**（A3 时 6,749 行，2026-10-25 实测 7,611 行） | README 项目结构；A3 |
 | — | 六项 UI 修复 + R 键确认字号 18→15 | `GameUI.Build.Right.cs:137`、`GameUI.Core.cs:53` |
-| A2 ✅ | `.gitignore` 纳入 `_tmp_verify/`、`_art/ui-audit/` | `.gitignore` |
-| A3 ✅ | README 项目结构按实测重写（59/15,620 + 10/4,048） | `README.md:117` 起 |
+| A2 ✅ | `.gitignore` 纳入 `_tmp_verify/`、`_art/ui-audit/`；2026-10-25 已迁到 `_art/tmp-verify/` | `.gitignore`、`_art/README.md` |
+| A3 ✅ | README 项目结构按实测重写（A3 时 59/15,620 + 10/4,048；2026-10-25 为 59/17,109） | `README.md:117` 起 |
 | A4 ✅ / C8 ✅ | 元信息 AutoBattle / UnityByDSH / 1.0.0；设置面板「关于」页 | `GameUI.Settings.cs`；`a4_about_panel.png` |
 | A5 ✅ | 菜单/脚本一键快速回归 3 步 + EditMode NUnit 8 条 + 3 个 asmdef | `AutoBattle.CI.cs`、`tools/quick-regression.ps1`、`tools/run-editmode-tests.ps1`、`Assets/Tests/` |
+| A8 ◐ | Windows 构建脚本 + GitHub Actions（windows-latest，回归 + NUnit + build）；本机 NUnit 8/8、出包 171.6 MB；CI 未在 GitHub 实跑 | `tools/build-windows.ps1`、`.github/workflows/unity-ci.yml`；README「构建与 CI」；A8 小节 |
 | A6 ✅ | `TrySave` 统一失败提示；导出/导入存档 | `GameController.cs`、`SaveSystem.cs`、`GameUI.Panels.Save.cs` |
 | C1 ✅ | 战斗速度写入 PlayerPrefs，重启保持 | `GameSettings.cs`、`GameController.Awake` |
 | C2 ✅ | 强化「+5」「满级」批量，逐级扣费 | `GameUI.Panels.Enhance.cs`、`EnhanceEquipmentBulk` |
@@ -336,7 +404,7 @@
 | B3 ✅ | 称号佩戴与左栏展示（未佩戴「无名旅人」） | `GameController.Achievements.cs`、`GameUI.Achievements.cs`；`b3_achievement_titles.png` |
 | D1 ✅ | 转生加速 82.6% / 47.1%，进目标区间 | `GameConfig.cs:686/:695` |
 
-**唯一悬着的 P0 是 A1（提交）**：等用户明确说「提交」；push 另问。
+**A7 已获用户「commit and push」授权（m05886）**：待提交 33 个 `M` + 3 个新文件（B4/B8 + B2/B4c/D3 + D2 + E4 + A8），提交后推送并回填哈希。A1 的 72 项已于 2026-10-25 提交并推送。
 
 ## 附录 A：测量方法（可复现）
 

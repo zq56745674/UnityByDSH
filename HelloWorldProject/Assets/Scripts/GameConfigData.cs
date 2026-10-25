@@ -143,7 +143,7 @@ namespace AutoBattle
         public int EndlessKillTargetEvery = 5;
         public int EndlessKillTargetMax = 6;
         public int EndlessBossEvery = 5;
-        public float EndlessBaseFactor = 2.8f;
+        public float EndlessBaseFactor = 3.4f;
         public int EndlessFloorGoldBase = 300;
         public int EndlessFloorGoldPerFloor = 40;
         public int EndlessFirstClearGoldBase = 1000;

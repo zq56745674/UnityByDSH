@@ -103,7 +103,10 @@ namespace AutoBattle
                     : new Color(0.60f, 0.64f, 0.72f, 1f);
                 _enhanceSlotLabels[i].color = selected ? Color.white
                     : unlocked ? GameConfig.TextMuted : GameConfig.BtnDisabledText;
-                _enhanceSlotLabels[i].text = EquipmentSlots.Name(s) + (unlocked ? string.Empty : " · 未解锁");
+                // 保留件可能落在尚未解锁的槽位（转生 v2），不要误写成「未解锁」。
+                string lockText = unlocked ? string.Empty
+                    : p.GetEquipment(s) != null ? " · 保留件" : " · 未解锁";
+                _enhanceSlotLabels[i].text = EquipmentSlots.Name(s) + lockText;
             }
 
             EquipmentSlot slot = EquipmentSlots.All[_enhanceSlotIndex];

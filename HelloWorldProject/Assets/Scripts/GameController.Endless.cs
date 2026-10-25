@@ -24,7 +24,13 @@ namespace AutoBattle
             {
                 if (Player == null) return 1;
                 if (!Player.IsStageFirstCleared(GameConfig.ChapterCount, GameConfig.StagesPerChapter)) return 1;
-                return EndlessCatalog.StartFloorFor(Player.endlessBestFloor);
+
+                int best = Mathf.Max(0, Player.endlessBestFloor);
+                if (best <= 0) return 1;
+
+                // 成就点兑换的起始层加成只抬高建议值；不能越过本档最高层（StartEndlessRun 还会再夹一次）。
+                int bonus = Mathf.Clamp(Player.endlessStartRank, 0, AchievementSystem.MaxEndlessStartRank);
+                return Mathf.Min(best, EndlessCatalog.StartFloorFor(best) + bonus);
             }
         }
 

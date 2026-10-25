@@ -24,9 +24,11 @@ namespace AutoBattle
         /// v9：加入转生次数 / 印记 / 历史巅峰与五条永久升级等级。
         /// v10：加入跨世累计统计（stats）与成就状态（achievements）。
         /// v11：加入无尽 Top-N 历史榜（endlessTop，最多 5 局）。
+        /// v12：加入本世计时（lifeSeconds）与最快轮回 Top-5（rebirthTop）；
+        /// v13：加入成就点兑换的无尽起始层等级（endlessStartRank）。
         /// 旧档缺 version 字段时读到 0，据此判断需要迁移。
         /// </summary>
-        private const int CurrentSaveVersion = 11;
+        private const int CurrentSaveVersion = 13;
 
         /// <summary>成就状态结构版本；比它新的档拒绝读取，避免旧版本覆盖新结构。</summary>
         public const int CurrentAchievementSchema = 1;
@@ -502,6 +504,15 @@ namespace AutoBattle
             /// <summary>v11 起：无尽 Top-N 历史榜（最多 5 局）。</summary>
             public List<EndlessScoreEntry> endlessTop;
 
+            /// <summary>v13 起：成就点兑换的无尽起始层等级（0~3）。</summary>
+            public int endlessStartRank;
+
+            /// <summary>v12 起：本世真实秒数（用于最快轮回榜）。</summary>
+            public float lifeSeconds;
+
+            /// <summary>v12 起：最快轮回 Top-5。</summary>
+            public List<RebirthRecord> rebirthTop;
+
             /// <summary>v9 起：转生次数 / 未花印记 / 历史最高巅峰。</summary>
             public int rebirthCount;
             public int rebirthMarks;
@@ -569,6 +580,9 @@ namespace AutoBattle
                 slotStarterMask = player.slotStarterMask,
                 endlessBestFloor = Mathf.Clamp(player.endlessBestFloor, 0, 9999),
                 endlessTop = EndlessHistory.CopyTop(player.endlessTop),
+                endlessStartRank = Mathf.Clamp(player.endlessStartRank, 0, AchievementSystem.MaxEndlessStartRank),
+                lifeSeconds = Mathf.Clamp(player.lifeSeconds, 0f, RebirthHistory.MaxSeconds),
+                rebirthTop = RebirthHistory.CopyTop(player.rebirthTop),
                 rebirthCount = player.rebirthCount,
                 rebirthMarks = player.rebirthMarks,
                 rebirthBestParagon = player.rebirthBestParagon,
@@ -772,6 +786,20 @@ namespace AutoBattle
                 ? EndlessHistory.FromSave(data.endlessTop)
                 : new System.Collections.Generic.List<EndlessScoreEntry>();
 
+            // v13：成就点兑换的无尽起始层等级。旧档没有这项，读 0。
+            player.endlessStartRank = data.version >= 13
+                ? Mathf.Clamp(data.endlessStartRank, 0, AchievementSystem.MaxEndlessStartRank)
+                : 0;
+
+            // v12：本世计时与最快轮回榜。旧档没有这两项：计时从 0 开始，榜为空。
+            // 计时还要挡住 NaN / Infinity / 负数（手改档或坏 JSON），否则会污染耗时榜。
+            float life = data.version >= 12 ? data.lifeSeconds : 0f;
+            if (float.IsNaN(life) || float.IsInfinity(life) || life < 0f) life = 0f;
+            player.lifeSeconds = Mathf.Clamp(life, 0f, RebirthHistory.MaxSeconds);
+            player.rebirthTop = data.version >= 12
+                ? RebirthHistory.FromSave(data.rebirthTop)
+                : new System.Collections.Generic.List<RebirthRecord>();
+
             // v9：转生状态。旧档与坏档全部归零；rank 超出 0..5 夹取。
             // 「次数为 0 却带着等级/印记」只可能来自手改档，整组清掉，避免凭空获得永久加成。
             // 次数/印记另给 100 万上限：正常玩法（每世最多 30 枚）远达不到，
@@ -808,6 +836,8 @@ namespace AutoBattle
                 player.rebirthFortuneRank = 0;
                 player.rebirthLegacyRank = 0;
                 player.rebirthAlchemyRank = 0;
+                // 次数为 0 的档不可能有合法轮回纪录，一并清掉，避免手改档伪造榜单。
+                if (player.rebirthTop != null) player.rebirthTop.Clear();
             }
 
             // v10：累计统计与成就。旧档只能把「当前五槽还看得见」的部分作为历史下界，

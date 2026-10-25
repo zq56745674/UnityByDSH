@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace AutoBattle
@@ -126,6 +128,117 @@ namespace AutoBattle
         {
             return Mathf.Min(MaxMarks,
                 BaseMarks + ParagonMarks(paragonLevel) + FloorMarks(endlessBestFloor) + GoldMarks(gold));
+        }
+    }
+
+    /// <summary>
+    /// 存档 v12：一世结束时的成绩单。只记展示需要的字段，不参与任何数值计算。
+    /// 榜单按「用时最短」优先，用时相同看印记，再看世数。
+    /// </summary>
+    [Serializable]
+    public sealed class RebirthRecord
+    {
+        public int life;
+        public int seconds;
+        public int paragon;
+        public int floor;
+        public int marks;
+    }
+
+    /// <summary>
+    /// 转生纪录榜（存档内 Top-5）。纯计算 + 清洗，不碰 PlayerData / 存档 / UI，
+    /// 探针与编辑器测试可以直接调用。
+    /// </summary>
+    public static class RebirthHistory
+    {
+        public const int Capacity = 5;
+
+        /// <summary>单世上限 30 天；同时用于本世计时钳制，防手改档写爆。</summary>
+        public const int MaxSeconds = 86400 * 30;
+
+        public const int MaxLife = 1000000;
+        public const int MaxParagon = 1000000;
+        public const int MaxFloor = 9999;
+
+        /// <summary>与 RebirthCatalog.MaxMarks 一致，单独写死避免循环引用。</summary>
+        public const int MaxMarks = RebirthCatalog.MaxMarks;
+
+        /// <summary>排序：用时升序 → 印记降序 → 世数升序。null 排最后。</summary>
+        public static int Compare(RebirthRecord a, RebirthRecord b)
+        {
+            if (ReferenceEquals(a, b)) return 0;
+            if (a == null) return 1;
+            if (b == null) return -1;
+
+            int c = a.seconds.CompareTo(b.seconds);
+            if (c != 0) return c;
+            c = b.marks.CompareTo(a.marks);
+            if (c != 0) return c;
+            return a.life.CompareTo(b.life);
+        }
+
+        /// <summary>把一条纪录夹到合法范围；null / 用时 &lt;= 0 返回 null（不记无效纪录）。</summary>
+        public static RebirthRecord Clamp(RebirthRecord record)
+        {
+            if (record == null || record.seconds <= 0) return null;
+            return new RebirthRecord
+            {
+                life = Mathf.Clamp(record.life, 1, MaxLife),
+                seconds = Mathf.Clamp(record.seconds, 1, MaxSeconds),
+                paragon = Mathf.Clamp(record.paragon, 0, MaxParagon),
+                floor = Mathf.Clamp(record.floor, 0, MaxFloor),
+                marks = Mathf.Clamp(record.marks, 0, MaxMarks),
+            };
+        }
+
+        /// <summary>
+        /// 插入一条纪录，返回名次（1 起）；没进前 5 返回 0。
+        /// 就地排序并裁到 5 条，调用方负责落盘。
+        /// </summary>
+        public static int Insert(List<RebirthRecord> top, RebirthRecord record)
+        {
+            RebirthRecord clean = Clamp(record);
+            if (top == null || clean == null) return 0;
+
+            top.RemoveAll(entry => entry == null);
+            top.Add(clean);
+            top.Sort(Compare);
+            int rank = top.IndexOf(clean) + 1;
+            if (top.Count > Capacity) top.RemoveRange(Capacity, top.Count - Capacity);
+            return rank <= Capacity ? rank : 0;
+        }
+
+        /// <summary>读档 / 写档共用的清洗：逐条夹取、丢掉无效项、排序、裁到 5 条，返回新列表。</summary>
+        public static List<RebirthRecord> CopyTop(List<RebirthRecord> source)
+        {
+            var top = new List<RebirthRecord>(Capacity);
+            if (source != null)
+            {
+                for (int i = 0; i < source.Count; i++)
+                {
+                    RebirthRecord clean = Clamp(source[i]);
+                    if (clean != null) top.Add(clean);
+                }
+            }
+
+            top.Sort(Compare);
+            if (top.Count > Capacity) top.RemoveRange(Capacity, top.Count - Capacity);
+            return top;
+        }
+
+        /// <summary>旧档没有这份榜，空榜即可；保留别名让读档路径与无尽榜写法一致。</summary>
+        public static List<RebirthRecord> FromSave(List<RebirthRecord> source) => CopyTop(source);
+
+        /// <summary>面板显示：不足 1 小时 mm:ss，否则 h:mm:ss。</summary>
+        public static string FormatSeconds(int seconds)
+        {
+            int s = Mathf.Clamp(seconds, 0, MaxSeconds);
+            int hours = s / 3600;
+            int minutes = (s % 3600) / 60;
+            int secs = s % 60;
+            return hours > 0
+                ? string.Format("{0}:{1:00}:{2:00}", hours, minutes, secs)
+                : string.Format("{0:00}:{1:00}", minutes, secs);
         }
     }
 }

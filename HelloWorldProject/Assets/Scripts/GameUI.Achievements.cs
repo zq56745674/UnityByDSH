@@ -40,6 +40,11 @@ namespace AutoBattle
         private Button[] _achTitleButtons;
         private Text[] _achTitleLabels;
 
+        // ---- 成就点出口：兑换无尽起始层（B2） ----
+        private Button _achExchangeButton;
+        private Text _achExchangeLabel;
+        private Text _achExchangeText;
+
         private int _achTabIndex;
         private bool _achOnlyUnfinished;
         private int _achPageIndex;
@@ -72,7 +77,7 @@ namespace AutoBattle
 
             CreateSectionTitle(_achievementPanel, "成就", 20, 12, 260, FontTitle, "ui_achievement");
 
-            _achSummaryText = CreateText(_achievementPanel, "AchSummary", "", 116, 14, 550, 24,
+            _achSummaryText = CreateText(_achievementPanel, "AchSummary", "", 116, 14, 430, 24,
                 FontSmall + 1, GameConfig.TextInfo, TextAnchor.MiddleLeft);
 
             Button close = CreateButton(_achievementPanel, "AchClose", "关闭", 698, 12, 90, 30,
@@ -163,8 +168,17 @@ namespace AutoBattle
                 _achTitleButtons[i].onClick.AddListener(() => OnAchievementTitleClicked(index));
             }
 
-            CreateText(_achievementPanel, "AchFootNote", "成就点只用于展示，不提供战斗属性；称号只影响显示。",
-                20, 596, 600, 18, 10, GameConfig.TextDisabled, TextAnchor.MiddleLeft);
+            // 成就点的非战斗出口：兑换无尽起始 +1 层（100 点/级，最多 +3）。
+            // 这是原来脚注那一行；脚注内容并进按钮 tooltip 与右侧状态文本。
+            _achExchangeButton = CreateButton(_achievementPanel, "AchExchange", "兑换 +1 层（100 点）",
+                20, 592, 180, 26, GameConfig.BtnGold, out _achExchangeLabel);
+            StyleTab(_achExchangeButton, _achExchangeLabel, "frame_tab", 11);
+            AttachTooltip(_achExchangeButton,
+                "用 100 成就点兑换无尽模式的起始层 +1，最多 +3 层；只抬高建议起始层，仍会被本档最高层夹住；转生后本世要先重通 11-10 才生效；成就点只用于兑换与非战斗展示，不提供任何战斗属性。");
+            _achExchangeButton.onClick.AddListener(OnAchievementExchangeClicked);
+
+            _achExchangeText = CreateText(_achievementPanel, "AchExchangeText", "", 208, 596, 580, 18,
+                10, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
             _achievementPanel.gameObject.SetActive(false);
 
@@ -234,6 +248,20 @@ namespace AutoBattle
         {
             _game.CloseAchievementPanel();
             GameAudio.PlayUiClose();
+        }
+
+        private void OnAchievementExchangeClicked()
+        {
+            if (_game == null) return;
+            if (_game.BuyEndlessStartRank())
+            {
+                _achDirty = true;
+                GameAudio.PlayCoin();
+            }
+            else
+            {
+                GameAudio.PlayUiClick();
+            }
         }
 
         private void OnAchievementTitleClicked(int index)
@@ -368,8 +396,10 @@ namespace AutoBattle
             int pages = Mathf.Max(1, (_achVisible.Count + AchRowsPerPage - 1) / AchRowsPerPage);
             _achPageIndex = Mathf.Clamp(_achPageIndex, 0, pages - 1);
 
+            int availablePoints = AchievementSystem.AvailablePoints(p);
             _achSummaryText.text =
-                $"已完成 <b>{unlockedCount}/{AchievementCatalog.Count}</b> · 成就点 <b>{earnedPoints}</b>";
+                $"已完成 <b>{unlockedCount}/{AchievementCatalog.Count}</b> · 成就点 <b>{earnedPoints}</b>" +
+                $"（可用 {availablePoints}）";
 
             for (int i = 0; i < _achTabButtons.Length; i++)
             {
@@ -416,6 +446,33 @@ namespace AutoBattle
             }
 
             RefreshAchievementTitles(p);
+            RefreshAchievementExchange(p);
+        }
+
+        /// <summary>刷新「兑换无尽起始层」按钮与已花/可用点数。成就点不足或兑换满时按钮置灰。</summary>
+        private void RefreshAchievementExchange(PlayerData p)
+        {
+            if (_achExchangeButton == null || _achExchangeText == null || p == null) return;
+
+            int rank = Mathf.Clamp(p.endlessStartRank, 0, AchievementSystem.MaxEndlessStartRank);
+            int max = AchievementSystem.MaxEndlessStartRank;
+            int spent = AchievementSystem.SpentPoints(p);
+            int available = AchievementSystem.AvailablePoints(p);
+
+            bool maxed = rank >= max;
+            bool canBuy = !maxed && available >= AchievementSystem.EndlessStartPointCost;
+
+            if (maxed)
+                _achExchangeLabel.text = $"起始 +{max} 已满";
+            else if (!canBuy)
+                _achExchangeLabel.text = $"还差 {AchievementSystem.EndlessStartPointCost - available} 点";
+            else
+                _achExchangeLabel.text = $"兑换 +1 层（{AchievementSystem.EndlessStartPointCost} 点）";
+
+            _achExchangeButton.interactable = canBuy;
+            _achExchangeLabel.color = canBuy ? Color.white : GameConfig.BtnDisabledText;
+            _achExchangeText.text =
+                $"已兑换 {rank}/{max}（起始 +{rank} 层）· 已用 {spent} · 可用 {available}";
         }
 
         private void RefreshAchievementTitles(PlayerData p)

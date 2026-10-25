@@ -125,7 +125,7 @@
   "EndlessKillTargetEvery": 5,
   "EndlessKillTargetMax": 6,
   "EndlessBossEvery": 5,
-  "EndlessBaseFactor": 2.8,
+  "EndlessBaseFactor": 3.4,
   "EndlessFloorGoldBase": 300,
   "EndlessFloorGoldPerFloor": 40,
   "EndlessFirstClearGoldBase": 1000,

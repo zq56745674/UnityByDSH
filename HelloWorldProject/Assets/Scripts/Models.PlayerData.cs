@@ -81,6 +81,26 @@ namespace AutoBattle
         /// </summary>
         public List<EndlessScoreEntry> endlessTop = new List<EndlessScoreEntry>();
 
+        /// <summary>
+        /// 存档 v13 起：用成就点兑换的无尽起始层等级（0~3，每级 +1 层）。
+        /// 只抬高「建议起始层」，仍会被本档最高层夹住；转生后未重通 11-10 不生效。
+        /// </summary>
+        public int endlessStartRank;
+
+        // ==================== 本世计时 / 轮回纪录（存档 v12） ====================
+
+        /// <summary>
+        /// 本世已进行的真实秒数。只在战斗运行、且没有浮层遮挡时累加；
+        /// 速度倍率不影响它（读的是 unscaledDeltaTime）。转生时归零。
+        /// </summary>
+        public float lifeSeconds;
+
+        /// <summary>
+        /// 存档 v12 起：最快轮回 Top-5（见 <see cref="RebirthHistory"/>）。
+        /// 以「本世用时」排序，转生时写入；跨世保留，只有删档/重置才清空。
+        /// </summary>
+        public List<RebirthRecord> rebirthTop = new List<RebirthRecord>();
+
         // ==================== 累计统计 / 成就（存档 v10） ====================
 
         /// <summary>

@@ -1,12 +1,12 @@
 # 无尽模式与最高层记录设计
 
-状态：2026-10-19 已实现并通过首轮平衡（README 路线图第 11 项「无尽模式 + 最高层记录」）
-涉及存档：v11（v7 加 endlessBestFloor、v8 加五槽装备与 slotStarterMask、v9 转生、v10 成就、v11 加 Top-5 历史榜 endlessTop；旧档按版本分支迁移）
+状态：2026-10-19 已实现并通过首轮平衡（README 路线图第 11 项「无尽模式 + 最高层记录」）；2026-10-25 D2 把 `EndlessBaseFactor` 2.8→3.4，当前基线见 §12.5.4
+涉及存档：v13（v7 加 endlessBestFloor、v8 加五槽装备与 slotStarterMask、v9 转生、v10 成就、v11 加 Top-5 历史榜 endlessTop、v12 加转生本世计时与最快轮回榜、v13 加成就点兑换的无尽起始层加成 endlessStartRank；v13 不改 endlessBestFloor/全局最高，旧档按版本分支迁移）
 已新增：Assets/Scripts/Endless.cs、Assets/Scripts/GameController.Endless.cs、Assets/Scripts/GameUI.Endless.cs、Assets/Editor/EndlessPacing.cs
 已修改：GameConfig.cs / GameConfigData.cs / game_config.json / GameConfig.Loader.cs / Models.PlayerData.cs / Models.cs / GameController.cs / SaveSystem.cs / GameUI.cs / GameUI.Core.cs / GameUI.Panels.cs / README.md
-实测基线（2026-10-19，20 种子）：P200 满装模板首死中位 45 层，P10 30 / P90 50 / max 60；50 层累计金币约 37.2 万。见 §12.4。
+实测基线（2026-10-19，20 种子，`EndlessBaseFactor=2.8` 口径）：P200 满装模板首死中位 45 层，P10 30 / P90 50 / max 60；50 层累计金币约 37.2 万。D2 把倍率收紧到 3.4 后，P200 这档没有复测，当前口径以 §12.5.4 的 P1000 数据为准。
 
-> 2026-10-19 晚更新：装备扩展为五槽、攻速改软上限后，P1000 满配的首死中位升到 290 层（50 种子，§12.5.3）；随机五槽配装中位约 242 层。
+> 2026-10-25 更新（D2）：`EndlessBaseFactor` 由 2.8 收紧到 3.4，P1000 满配首死中位 240 层（50 种子，P10 227 / P90 250 / max 261），随机五槽 181 层（P10 161 / P90 195 / max 205），见 §12.5.4。2026-10-19 五槽初测的 290 / 242 是 2.8 口径，保留在 §12.5.3 作历史；其中 242 还是 3 种子误读，50 种子随机实际是 220。
 
 ## 0. 一句话
 
@@ -153,8 +153,9 @@
 起始层：
 
     StartFloorFor(best) = best <= 0 ? 1 : Max(1, best - EndlessCheckpointOffset)
+    SuggestedStartFloor(best) = Min(best, StartFloorFor(best) + clamp(endlessStartRank, 0, 3))
 
-默认 EndlessCheckpointOffset = 4。例：本档最高 13 层 → 起始第 9 层；最高 3 层 → 起始第 1 层。StartEndlessRun 还要把 startFloor 夹到 1..max(1, Player.endlessBestFloor)，避免调试/读档参数把玩家直接送到未达到的层。
+默认 EndlessCheckpointOffset = 4。例：本档最高 13 层 → 基础起始第 9 层；成就兑换 +2 层时建议第 11 层，但不会超过本档最高 13 层。`endlessStartRank` 只能在成就面板用 100 点/级购买，最多 +3 级（v13）；没有成就兑换时与旧公式完全一致。`StartEndlessRun` 仍把 startFloor 夹到 1..max(1, Player.endlessBestFloor)，避免调试/读档参数把玩家直接送到未达到的层。
 
 面板上同时提供「从第 1 层开始」按钮（仅当 StartFloorFor(best) > 1 时显示），让玩家可以练手或刷低层金币。从第 1 层开始不会额外奖励，也不影响纪录语义。
 
@@ -297,10 +298,10 @@ EndEndlessRun：
 
 | 按钮 | 行为 |
 |---|---|
-| 再次挑战 | StartEndlessRun(StartFloorFor(Player.endlessBestFloor))；回满血；从新的起始层开始 |
+| 再次挑战 | StartEndlessRun(GameController.EndlessSuggestedStartFloor)；回满血；从新的建议起始层开始（含成就兑换加成，且不越本档最高层） |
 | 返回战役 | ReturnToCampaign()：Mode=Campaign、IsRunning=true、Monster=null、Player.FillHp()、Player.shield=0、State=WaitingRespawn、_respawnTimer=MonsterRespawnDelay、_pendingTier=Normal、_finalBossAttempt=0、EndlessRun=null、EndlessResultOpen=false；不改变战役 chapterIndex/stageIndex |
 
-「再次挑战」不会从死亡的那一层原地重开。原地重开会把「死在第 N 层 → 重开 N 层」变成无限重试，纪录会失去意义；统一回到 best − EndlessCheckpointOffset 的检查点。
+「再次挑战」不会从死亡的那一层原地重开。原地重开会把「死在第 N 层 → 重开 N 层」变成无限重试，纪录会失去意义；统一回到 best − EndlessCheckpointOffset 的检查点（有成就兑换时再 +0~3 层，仍不越 best）。
 
 返回战役后，玩家仍在 11-10（或当前战役关）。由于 11-10 已经首通，选关面板可以正常选其他关。
 
@@ -327,7 +328,7 @@ EndEndlessRun：
 - 不乘 MaxTierHp/Attack/Defense、MaxTierSpeed；
 - 不乘 FinalBossStatFactor；
 - 不乘 ChapterPressure，也不乘章节族类偏向 MonsterStatBiasOf（按中性 1 处理）；
-- 额外乘 EndlessBaseFactor（默认 2.8），只作用于 HP / 攻击 / 防御，不作用于速度；
+- 额外乘 EndlessBaseFactor（当前 3.4；2026-10-25 前为 2.8），只作用于 HP / 攻击 / 防御，不作用于速度；
 - 速度只由等级、类型、档次决定。
 
 实现上建议把 CreateForLevel 的主体抽成 CreateCore(level, type, tier, affix, bool applyMaxTierAndFinalBoss, bool applyChapterBias)，CreateForLevel 传 true/true，CreateForEndlessFloor 传 false/false 再乘 EndlessBaseFactor；不要复制两份公式，避免以后改一处漏一处。
@@ -348,7 +349,7 @@ EndEndlessRun：
 
 ### 5.2 相对强度表
 
-以 Lv.110 普通怪为 1；战役终局 BOSS 是 2.5（Boss 档次）× 3（MaxTier）× 1.6（FinalBoss）= 12 倍。无尽 BOSS 是 2.5（Boss 档次）× 2.8（EndlessBaseFactor）= 7.0 倍，再乘等级增长：
+以 Lv.110 普通怪为 1；战役终局 BOSS 是 2.5（Boss 档次）× 3（MaxTier）× 1.6（FinalBoss）= 12 倍。无尽 BOSS 的裸倍率是 2.5（Boss 档次）× 3.4（EndlessBaseFactor）= 8.5 倍，再乘等级增长。表里的数值是相对「本层系的 Lv.110 普通怪」（已含 EndlessBaseFactor），所以第 5 层 BOSS 显示 3.04，不是 8.5：
 
 | 层 | 等级 | 最后一只 | 相对 Lv.110 基础（HP/攻/防） |
 |---:|---:|---|---:|
@@ -497,7 +498,7 @@ EndlessRecord 静态类：
 }
 ```
 
-`PlayerData.endlessTop` 是 `List<EndlessScoreEntry>`，最多 5 条（`EndlessHistory.Capacity`）。存档 v11；v10 及更旧档读入时得到空列表。
+`PlayerData.endlessTop` 是 `List<EndlessScoreEntry>`，最多 5 条（`EndlessHistory.Capacity`）。该字段自存档 v11 起；v10 及更旧档读入时得到空列表（现行为存档 v13，v12/v13 均不影响 endlessTop 本身的含义）。
 
 排序（`EndlessHistory.Compare`）：
 
@@ -535,7 +536,7 @@ EndlessRecord 静态类：
 - 换档/重置：`EndEndlessRun(SlotChanged|Reset)` 不记录，因此不能用「切档再切回」制造成绩。
 - 同一局的重复结束：`EndEndlessRun` 开头有 `if (Mode != GameMode.Endless) return;`，第二次调用不会重复入榜。
 
-## 7. 存档 v7（历史，当前 v11）
+## 7. 存档 v7（历史，当前 v13）
 
 ### 7.1 字段
 
@@ -595,6 +596,13 @@ ResetSessionState() 需要追加：
 
 但不要清 Player.endlessBestFloor——它是存档字段，由 SwitchSlot/Load 或新 PlayerData 决定。
 
+### 7.5 v11~v13 追加（2026-10-25）
+
+- **v11**：`PlayerData.endlessTop`（本档 Top-5 历史榜），不影响 `endlessBestFloor` 与全局最高。
+- **v12**：`PlayerData.lifeSeconds` 与 `PlayerData.rebirthTop`（转生 v2 的本世计时与最快轮回榜），不影响无尽字段。
+- **v13**：`PlayerData.endlessStartRank`（0..3）。只抬高**建议**起始层：`GameController.EndlessSuggestedStartFloor` 在本世未重通 11-10 时返回 1，否则 `Min(best, EndlessCatalog.StartFloorFor(best)+rank)`；`StartEndlessRun` 仍夹到 1..best。旧档读入 0，`version<13` 不读该字段。
+- 成就点兑换规则、代价与验收见 `docs/achievements.md` §15.5；清空历史榜只清 `endlessTop`，不动 `endlessStartRank`、`endlessBestFloor` 或全局最高。
+
 ## 8. 界面
 
 ### 8.1 左栏入口（已在上文）
@@ -612,7 +620,7 @@ ResetSessionState() 需要追加：
 
     ┌ 无尽模式 ──────────────────────────────────────── [关闭] ┐
     │ 本档最高  第 12 层          全局最高  第 18 层          │
-    │ 起始层    第 8 层（本档最高 − 偏移）                      │
+    │ 起始层    第 8 层（本档最高 − 偏移 + 成就 0）              │
     │                                                          │
     │ [规则] [历史榜]                                          │
     │ · 每层清完立刻进入下一层；每 5 层一个 BOSS。              │
@@ -659,7 +667,7 @@ ResetSessionState() 需要追加：
 
     ┌ 无尽模式 ──────────────────────────────────────── [关闭] ┐
     │ 本档最高  第 14 层          全局最高  第 250 层         │
-    │ 起始层    第 10 层（本档最高 − 4）                        │
+    │ 起始层    第 10 层（本档最高 − 4 + 成就 0）                │
     │ [规则] [历史榜]                            [清空榜单]      │
     │ 本档历史最好 5 局 · 按到达层数 → 本局清除 → 先达成排序    │
     │ 1  第 15 层   清 14 层 · P177 · 1m10s · 10-22 01:16 · 撤退│
@@ -888,14 +896,14 @@ GameConfigData（当前 121 个 public 字段，其中本次新增 14 个）新�
 | EndlessKillTargetBase | 3 | 1..100 | 每层基础击杀数 |
 | EndlessKillTargetEvery | 5 | 1..100 | 每几层 +1 击杀 |
 | EndlessKillTargetMax | 6 | ≥base..100 | 击杀数上限 |
-| EndlessBaseFactor | 2.8 | 0.1..100 | 无尽怪物 HP/攻/防平坦倍率 |
+| EndlessBaseFactor | 3.4 | 0.1..100 | 无尽怪物 HP/攻/防平坦倍率（2026-10-25 D2 由 2.8 上调） |
 | EndlessFloorClearDelay | 2.0 | 0..60 | 层通过等待（战斗秒） |
 | EndlessFloorGoldBase | 300 | 0..1,000,000 | 每层通过基础金币 |
 | EndlessFloorGoldPerFloor | 40 | 0..1,000,000 | 每层金币递增 |
 | EndlessFirstClearGoldBase | 1,000 | 0..1,000,000 | 新纪录首通基础金币 |
 | EndlessFirstClearGoldPerFloor | 150 | 0..1,000,000 | 新纪录首通金币递增 |
 | EndlessDropLevelCap | 150 | 1..9999 | 掉落/奖励等级封顶 |
-| EndlessCheckpointOffset | 4 | 0..100 | 起始层 = 最高 − 偏移 |
+| EndlessCheckpointOffset | 4 | 0..100 | 起始层 = 最高 − 偏移；成就兑换另加 0..3 层，且不越最高层 |
 
 GameConfig.Loader.SanitizeValues 追加：
 
@@ -928,7 +936,7 @@ EndlessCatalog 仍要做防御性 Max(1, every)，不要只依赖配置校验。
 | 情况 | 行为 |
 |---|---|
 | 未通关 11-10 | 点入口打开只读说明面板；开始按钮置灰并写解锁提示 |
-| 从检查点开始 | 起始层 = max(1, best − EndlessCheckpointOffset)；可点「从第 1 层开始」覆盖 |
+| 从检查点开始 | 建议起始层 = min(best, max(1, best − EndlessCheckpointOffset) + 成就兑换 0..3)；可点「从第 1 层开始」覆盖 |
 | 起始层 > 最高层 | 不允许；StartEndlessRun 夹到 1..max(1, best) |
 | 死在第 N 层 | 本局结束；最高层不因死亡增加；TotalDeaths++；不自动复活 |
 | 撤退 | 二次确认；最高层不变；不增加 TotalDeaths |
@@ -998,7 +1006,7 @@ EndlessCatalog 仍要做防御性 Max(1, every)，不要只依赖配置校验。
 
 如果第 1 层就打不过：检查是否误用了 CreateForLevel 的终局倍率，而不是先降 EndlessBaseFactor。
 如果 50 层后仍然一刀秒：检查 MaxTier/BOSS 倍率是否被重复乘了两次。
-如果玩家在 20 层前必死：把 EndlessBaseFactor 从 2.8 降到 2.2 左右，或把 Step 从 6 降到 4（2026-10-19 实测 2.8/6 的首死中位为 45 层）。
+如果玩家在 20 层前必死：把 EndlessBaseFactor 从当前 3.4 降到 2.8~3.0，或把 Step 从 6 降到 4（2026-10-19 实测 2.8/6 的 P200 首死中位为 45 层；3.4 的 P1000 满配为 240 层，见 §12.5.4）。
 
 ### 12.3 经济监控
 
@@ -1020,19 +1028,19 @@ EndlessCatalog 仍要做防御性 Max(1, every)，不要只依赖配置校验。
 | 8 / 2 | 15 | 过难 |
 | 6.25 / 2 | 30 | 偏难 |
 | 3 / 6 | 45 | 中位达标，但 0 局到 50 层 |
-| **2.8 / 6（采用）** | **45** | 20 局全部阵亡，2 局到 50 层 |
+| **2.8 / 6（当时采用）** | **45** | 20 局全部阵亡，2 局到 50 层 |
 
-最终基线（2.8 / 6）：
+最终基线（2.8 / 6，2026-10-19 历史）：
 
 - 首死：min 30 / P10 30 / 中位 45 / P90 50 / max 60；
 - 0 局打满 100 层，没有软锁；
 - 单层耗时 P90 最大约 16.1 秒（远低于 60 秒目标）；
 - 50 层经济（仅 2 局达到）：平均累计金币 371,940、经验 2,602,923；金币约为终局量级（P200 约 560 万）的 6%，仍偏宽松，但未打穿；
-- 结论：落在首版目标 35~50 层的中位区间，采用 2.8 / 6。
+- 结论：落在首版目标 35~50 层的中位区间，当时采用 2.8 / 6。2026-10-25 D2 已改为 3.4，当前口径见 §12.5.4。
 
 ### 12.5 最高数值上限实测（2026-10-19）
 
-2026-10-19 之前，配置里的 `MaxParagonLevel` 还是 200（代码默认与加载器都允许到 1000，是 JSON 漏改）；现已改为 1000，并按 P1000 重测。下面 12.5.1 是两槽时代的 P1000 口径，12.5.2 是 P200 旧结果，12.5.3 是五槽 + 攻速软上限后的当前口径。
+2026-10-19 之前，配置里的 `MaxParagonLevel` 还是 200（代码默认与加载器都允许到 1000，是 JSON 漏改）；现已改为 1000，并按 P1000 重测。下面 12.5.1 是两槽时代的 P1000 口径，12.5.2 是 P200 旧结果，12.5.3 是五槽 + 攻速软上限后的 2.8 口径（历史），12.5.4 是 2026-10-25 D2 收紧到 3.4 后的**当前口径**。
 
 #### 12.5.1 P1000 两槽满配（历史口径）
 
@@ -1057,7 +1065,7 @@ EndlessCatalog 仍要做防御性 Max(1, every)，不要只依赖配置校验。
 
 同口径、P200、200 个固定种子、最多 200 层：模板攻 3,291 / 防 2,080 / 血 25,361 / 暴击 95.0% / 暴伤 276%。首死 min 45 / P10 45 / 中位 60 / P90 60 / max 75，最高纪录第 74 层；45 层通过率 83%、60 层 7%、75 层 0%；50 层平均累计金币 411,234、经验 2,791,774。失败集中在第 60、75 层近战 BOSS（60 层 HP 104,328 / 防 12,490；75 层 HP 124,488 / 防 14,909），而远程 65 层、暴击 70 层反而 100% 通过。这组数据说明「近战 BOSS 高防高血卡攻击上限」的机制在 P200 就已经存在，P1000 只是把墙推到了 235 层附近。
 
-#### 12.5.3 五槽 + 攻速软上限复测（2026-10-19 晚）
+#### 12.5.3 五槽 + 攻速软上限复测（2026-10-19 晚，2.8 口径历史）
 
 五槽（武器 / 衣服 / 头盔 / 鞋 / 饰品）与攻速软上限上线后，12.5.1 的两槽基线不再代表当前数值。
 
@@ -1072,13 +1080,13 @@ EndlessCatalog 仍要做防御性 Max(1, every)，不要只依赖配置校验。
 | 单层耗时 P90 | 100 层 6.1 秒、150 层 9.2 秒、200 层 14.2 秒、250 层 12.3 秒、300 层 15.4 秒 |
 | 50 层经济 | 50 局到达，平均累计金币 9,033,716、经验 14,390,475 |
 
-作为对照，同参数但 `maxGear=false`、`affixQuality=0.85` 的随机五槽配装（3 种子）首死为 243 / 210 / 242，中位约 242 层。
+作为对照，同参数但 `maxGear=false`、`affixQuality=0.85` 的随机五槽配装（3 种子）首死为 243 / 210 / 242，中位约 242 层。**2026-10-25 D2 用 50 种子复测，同口径随机五槽中位是 220，不是 242**；3 种子只是碰巧落在目标附近，不能作为验收依据。
 
-结论：
+以下是 **2.8 口径**的结论（历史，保留用于对照；3.4 后的结论见 §12.5.4）：
 
 - **理想配装的天花板升到 290 层**，高于原设计目标 235~250，也高于两槽时代的 221 层；
 - **随机五槽配装的中位约 242 层**，仍落在原目标附近；
-- 两者相差约 48 层，来自「五槽乘算 + 完美词条」；如果只按随机配装验收，目标仍成立，但「理论上限」已经越界。是否收紧无尽怪物成长、压缩完美词条收益，或接受双口径，待调；
+- 两者相差约 48 层，来自「五槽乘算 + 完美词条」；如果只按随机配装验收，目标仍成立，但「理论上限」已经越界。当时待调；2026-10-25 D2 已决定不压词条收益，改为收紧整体倍率到 3.4（§12.5.4）；
 - **整体通关率比中位层数更能说明尾部风险**：50 局里 44% 能打满 300 层，68% 能过 290 层，82% 能过 280 层；条件通过率在 280~300 层仍有 88%~95%，说明高层不是必死墙，而是逐层消耗后的概率衰减。
 - 攻速软上限同时作用于怪物，后期近战 BOSS 的有效攻速被压到约 4.5 次/秒，对高层生存有正面影响，这也是理想配装变深的原因之一。
 
@@ -1097,6 +1105,48 @@ unity job wait <job-id>
 unity command --detach --format json eval -- --code 'return AutoBattle.EditorTools.EndlessPacing.Run(200, 200, 20261019, 200, 150, 1.0f, true);'
 unity job wait <job-id>
 ```
+
+#### 12.5.4 D2 收紧后（2026-10-25，当前口径）
+
+12.5.3 的 290 层是 `EndlessBaseFactor=2.8` 的口径。五槽上线后它比设计目标 235~250 高出一截，D2 用 50 个固定种子重测两条配装曲线，并把倍率收紧到 **3.4**。
+
+口径：P1000、装备 Lv150、最多 400 层、seed 20261019；`maxGear=true` 为五件传说满倍率满词条（小件 50% 词条），`affixQuality=0.85` 为随机五槽。maxGear 表用 `fixedSkills=true` 固定技能槽 1/2/4/9/14/13（旋风斩 / 狂暴之心 / 铁躯 / 巨人杀手 / 护盾生成 / 濒死爆发），避免技能三选一随属性漂移；随机五槽表用默认自动技能——固定槽位会强行带 IronBody，把随机配装的防御从 2,752 抬到 5,380、中位从 181 变 212，反而不代表随机装备下的真实选择。maxGear 的 50 种子在固定与自动两种技能口径下都是 240。
+
+| 口径（50 种子，maxFloor 400） | min | P10 | 中位 | P90 | max | 打满 400 |
+|---|---:|---:|---:|---:|---:|---:|
+| 2.8 maxGear（历史） | 255 | 276 | 296 | 312 | 320 | 0 |
+| 2.8 随机五槽（历史） | 168 | 195 | 220 | 245 | 286 | 0 |
+| **3.4 maxGear（当前）** | 195 | 227 | **240** | 250 | 261 | 0 |
+| **3.4 随机五槽（当前）** | 125 | 161 | **181** | 195 | 205 | 0 |
+
+3.4 的 maxGear 模板：攻 4,429 / 防 6,755 / 血 70,035 / 速度 122 / 暴击 95.0% / 暴伤 368% / 穿甲 34.9%；50 层经济为 50 局全部到达，平均累计金币 5,649,625、经验 11,680,741（模板词条已满，洗练花费 0）。
+
+为什么选 3.4：3.3 的 20 种子中位正好 250（目标上沿），3.5 的中位 231（低于下沿），3.4 的 240 居中且 P90 250 不越界。
+
+| 变量（20 种子，fixedSkills） | 设定 | 首死中位 | 结论 |
+|---|---|---:|---|
+| 副词条上限 | `EquipAffixMax` 整体 ×0.85 | 280 | 只降 20 层，压不动完美词条 |
+| 暴击率上限 | 0.95 → 0.80 | 286 | 弱杠杆 |
+| 暴击率上限 | 0.95 → 0.70 | 277 | 弱杠杆，且误伤非暴击流派 |
+| `EndlessBaseFactor` | 3.0 / 3.2 / 3.3 / **3.4** / 3.5 | 275 / 262 / 250 / **240** / 231 | 只有整体倍率能可靠落进 235~250 |
+
+技能污染教训：`ProbePolicy.ResolvePendingSkills` 会按当前属性实打三选一，改词条或暴击上限会连技能一起换。固定成基线自动选出的 1/2/4/9/14/13 后，2.8 的 maxGear 20 种子中位 300（与自动 296 一致）；若错固定成没有 IronBody 的 1/3/10/9/12/11，防御只有 3,302，中位立刻掉到 150。**比较 maxGear 配装差异必须用 `fixedSkills=true`；随机五槽例外，上表 181 是默认自动技能口径。**
+
+代价与口径：235~250 仍按「理想配装」验收；随机五槽从 220 降到 181，接受更早死。如果改按随机配装验收，目标要改写成 175~185，但那会让完美词条重新变成装饰。旧「随机 242」是 3 种子误读，已作废。倍率只作用于 `Models.CreateForEndlessFloor`，不碰战役、章节压迫和终局 BOSS；`EndlessMonsterLevelStep` 仍为 6（Lv = 110 + (层-1)×6）。
+
+复现（50 种子、400 层，长任务建议 `--detach`；`fixedSkills` 是第 13 个参数，需先把五个 rank 传 0）：
+
+```powershell
+# 理想配装：maxGear=true、随机词条质量 0.85、fixedSkills=true
+unity command --detach --format json eval -- --code 'return AutoBattle.EditorTools.EndlessPacing.Run(50, 400, 20261019, 1000, 150, 0.85f, true, 0, 0, 0, 0, 0, true);'
+unity job wait <job-id>
+
+# 随机五槽：maxGear=false，且 fixedSkills 保持默认 false（自动技能，表中 181 的口径）
+unity command --detach --format json eval -- --code 'return AutoBattle.EditorTools.EndlessPacing.Run(50, 400, 20261019, 1000, 150, 0.85f, false);'
+unity job wait <job-id>
+```
+
+落地：`HelloWorldProject/Assets/Scripts/GameConfig.cs:675`、`HelloWorldProject/Assets/Scripts/GameConfigData.cs:146`、`HelloWorldProject/Assets/Resources/game_config.json:128` 均为 3.4；探针改动见 `HelloWorldProject/Assets/Editor/EndlessPacing.cs` 的 `fixedSkills` 参数与「技能槽」输出行。验收：`QuickRegression.RunAllQuick()` 3/3 PASS（静态哨兵、成就 644/0、无尽冒烟 2 种子/40 层），静态哨兵不记录无尽层数，故不受 3.4 影响。
 
 ## 13. 验收清单
 
@@ -1150,6 +1200,7 @@ unity job wait <job-id>
 | 20 | ✅ | compilationFailed=false，consoleErrors/Warnings=0 |
 | 21 | ✅ | 2026-10-23 v11 Top-5 榜：连续 6 局按 3/7/5/4/6/9 层阵亡，名次依次 1/1/2/3/2/1；最终 5 条、层序 9/7/6/5/4，第 3 层被容量 5 挤出；手设的 endlessBestFloor=5 不被阵亡改写。存档 JSON `version=11`、`endlessTop` 5 条；`new PlayerData()` + `SaveSystem.Load` 读回仍重排为 9/7/6/5/4 |
 | 22 | ✅ | 2026-10-23 「清空榜单」：历史页签 5 行全显示、按钮可见且文案「清空榜单」、空提示隐藏；第一次点击只上膛（文案「确认清空 3.0s」，条数仍 5），第二次才真清（count=0、按钮隐藏、空提示出现、best 仍 5、落盘 `endlessTop` 为 0） |
+| 23 | ✅ | 2026-10-25 v13 成就兑换：纯逻辑连买 3 级成功、第 4 次返回「无尽起始层已兑换满（+3 层）。」，spent=300 / available=505；建议层 best=14 rank=3 → 13、rank=0 → 10、best=12 rank=3 → 11、best=3 rank=3 → 3；Play 中 805 点买 1 级后 rank=1 / 可用 705；Save→Load version=13 rank=2，手写 v12 + rank=3 读回 0 |
 
 Play 模式验收顺序建议：
 
@@ -1195,7 +1246,7 @@ Play 模式验收顺序建议：
 ### 阶段 5：平衡与探针（已完成）
 
 - EndlessPacing.cs：默认 20 个种子，输出首死分布/耗时/经济；P1000 满配用 50 个种子、最多 300 层。
-- 按 §12.2 调参；已定为 EndlessBaseFactor=2.8、EndlessMonsterLevelStep=6，P200 首死中位 45 层；P1000 满配中位 221 层。
+- 按 §12.2 调参；当时定为 EndlessBaseFactor=2.8、EndlessMonsterLevelStep=6，P200 首死中位 45 层；P1000 满配中位 221 层。2026-10-25 D2 已把 EndlessBaseFactor 收紧到 3.4（P1000 满配 240，§12.5.4），Step 仍为 6。
 - 基线已记入 §12.4 / §12.5，并同步到 _balance/balance-analysis.md §10。
 
 ### 阶段 6：文档与收尾（已完成，2026-10-19）

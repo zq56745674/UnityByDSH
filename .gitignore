@@ -8,6 +8,8 @@ HelloWorldProject/[Ll]ogs/
 HelloWorldProject/[Uu]serSettings/
 HelloWorldProject/[Mm]emoryCaptures/
 HelloWorldProject/[Rr]ecordings/
+# Unity CLI 的 NUnit 报告（本地/CI 一次性产物，见 README「构建与 CI」）
+HelloWorldProject/test-results.xml
 
 # Unity 崩溃恢复时自动写出的临时场景
 HelloWorldProject/Assets/_Recovery/
@@ -69,8 +71,8 @@ _art/topn/
 # UI 逐面板审计截图（2026-10-22~23，见 docs/roadmap.md 第 4 节）
 _art/ui-audit/
 
-# 一次性验证产物：探针脚本、UI dump、提交信息草稿（见 docs/roadmap.md A2）
-_tmp_verify/
+# 一次性验证产物：探针脚本、UI dump、提交信息草稿、NUnit 报告（见 docs/roadmap.md E4）
+_art/tmp-verify/
 _balance/*.bak
 
 # 归档区：拆分前的备份、早期截图，保留在本地但不入库

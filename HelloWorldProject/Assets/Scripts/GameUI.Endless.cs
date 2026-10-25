@@ -84,8 +84,8 @@ namespace AutoBattle
                 FontSmall + 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
             AttachTooltip(_endlessStartText.rectTransform,
                 "起始层 = 本档最高层 − " + GameConfig.EndlessCheckpointOffset +
-                "，最低从第 1 层开始（最高不足 " + (GameConfig.EndlessCheckpointOffset + 1) + " 层时就是第 1 层）。\n" +
-                "例：本档最高 14 层 → 从第 10 层开始；最高 3 层 → 仍从第 1 层开始。\n" +
+                "（成就点可再兑换 +1~+3 层，但不会超过本档最高层），最低从第 1 层开始。\n" +
+                "例：本档最高 14 层 → 从第 10 层开始；成就 +3 层 → 第 13 层（仍低于 14）。\n" +
                 "转生后本世要先重通 11-10 才恢复检查点；中途退出不计成绩，但已清层数会保留。");
 
             // 规则 / 历史榜 两个页签：共用下面 20..300 的内容区，省得再开一层浮层
@@ -250,13 +250,17 @@ namespace AutoBattle
                 }
                 else
                 {
-                    _endlessStartText.text = $"起始层：第 {startFloor} 层（本档最高 − {GameConfig.EndlessCheckpointOffset}）";
+                    int bonus = Mathf.Clamp(_game.Player.endlessStartRank, 0,
+                        AchievementSystem.MaxEndlessStartRank);
+                    string bonusNote = bonus > 0 ? $" + 成就 {bonus} 层" : string.Empty;
+                    _endlessStartText.text =
+                        $"起始层：第 {startFloor} 层（本档最高 − {GameConfig.EndlessCheckpointOffset}{bonusNote}）";
                 }
             }
 
             int checkpointOffset = Mathf.Max(0, GameConfig.EndlessCheckpointOffset);
             _endlessRulesText.text =
-                $"· 起始层 = 本档最高 − {checkpointOffset} 层；本档最高不足 {checkpointOffset + 1} 层时从第 1 层开始。\n" +
+                $"· 起始层 = 本档最高 − {checkpointOffset} 层（成就点最多再 +{AchievementSystem.MaxEndlessStartRank} 层，不越过最高层）；最高不足 {checkpointOffset + 1} 层时从第 1 层开始。\n" +
                 $"· 每层清完立刻进入下一层；每 {Mathf.Max(1, GameConfig.EndlessBossEvery)} 层一个 BOSS。\n" +
                 "· 死亡或撤退结束本局；最高层只记「已清除」的层。\n" +
                 "· 每局结束会记进本档历史榜（最多 5 局）；中途退出/换档/重置不算。\n" +
@@ -421,7 +425,7 @@ namespace AutoBattle
                 $"起始层 第 {run.startFloor} 层 · 本局击杀 {run.runKills} 只\n" +
                 $"用时 {FormatEndlessDuration(run.finishSeconds)} · {rankNote}";
 
-            int retryFloor = EndlessCatalog.StartFloorFor(best);
+            int retryFloor = _game.EndlessSuggestedStartFloor;
             _endlessRetryLabel.text = $"再次挑战（第 {retryFloor} 层）";
             _endlessResultReturnLabel.text = "返回战役";
         }

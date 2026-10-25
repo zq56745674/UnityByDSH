@@ -671,8 +671,10 @@ namespace AutoBattle
         /// 无尽怪物的额外属性倍率（只乘生命/攻击/防御，不乘速度）。
         /// 战役里 Lv.110 的终局档已经含 MaxTier×3 与章节压迫；无尽不吃那两层，
         /// 改用这一个显式倍率，强度才可单独调。
+        /// 2026-10-25 D2：2.8→3.4。50 种子满倍率模板首死中位 296→240（P10 227 / P90 250），
+        /// 随机五槽 220→181；235~250 的目标按「理想配装」口径保留，随机配装按设计更早死。
         /// </summary>
-        public static float EndlessBaseFactor = 2.8f;
+        public static float EndlessBaseFactor = 3.4f;
 
         public static int EndlessFloorGoldBase = 300;
         public static int EndlessFloorGoldPerFloor = 40;

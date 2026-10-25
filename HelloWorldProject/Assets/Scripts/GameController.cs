@@ -221,6 +221,13 @@ namespace AutoBattle
                 || SettingsOpen || MusicPanelOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen
                 || RebirthPanelOpen || AchievementPanelOpen || AboutOpen || DisplayOpen) return;
 
+            // 本世计时（v12）：暂停 / 浮层不计；刷怪等待、复活、商店倒计时与三选一都计真实秒。
+            // 速度倍率不影响它，读的是 realDt；上限防手改档把计时写爆。
+            if (Player != null && Player.lifeSeconds < RebirthHistory.MaxSeconds)
+            {
+                Player.lifeSeconds = Mathf.Min(RebirthHistory.MaxSeconds, Player.lifeSeconds + realDt);
+            }
+
             // 游戏速度只影响战斗推进，不影响存档节奏（要求 16）。
             float dt = Time.deltaTime * SpeedMultiplier;
 

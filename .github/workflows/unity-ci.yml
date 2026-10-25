@@ -1,0 +1,126 @@
+# Unity CI: quick regression + EditMode NUnit + Windows x64 build.
+#
+# Runs-on is Windows on purpose: the Windows editor ships the Windows Mono
+# player support, while a Linux runner would need the windows-il2cpp module and
+# this project builds the default Mono player.
+#
+# Required repository secret (Settings -> Secrets and variables -> Actions):
+#   UNITY_LICENSE_SERIAL          Unity Editor license serial.
+#
+# Optional Unity Cloud service-account secrets (only needed for Unity services,
+# not for the local test/build steps):
+#   UNITY_SERVICE_ACCOUNT_ID
+#   UNITY_SERVICE_ACCOUNT_SECRET
+#
+# Without UNITY_LICENSE_SERIAL the "Check required secrets" step fails with an
+# explicit message instead of silently skipping the Unity work.
+
+name: Unity CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: unity-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: HelloWorldProject
+
+    env:
+      UNITY_SERVICE_ACCOUNT_ID: ${{ secrets.UNITY_SERVICE_ACCOUNT_ID }}
+      UNITY_SERVICE_ACCOUNT_SECRET: ${{ secrets.UNITY_SERVICE_ACCOUNT_SECRET }}
+      UNITY_LICENSE_SERIAL: ${{ secrets.UNITY_LICENSE_SERIAL }}
+      UNITY_FORMAT: github
+      UNITY_NON_INTERACTIVE: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        working-directory: .
+        run: |
+          if (-not $env:UNITY_LICENSE_SERIAL) {
+            throw "Missing GitHub Actions secret UNITY_LICENSE_SERIAL. See README 'Build and CI'."
+          }
+
+      - name: Install Unity CLI
+        working-directory: .
+        run: |
+          irm https://unity.com/install.ps1 | iex
+          "$env:LOCALAPPDATA\Unity\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Resolve Unity download cache
+        id: unity-cache
+        working-directory: .
+        run: |
+          $info = unity cache info --format json | ConvertFrom-Json
+          "path=$($info.data.path)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Restore Unity download cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.unity-cache.outputs.path }}
+          key: unity-downloads-6000.6.5f1
+
+      - name: Compute Library cache key
+        id: cache-key
+        run: |
+          $key = unity cache key --target StandaloneWindows64
+          "key=$key" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Restore project Library
+        uses: actions/cache@v4
+        with:
+          path: HelloWorldProject/Library
+          key: unity-library-${{ steps.cache-key.outputs.key }}
+
+      - name: Install Unity Editor
+        working-directory: .
+        run: unity install 6000.6.5f1 --yes --accept-eula
+
+      - name: Activate Unity license
+        working-directory: .
+        run: unity license activate --serial "$env:UNITY_LICENSE_SERIAL"
+
+      - name: Preflight
+        run: unity doctor --ci
+
+      - name: Quick regression
+        run: unity run -- -executeMethod AutoBattle.EditorTools.QuickRegression.RunAllQuickBatch
+
+      - name: EditMode tests
+        run: unity test --mode EditMode --report-format junit --output test-results.xml
+
+      - name: Build Windows x64
+        run: unity build --target StandaloneWindows64 --output-path Build/Windows/AutoBattle.exe
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editmode-test-results
+          path: HelloWorldProject/test-results.xml
+          if-no-files-found: warn
+
+      - name: Upload Windows build
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoBattle-Windows-x64
+          path: HelloWorldProject/Build/Windows/
+          if-no-files-found: error
+
+      - name: Return Unity license
+        if: always() && env.UNITY_LICENSE_SERIAL != ''
+        working-directory: .
+        run: unity license return --yes

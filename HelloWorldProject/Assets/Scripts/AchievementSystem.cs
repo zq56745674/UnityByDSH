@@ -19,6 +19,12 @@ namespace AutoBattle
         /// <summary>切档 / 重置 / 转生 / 读档：界面应清空尚未播完的 toast 队列。</summary>
         public static event Action ContextReset;
 
+        /// <summary>成就点能兑换的无尽起始层上限（每级 +1 层）。</summary>
+        public const int MaxEndlessStartRank = 3;
+
+        /// <summary>每级无尽起始层消耗的成就点。</summary>
+        public const int EndlessStartPointCost = 100;
+
         /// <summary>unlocked 列表的版本号；UI 用它判断成就面板是否需要重绘。</summary>
         public static int Version { get; private set; }
 
@@ -78,6 +84,65 @@ namespace AutoBattle
             player.achievements.unlocked.Add(id);
             Version++;
             HasUnsavedUnlocks = true;
+            return true;
+        }
+
+        /// <summary>本档已赚到的成就点总额（按目录重算，不另存流水）。</summary>
+        public static int EarnedPoints(PlayerData player)
+        {
+            if (player == null || player.achievements == null || player.achievements.unlocked == null)
+                return 0;
+            if (!AchievementCatalog.Loaded && !AchievementCatalog.Reload()) return 0;
+
+            int sum = 0;
+            IReadOnlyList<AchievementDef> all = AchievementCatalog.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                AchievementDef def = all[i];
+                if (def != null && player.achievements.IsUnlocked(def.id)) sum += def.points;
+            }
+            return sum;
+        }
+
+        /// <summary>已经花在无尽起始层上的成就点。</summary>
+        public static int SpentPoints(PlayerData player)
+        {
+            if (player == null) return 0;
+            return Mathf.Clamp(player.endlessStartRank, 0, MaxEndlessStartRank) * EndlessStartPointCost;
+        }
+
+        /// <summary>当前还能自由支配的成就点。</summary>
+        public static int AvailablePoints(PlayerData player) =>
+            Mathf.Max(0, EarnedPoints(player) - SpentPoints(player));
+
+        /// <summary>
+        /// 用成就点兑换一级无尽起始层。只影响无尽开局，不改任何战斗数值。
+        /// 成功时把等级写进 <see cref="PlayerData.endlessStartRank"/> 并返回 true。
+        /// </summary>
+        public static bool TryBuyEndlessStartRank(PlayerData player, out string message)
+        {
+            if (player == null)
+            {
+                message = "没有可兑换的存档。";
+                return false;
+            }
+
+            int rank = Mathf.Clamp(player.endlessStartRank, 0, MaxEndlessStartRank);
+            if (rank >= MaxEndlessStartRank)
+            {
+                message = $"无尽起始层已兑换满（+{MaxEndlessStartRank} 层）。";
+                return false;
+            }
+
+            int available = AvailablePoints(player);
+            if (available < EndlessStartPointCost)
+            {
+                message = $"成就点不足：还差 {EndlessStartPointCost - available} 点。";
+                return false;
+            }
+
+            player.endlessStartRank = rank + 1;
+            message = $"已解锁无尽起始 +1 层（花费 {EndlessStartPointCost} 成就点）。";
             return true;
         }
 

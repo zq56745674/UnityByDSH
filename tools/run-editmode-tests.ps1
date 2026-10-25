@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   等价于：
-      unity test <Project> --mode EditMode --output _tmp_verify/test-results.xml
+      unity test <Project> --mode EditMode --output _art/tmp-verify/test-results.xml
 
   测试程序集是 Assets/Tests/AutoBattle.Tests.asmdef（Unity Test Framework 1.8.0），
   所以这里必须让 Unity 以 batchmode 独占工程：Editor 正开着时直接退出，避免
@@ -22,7 +22,7 @@
 [CmdletBinding()]
 param(
     [string]$Project = (Join-Path $PSScriptRoot '..\HelloWorldProject'),
-    [string]$Output = '_tmp_verify/test-results.xml',
+    [string]$Output = '_art/tmp-verify/test-results.xml',
     [string]$Filter = '',
     [int]$TimeoutSeconds = 480
 )

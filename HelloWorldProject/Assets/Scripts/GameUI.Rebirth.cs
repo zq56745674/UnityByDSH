@@ -31,18 +31,20 @@ namespace AutoBattle
         private Text _rebirthReasonText;
         private Button _rebirthConfirmButton;
         private Text _rebirthConfirmLabel;
+        private readonly Text[] _rebirthRecordTexts = new Text[RebirthHistory.Capacity];
 
         /// <summary>二次确认的截止时间（Time.unscaledTime）；0 表示未上膛。</summary>
         private float _rebirthConfirmUntil;
         private bool _rebirthWasOpen;
 
         /// <summary>
-        /// 轮回面板。尺寸按 docs/rebirth.md：680×540，五行永久升级，每行一个购买按钮。
+        /// 轮回面板。尺寸按 docs/rebirth.md：680×680（v2 加最快轮回榜后从 540 抬高），
+        /// 五行永久升级，每行一个购买按钮；底部是纪录榜。
         /// 入口在存档面板，因为它不可逆、低频，不适合放在左栏常驻按钮里。
         /// </summary>
         private void BuildRebirthPanel(Transform root)
         {
-            _rebirthPanel = CreatePanel(root, "RebirthPanel", 300, 90, 680, 540,
+            _rebirthPanel = CreatePanel(root, "RebirthPanel", 300, 20, 680, 680,
                 GameConfig.OverlayBg, true);
 
             CreateIcon(_rebirthPanel, "ui_rebirth", 20, 14, 24);
@@ -110,6 +112,15 @@ namespace AutoBattle
             _rebirthReasonText = CreateText(_rebirthPanel, "RebirthReason", "", 220, 502, 440, 34,
                 FontTiny + 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
+            // 最快轮回榜（v12）。只读展示，排序与清洗都在 RebirthHistory。
+            CreateText(_rebirthPanel, "RebirthRecordTitle", "轮回纪录 · 最快 5 世（本世用时）",
+                20, 544, 640, 18, FontSmall, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+            for (int i = 0; i < RebirthHistory.Capacity; i++)
+            {
+                _rebirthRecordTexts[i] = CreateText(_rebirthPanel, "RebirthRecord" + i, "",
+                    20, 566 + i * 20, 640, 18, FontTiny + 1, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+            }
+
             _rebirthPanel.gameObject.SetActive(false);
         }
 
@@ -145,7 +156,8 @@ namespace AutoBattle
             string bestFloorText = p.endlessBestFloor > 0 ? $"第 {p.endlessBestFloor} 层" : "—";
             _rebirthLeftText.text =
                 $"本世 Lv.{p.level} · 巅峰 {p.paragonLevel}\n" +
-                $"无尽最高 {bestFloorText} · 金币 {p.gold:N0}";
+                $"无尽最高 {bestFloorText} · 金币 {p.gold:N0}\n" +
+                $"本世用时 {RebirthHistory.FormatSeconds(Mathf.RoundToInt(p.lifeSeconds))} · 保留最低分 1 件";
             _rebirthRightText.text =
                 $"预计 +{marks} 印记\n" +
                 $"<color=#8C99B0>巅峰 {paragonMarks} + 无尽 {floorMarks} + 金币 {goldMarks} + 基础 1</color>";
@@ -183,9 +195,33 @@ namespace AutoBattle
                 $"本次可得 <b>{marks}</b> 印记" +
                 $"<color=#8C99B0>（巅峰 {paragonMarks} + 无尽 {floorMarks} + 金币 {goldMarks} + 基础 {RebirthCatalog.BaseMarks}）</color>";
             _rebirthKeepText.text =
-                $"保留：印记余额 {p.rebirthMarks} → {p.rebirthMarks + marks} · 无尽最高 {bestFloorText} · 成就与全局纪录";
+                $"保留：印记 {p.rebirthMarks} → {p.rebirthMarks + marks} · 无尽最高 {bestFloorText} · 成就 / 纪录 / 1 件装备";
             _rebirthResetText.text =
-                $"重置：Lv.{p.level} → Lv.{p.RebirthStartLevel}，金币 → {p.RebirthStartGold:N0}，药剂 → {p.RebirthStartPotions}；关卡 / 装备 / 技能 / 巅峰清零";
+                $"重置：Lv.{p.level} → Lv.{p.RebirthStartLevel}，金币 → {p.RebirthStartGold:N0}，药剂 → {p.RebirthStartPotions}；关卡 / 技能 / 巅峰清零，装备只清 4 件";
+
+            var top = p.rebirthTop;
+            for (int i = 0; i < _rebirthRecordTexts.Length; i++)
+            {
+                if (top == null || i >= top.Count)
+                {
+                    _rebirthRecordTexts[i].text = i == 0 && (top == null || top.Count == 0)
+                        ? "还没有纪录 —— 每次转生会自动记下本世用时"
+                        : "";
+                    _rebirthRecordTexts[i].color = GameConfig.TextMuted;
+                    continue;
+                }
+
+                RebirthRecord record = top[i];
+                if (record == null)
+                {
+                    _rebirthRecordTexts[i].text = "";
+                    _rebirthRecordTexts[i].color = GameConfig.TextMuted;
+                    continue;
+                }
+                _rebirthRecordTexts[i].text =
+                    $"{i + 1}. 第 {record.life} 世 · {RebirthHistory.FormatSeconds(record.seconds)} · P{record.paragon} · 无尽 {record.floor} 层 · +{record.marks} 印记";
+                _rebirthRecordTexts[i].color = i == 0 ? GameConfig.LogGold : GameConfig.TextInfo;
+            }
 
             bool can = _game.CanRebirth(out string reason);
             if (!can) _rebirthConfirmUntil = 0f;

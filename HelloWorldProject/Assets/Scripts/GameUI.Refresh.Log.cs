@@ -30,6 +30,117 @@ namespace AutoBattle
             RefreshDisplayPanel();
             RefreshGuide();
             RefreshBanner();
+            if (textTick) RefreshGoalLine(p);
+        }
+
+        /// <summary>
+        /// B8：按钮行下方那条「当前目标」。不新增系统，只把已有进度投影成一句话：
+        /// 主目标是下一关 / 终局 / 轮回，副目标是成就目录里「还差最少」的一条。
+        /// 10Hz 刷新，文本不变就不赋值。
+        /// </summary>
+        private void RefreshGoalLine(PlayerData p)
+        {
+            if (_goalMainText == null || _goalSideText == null || p == null) return;
+
+            string main = BuildGoalMain(p);
+            if (main != _goalMainCache)
+            {
+                _goalMainCache = main;
+                _goalMainText.text = main;
+            }
+
+            string side = BuildGoalSide(p);
+            if (side != _goalSideCache)
+            {
+                _goalSideCache = side;
+                _goalSideText.text = side;
+            }
+        }
+
+        private string BuildGoalMain(PlayerData p)
+        {
+            if (_game.PendingSkillPicks > 0)
+                return $"目标  三选一：选择本局技能（剩 {_game.PendingSkillPicks} 次）";
+
+            // 从已解锁章里找第一个没首通的关；整章清完就顺延到下一章。
+            int stages = StageCatalog.StagesPerChapter;
+            int chapter = Mathf.Clamp(p.maxChapterUnlocked, 1, StageCatalog.ChapterCount);
+            int stage = 1;
+            for (; chapter <= StageCatalog.ChapterCount; chapter++, stage = 1)
+            {
+                while (stage <= stages && p.IsStageFirstCleared(chapter, stage)) stage++;
+                if (stage <= stages) break;
+            }
+
+            bool allCleared = chapter > StageCatalog.ChapterCount;
+            if (!allCleared)
+            {
+                int gold = StageCatalog.FirstClearGold(chapter, stage);
+                if (StageCatalog.IsChapterFinal(stage) && chapter < StageCatalog.ChapterCount)
+                    return $"目标  首通 {chapter}-{stage}（章末），解锁第 {chapter + 1} 章 · +{gold:N0} 金币";
+                if (chapter == StageCatalog.ChapterCount && StageCatalog.IsChapterFinal(stage))
+                    return $"目标  终局：首通 {chapter}-{stage}，解锁轮回与无尽 · +{gold:N0} 金币";
+                return $"目标  推图：首通 {chapter}-{stage} · +{gold:N0} 金币";
+            }
+
+            if (_game.RebirthUnlocked)
+            {
+                if (_game.CanRebirth(out string reason))
+                    return $"目标  轮回：预计 +{_game.PendingRebirthMarks} 印记（存档 → 轮回）";
+                return $"目标  轮回准备：{reason}";
+            }
+
+            if (p.endlessBestFloor > 0)
+                return $"目标  无尽：最高 {p.endlessBestFloor} 层，继续挑战";
+            return "目标  无尽：从第 1 层开始";
+        }
+
+        private string BuildGoalSide(PlayerData p)
+        {
+            if (!AchievementCatalog.Loaded) return "成就表未加载";
+            var all = AchievementCatalog.All;
+            if (all == null || all.Count == 0) return "成就 —";
+
+            // 「下一件可达成」按还差多少选，而不是按百分比：新档 0/1 的小成就
+            // 应该排在 1/100 的「满级」前面。剩余相同再按完成度高者优先。
+            AchievementDef best = null;
+            long bestValue = 0;
+            long bestRemaining = long.MaxValue;
+            float bestRatio = -1f;
+            int locked = 0;
+            for (int i = 0; i < all.Count; i++)
+            {
+                AchievementDef def = all[i];
+                if (def == null || string.IsNullOrEmpty(def.id) || def.target <= 0) continue;
+                if (p.achievements != null && p.achievements.IsUnlocked(def.id)) continue;
+
+                locked++;
+                long value = AchievementSystem.Metric(p, def.metric);
+                long remaining = def.target - value;
+                if (remaining < 0) remaining = 0;
+                float ratio = Mathf.Clamp01((float)value / def.target);
+                if (best == null || remaining < bestRemaining
+                    || (remaining == bestRemaining && ratio > bestRatio))
+                {
+                    best = def;
+                    bestValue = value;
+                    bestRemaining = remaining;
+                    bestRatio = ratio;
+                }
+            }
+
+            if (best == null)
+                return locked == 0 ? $"成就 {all.Count}/{all.Count} 全达成" : "成就 —";
+            return $"成就 {best.name} {Compact(bestValue)}/{Compact(best.target)}";
+        }
+
+        /// <summary>成就进度用紧凑数字，避免 264 宽的副文本被大数挤爆。</summary>
+        private static string Compact(long value)
+        {
+            if (value < 0) value = 0;
+            if (value < 1000) return value.ToString("N0");
+            if (value < 1000000) return (value / 1000f).ToString("0.#") + "k";
+            return (value / 1000000f).ToString("0.#") + "M";
         }
 
         /// <summary>
