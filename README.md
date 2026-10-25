@@ -239,7 +239,7 @@ pwsh tools/build-windows.ps1
 
 CI 在 [`.github/workflows/unity-ci.yml`](.github/workflows/unity-ci.yml)：`runs-on: windows-latest`（Ubuntu runner 没有 Windows Mono 模块，`unity ci init` 默认给的 Ubuntu 模板不适合这个 target），依次跑快速回归（`quick-regression` 的 3 项）、EditMode NUnit（8 条）与 Windows 构建，任一步失败即 job 失败。首次启用需要在仓库 Secrets 里配 `UNITY_LICENSE_SERIAL`（必需；`UNITY_SERVICE_ACCOUNT_ID` / `UNITY_SERVICE_ACCOUNT_SECRET` 可选），并在分支保护里把 `Unity CI / verify` 设为 required check。
 
-边界：**本机链路已验**（NUnit 8/8、构建成功），**GitHub 上的流水线尚未实跑**（本仓库还没有配置 Unity 许可证 secret）；因此 CI 目前是「已写好、待首跑」，不能当作已通过的保证。
+边界：**本机链路已验**（NUnit 8/8、构建成功），**GitHub 上的流水线已触发但未跑通**：2026-10-25 两次 `Unity CI` 都在第 3 步「Check required secrets」失败，原因是仓库还没配 `UNITY_LICENSE_SERIAL`（第 4~17 步全部 skipped）。因此 CI 目前是「已触发、待补 secret」，不能当作已通过的保证。
 
 ## 开发进度
 

@@ -26,7 +26,7 @@
 | 文档 | **11 份** | README、AGENTS、achievements、audio-credits、endless-mode、equipment-reforge、rebirth、sprites-and-fx、roadmap（本文）、balance-analysis、_balance/README；行数随回填变化，以各文件为准 |
 | 存档 | **v13 / 3 槽 / 可导出导入、改名、跨槽复制** | `SaveSystem.cs:29`；PlayerPrefs（Windows 为注册表）+ `Documents/AutoBattle/slotN.json` 导出/导入（2026-10-24）；名字 ≤12 字，覆盖目标槽需 3 秒内二次确认；v13 加 `endlessStartRank` |
 | 工程 | Unity **6000.6.5f1**，单场景 `SampleScene` | 2026-10-24 起 `productName = AutoBattle`、`companyName = UnityByDSH`、`bundleVersion = 1.0.0`（PlayerSettings；改名前是 My project / DefaultCompany / 1.0） |
-| 自动化测试 | **快速回归 + EditMode NUnit 8 条 + Windows 构建脚本 + CI workflow**；CI 待 GitHub 首跑 | `AutoBattle.CI.cs` + `tools/quick-regression.ps1`（静态哨兵 + 成就核心 + 无尽冒烟）；`AutoBattle.Tests.asmdef` + `tools/run-editmode-tests.ps1`（8 条）；`tools/build-windows.ps1` + `.github/workflows/unity-ci.yml`；test-framework 1.8.0 已启用，3 个 asmdef |
+| 自动化测试 | **快速回归 + EditMode NUnit 8 条 + Windows 构建脚本 + CI workflow**；CI 已触发但缺 Secrets | `AutoBattle.CI.cs` + `tools/quick-regression.ps1`（静态哨兵 + 成就核心 + 无尽冒烟）；`AutoBattle.Tests.asmdef` + `tools/run-editmode-tests.ps1`（8 条）；`tools/build-windows.ps1` + `.github/workflows/unity-ci.yml`；test-framework 1.8.0 已启用，3 个 asmdef |
 
 ### 1.2 已经成型的系统（不是缺口，先确认共识）
 
@@ -47,7 +47,7 @@
 **玩法闭环完整，B8 已补上「现在该追什么」的投影，B2 已给成就点一个非战斗出口，D2 已把无尽理想配装的首死中位从 290 收到 240；剩下的缺口是：**
 1. **长线出口**——P1000 兜里 8.593 亿花不掉；成就点现在能换无尽起始层，但金币仍是唯一没有硬出口的终局资源；
 2. **终局内容**——B4c 已量到首通后到 P100 还要约 29 分钟，结论是保持 100；缺的不是门槛数值，而是 P100 之后的新玩法；
-3. **工程化**——快速回归 + 8 条 NUnit + 3 个 asmdef 已补；Windows 构建脚本与 CI workflow 已落地（本机 8/8 + 出包成功），但 GitHub 首跑与分支保护还没配，验收仍有一半靠本机 Editor。
+3. **工程化**——快速回归 + 8 条 NUnit + 3 个 asmdef 已补；Windows 构建脚本与 CI workflow 已落地（本机 8/8 + 出包成功），GitHub 首跑已触发但卡在缺 `UNITY_LICENSE_SERIAL`，分支保护也还没配，验收仍有一半靠本机 Editor。
 
 ## 2. 待办总览（按优先级）
 
@@ -58,7 +58,7 @@
 | 编号 | 事项 | 类 | 优先级 | 量级 |
 |---|---|---|---|---|
 | B1 | 金币出口（商店 2.0）只有构想、无设计稿 | 玩法 | P2 | 2~3 天（含设计） |
-| A8 | 构建与 CI：本机脚本/workflow 已写，GitHub 首跑 + 分支保护未做 | 工程 | P3 | 剩余约 30 min（需仓库 Secrets 权限） |
+| A8 | 构建与 CI：本机脚本/workflow 已写；GitHub 首跑已触发但缺 Secrets 失败，分支保护未做 | 工程 | P3 | 剩余约 30 min（需仓库 Secrets 权限） |
 | B9 | 技能只有三选一，无 reroll/构筑协同 | 玩法 | P4 | 设计题 |
 
 ### 2.2 已完成（保留编号）
@@ -135,7 +135,7 @@
 - **验证**：`quick-regression.ps1 -Batch` 退出码 0（三步全 PASS 才返回 0）；EditMode NUnit **8/8**；Windows 构建成功；`git diff --check` 干净。
 - **推送**：用户已授权 `commit and push`（m05886）；本机 hosts 把 github.com 指向 127.0.0.1，已用 `git -c http.curloptResolve=github.com:443:20.205.243.166 push origin main` 推上去（`GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never`）。`git rev-list --count origin/main..HEAD` = 0，`origin/main` = `e0b9f72`。
 
-### A8 构建流程与 CI（P3，本机链路 ✅ / GitHub 首跑 ◐）
+### A8 构建流程与 CI（P3，本机链路 ✅ / GitHub 首跑已触发但缺 secrets ❌）
 
 - **现状（2026-10-25）**：`tools/quick-regression.ps1`（静态哨兵 + 成就核心 + 无尽冒烟）与 `tools/run-editmode-tests.ps1`（8 条 NUnit）已可用，但此前没有 Player build 脚本，也没有 CI。
 - **已完成（本机）**：
@@ -143,8 +143,9 @@
   - `.github/workflows/unity-ci.yml`：`runs-on: windows-latest`（Ubuntu runner 没有 Windows Mono 模块），16 步，含 Unity CLI 安装、downloads/Library 缓存、许可证激活、`quick-regression`（3 项）、EditMode NUnit（8 条）、Windows 构建与产物上传；缺 `UNITY_LICENSE_SERIAL` 会明确失败。
   - 本机实测：NUnit **8/8 通过（0 失败、0 跳过，0.11s）**；`build-windows.ps1` 构建成功，`AutoBattle.exe` 0.6 MB / 整目录 171.6 MB，SHA256 `001AEEBFB92718F8B49F0C0E0A03E313C54669552B08E952B2FEE3DDD143683A`；`AutoBattle_Data`、`UnityPlayer.dll`、`MonoBleedingEdge`、`D3D12` 齐全。
   - 顺手修掉一个真 bug：`unity run` 的 batchmode 参数里不能再带 `-quit`（CLI 保留 flag，报 `Forwarded argument '-quit' conflicts with a reserved Unity flag`）；`tools/quick-regression.ps1` 与 CI 都已去掉，退出码由 `RunAllQuickBatch` 自己 `EditorApplication.Exit` 决定。
-- **仍未完成（必须在 GitHub 侧做）**：① 在仓库 Secrets 配 `UNITY_LICENSE_SERIAL`（可选 service account）；② 首次 push 后看 `Unity CI / verify` 实际跑通 3/3 + 8/8；③ 在分支保护里把 `Unity CI / verify` 设为 required check（「失败阻止合并」不能由仓库文件单独保证）。
-- **验收边界**：本机「一条命令出包」与 NUnit 已过；**全新 clone 出包**与 **GitHub 首跑**尚未执行，因此 A8 暂记 ◐，不并入 §2.2 的已完成。
+- **GitHub 首跑（2026-10-25）**：push `e0b9f72` 与 `ebe8ba8` 各触发一次 `Unity CI`，均在第 3 步「Check required secrets」失败，失败原因就是缺 `UNITY_LICENSE_SERIAL`；第 4~17 步全部 skipped。运行 ID：`40202445313`（e0b9f72）、`40202474782`（ebe8ba8）。说明 workflow 触发与前置逻辑正常，卡在仓库 Secrets。
+- **仍未完成（必须在 GitHub 侧做）**：① 在仓库 Secrets 配 `UNITY_LICENSE_SERIAL`（可选 service account）；② 补 secret 后重跑，确认 `Unity CI / verify` 跑通 3/3 + 8/8 与 Windows 构建；③ 在分支保护里把 `Unity CI / verify` 设为 required check（「失败阻止合并」不能由仓库文件单独保证）。
+- **验收边界**：本机「一条命令出包」与 NUnit 已过；**全新 clone 出包**与 **GitHub 绿跑**尚未完成（首跑已触发，仅因缺 secret 失败），因此 A8 暂记 ◐，不并入 §2.2 的已完成。
 - **依赖**：§8 决策 #5 已按「先落发行向工程化」处理；正式上架/发版仍另说。
 
 ## 4. UI / UX（C）
@@ -355,7 +356,7 @@
 
 > 进展：C2、C3、C4、C8、C9、C10、C11 已完成并 Play 验收。
 
-**第三批（当前，按决策点推进）**：A7 已提交 `e0b9f72`（36 files / +1,453 / −216）→ B1 设计稿（金币出口/商店 2.0）→ B9 设计题。本批已完成 B4（a+b）、B8、B2（成就点换无尽起始层）、D3（财运掉落量化，保持 +2%/级）、B4c（P100 门槛复评，保持 100）、D2（无尽口径 2.8→3.4）、E4（一次性产物归并到 `_art/`）、A8（Windows 构建脚本 + CI workflow；本机 8/8 与出包已验，GitHub 首跑待配置）。
+**第三批（当前，按决策点推进）**：A7 已提交 `e0b9f72`（36 files / +1,453 / −216）→ B1 设计稿（金币出口/商店 2.0）→ B9 设计题。本批已完成 B4（a+b）、B8、B2（成就点换无尽起始层）、D3（财运掉落量化，保持 +2%/级）、B4c（P100 门槛复评，保持 100）、D2（无尽口径 2.8→3.4）、E4（一次性产物归并到 `_art/`）、A8（Windows 构建脚本 + CI workflow；本机 8/8 与出包已验，GitHub 首跑已触发但缺 Secrets 失败）。
 
 每批结束的固定动作：`BalanceRegression.RunStaticOnly()` → PASS；`AchievementRegression.RunCore()` → 644/0；`console_status` → compilationFailed=false、consoleErrors=0；新增数字回填本文与对应 docs。
 
@@ -404,7 +405,7 @@
 | B3 ✅ | 称号佩戴与左栏展示（未佩戴「无名旅人」） | `GameController.Achievements.cs`、`GameUI.Achievements.cs`；`b3_achievement_titles.png` |
 | D1 ✅ | 转生加速 82.6% / 47.1%，进目标区间 | `GameConfig.cs:686/:695` |
 
-**A7 已收口**：`e0b9f72`（36 files / +1,453 / −216）已提交并推送（2026-10-25，用户 m05886 授权），`origin/main` 与本地一致。当前剩余 P0 为 0；A8 的 GitHub 首跑与分支保护仍需仓库 Secrets 权限。A1 的 72 项已于 2026-10-25 提交并推送。
+**A7 已收口**：`e0b9f72`（36 files / +1,453 / −216）已提交并推送（2026-10-25，用户 m05886 授权），`origin/main` 与本地一致。当前剩余 P0 为 0；A8 的 GitHub 绿跑与分支保护仍需仓库 Secrets 权限（首跑已触发，缺 `UNITY_LICENSE_SERIAL`）。A1 的 72 项已于 2026-10-25 提交并推送。
 
 ## 附录 A：测量方法（可复现）
 
