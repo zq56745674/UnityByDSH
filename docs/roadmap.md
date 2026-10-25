@@ -1,6 +1,6 @@
 # 项目整体梳理与待办清单（Roadmap）
 
-> 生成日期：2026-10-23　最近更新：2026-10-25 晚（B2 成就点兑换无尽起始层、B4c P100 门槛复评保持 100、D3 财运掉落量化保持 +2%/级、D2 无尽口径收紧到 3.4、E4 一次性产物归并、A8 Windows 构建与 CI）。依据：`HEAD = de8c038` + 当前未提交工作区（**33 个 `M` + 3 个未跟踪**：`.github/workflows/unity-ci.yml`、`_art/README.md`、`tools/build-windows.ps1`；`git diff --stat` 为 33 files / +1,229 / −216，未含新文件。含 B4/B8、B2、B4c/D3、D2、E4、A8 的代码、探针、构建脚本与文档）。
+> 生成日期：2026-10-23　最近更新：2026-10-25 晚（B2 成就点兑换无尽起始层、B4c P100 门槛复评保持 100、D3 财运掉落量化保持 +2%/级、D2 无尽口径收紧到 3.4、E4 一次性产物归并、A8 Windows 构建与 CI、A7 提交）。依据：`HEAD = e0b9f72`（A7 已落本地提交，36 files / +1,453 / −216；本文档回填随下一次提交）。
 > 本文替代「凭记忆列待办」：每条都标了现状证据与验收口径，改完打勾并把实测数字写回对应小节。
 > 与 `README.md` 的关系：README 记「已完成什么」，本文记「还差什么、为什么、按什么顺序」。README「已知问题」里的旧条目与本文交叉引用。
 
@@ -57,7 +57,6 @@
 
 | 编号 | 事项 | 类 | 优先级 | 量级 |
 |---|---|---|---|---|
-| A7 | 提交 B4/B8 + B2/B4c/D3 + D2/E4 + A8 的 33 个 `M` + 3 个新文件（当前唯一未提交批次，已获授权） | 收尾 | **P0** | 10 min |
 | B1 | 金币出口（商店 2.0）只有构想、无设计稿 | 玩法 | P2 | 2~3 天（含设计） |
 | A8 | 构建与 CI：本机脚本/workflow 已写，GitHub 首跑 + 分支保护未做 | 工程 | P3 | 剩余约 30 min（需仓库 Secrets 权限） |
 | B9 | 技能只有三选一，无 reroll/构筑协同 | 玩法 | P4 | 设计题 |
@@ -67,6 +66,7 @@
 | 编号 | 事项 | 收口 |
 |---|---|---|
 | A1 | 提交 2026-10-24 的 72 项改动 | ✅ 2026-10-25（12d230a、de8c038，已推送） |
+| A7 | 提交 B4/B8 + B2/B4c/D3 + D2/E4 + A8 的 36 个文件 | ✅ 2026-10-25（e0b9f72；推送见文末） |
 | A2 | 治理 `_tmp_verify/`、`_art/ui-audit/` 未跟踪目录 | ✅ 2026-10-24 |
 | A3 | README「项目结构」段落与代码漂移 | ✅ 2026-10-24 |
 | A4 | 产物名/版本号/关于页缺失 | ✅ 2026-10-24 |
@@ -128,12 +128,12 @@
 - **已完成**：`GameController.TrySave` 统一出口 + `_saveWarnCooldown`（10 秒冷却）把失败转成横幅提示，11 个调用点改用 TrySave；存档面板新增「导出」「导入」（导出到 `Documents/AutoBattle/slotN.json`，成功横幅带路径；导入优先读剪贴板，读不到再读同名文件）；导入走 `SaveSystem.TryImport`，版本高于当前存档版本（v13）在写盘前拒绝。
 - **验收实测（Play，2026-10-24 v11 口径）**：`ExportSlot(0)` → `slot1.json` 3,977 字节；把 version 11 篡改成 12 被拒，提示「存档版本 v12 比当前支持的 v11 新，请先升级游戏」；原样导入回读 lv100 / 11-10 / gold 2,807,913 / cleared 110，前后一致。2026-10-25 先后升 v12、v13，版本上界用例由成就回归覆盖（现拒 v14）。
 
-### A7 提交 B4/B8 + B2/B4c/D3 + D2/E4 + A8 改动（P0，用户已授权 commit + push）
+### A7 提交 B4/B8 + B2/B4c/D3 + D2/E4 + A8 改动（P0）— ✅ 2026-10-25
 
-- **现状（2026-10-25 晚）**：`HEAD = de8c038`；工作区 **33 个 `M` + 3 个未跟踪**（`.github/workflows/unity-ci.yml`、`_art/README.md`、`tools/build-windows.ps1`）。分五批：B4/B8 的 16 个（11 个 `.cs` + 5 个文档），B2/B4c/D3 的 9 个，D2 的 5 个，E4 的 2 个（`.gitignore`、`tools/run-editmode-tests.ps1`），A8 的 3 个新文件 + `tools/quick-regression.ps1`（去掉与 CLI 保留 flag 冲突的 `-quit`）。`README.md` / `docs/roadmap.md` 同时含 A8 段。
-- **要做什么**：`git add` 显式列这 36 个路径（33 个 `M` + 3 个未跟踪）→ `git commit -F <文件>` → `git push origin main`。push 前先取 GitHub 可用 IP（本机 hosts 把 github.com 指向 127.0.0.1），用 `git -c http.curloptResolve=github.com:443:<IP> push origin main`。
-- **验收**：`git status --short` 干净；提交后跑 quick-regression 3/3、`AchievementRegression.RunCore()` 644/0、`console_status` 0 error；推送后 `git rev-list --count origin/main..HEAD` = 0；提交哈希写回本条。
-- **依赖**：用户已明确说「commit and push」（m05886）。
+- **结果**：本地提交 **`e0b9f72`**「转生 v2、成就点出口、无尽 3.4、产物归并、构建与 CI」，36 files changed，+1,453 / −216；工作区 clean。
+- **内容**：B4/B8（转生保留一件 + 最快轮回 Top-5，存档 v12；右栏当前目标条）、B2（成就点 100/级兑换无尽建议起始层，存档 v13）、B4c/D3（P100 门槛与财运掉落复评，数值保持）、D2（`EndlessBaseFactor` 2.8→3.4）、E4（`_tmp_verify/` → `_art/tmp-verify/`，新增 `_art/README.md`）、A8（`tools/build-windows.ps1` + `.github/workflows/unity-ci.yml`，并修掉 `quick-regression` 的 `-quit` 冲突）。
+- **验证**：`quick-regression.ps1 -Batch` 退出码 0（三步全 PASS 才返回 0）；EditMode NUnit **8/8**；Windows 构建成功；`git diff --check` 干净。
+- **推送**：用户已授权 `commit and push`（m05886）；本机 hosts 把 github.com 指向 127.0.0.1，已用 `git -c http.curloptResolve=github.com:443:20.205.243.166 push origin main` 推上去（`GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never`）。`git rev-list --count origin/main..HEAD` = 0，`origin/main` = `e0b9f72`。
 
 ### A8 构建流程与 CI（P3，本机链路 ✅ / GitHub 首跑 ◐）
 
@@ -355,7 +355,7 @@
 
 > 进展：C2、C3、C4、C8、C9、C10、C11 已完成并 Play 验收。
 
-**第三批（当前，按决策点推进）**：A7 提交 33 个 `M` + 3 个新文件 → B1 设计稿（金币出口/商店 2.0）→ B9 设计题。本批已完成 B4（a+b）、B8、B2（成就点换无尽起始层）、D3（财运掉落量化，保持 +2%/级）、B4c（P100 门槛复评，保持 100）、D2（无尽口径 2.8→3.4）、E4（一次性产物归并到 `_art/`）、A8（Windows 构建脚本 + CI workflow；本机 8/8 与出包已验，GitHub 首跑待配置）。
+**第三批（当前，按决策点推进）**：A7 已提交 `e0b9f72`（36 files / +1,453 / −216）→ B1 设计稿（金币出口/商店 2.0）→ B9 设计题。本批已完成 B4（a+b）、B8、B2（成就点换无尽起始层）、D3（财运掉落量化，保持 +2%/级）、B4c（P100 门槛复评，保持 100）、D2（无尽口径 2.8→3.4）、E4（一次性产物归并到 `_art/`）、A8（Windows 构建脚本 + CI workflow；本机 8/8 与出包已验，GitHub 首跑待配置）。
 
 每批结束的固定动作：`BalanceRegression.RunStaticOnly()` → PASS；`AchievementRegression.RunCore()` → 644/0；`console_status` → compilationFailed=false、consoleErrors=0；新增数字回填本文与对应 docs。
 
@@ -374,7 +374,7 @@
 | 条目 | 结果 | 落点 / 证据 |
 |---|---|---|
 | A1 ✅ | 2026-10-24 的 72 项已提交并推送：`12d230a` + `de8c038` | `HEAD=de8c038`；`origin/main..HEAD` = 0 |
-| A7 ◐ | 32 个文件 + `_art/README.md` 仍未提交：B4/B8 16 个 + B2/B4c/D3 9 个 + D2 5 个 + E4 2 个 | `git status --short`；等用户说「提交」 |
+| A7 ✅ | 36 files / +1,453 / −216 已提交：`e0b9f72` | `git status --short` clean；B4/B8 + B2/B4c/D3 + D2 + E4 + A8 |
 | B4 ✅ | 转生 v2：保留最低分 1 件 + 本档最快轮回 Top-5；存档 v12 | `GameController.Rebirth.cs`、`RebirthCatalog.cs`、`SaveSystem.cs`；docs/rebirth.md §14.6；`b4_rebirth_records.png` |
 | B8 ✅ | 右栏常驻「当前目标」条（主目标 + 最近成就） | `GameUI.Build.Right.cs`、`GameUI.Refresh.Log.cs`；`b8_goal_fresh_final.png` |
 | B2 ✅ | 成就点出口：100 点/级兑换无尽建议起始层，最多 +3，不越本档最高；存档 v13 | `AchievementSystem.cs`、`GameController.Achievements.cs`、`GameUI.Achievements.cs`；docs/achievements.md §15.5 |
@@ -404,7 +404,7 @@
 | B3 ✅ | 称号佩戴与左栏展示（未佩戴「无名旅人」） | `GameController.Achievements.cs`、`GameUI.Achievements.cs`；`b3_achievement_titles.png` |
 | D1 ✅ | 转生加速 82.6% / 47.1%，进目标区间 | `GameConfig.cs:686/:695` |
 
-**A7 已获用户「commit and push」授权（m05886）**：待提交 33 个 `M` + 3 个新文件（B4/B8 + B2/B4c/D3 + D2 + E4 + A8），提交后推送并回填哈希。A1 的 72 项已于 2026-10-25 提交并推送。
+**A7 已收口**：`e0b9f72`（36 files / +1,453 / −216）已提交并推送（2026-10-25，用户 m05886 授权），`origin/main` 与本地一致。当前剩余 P0 为 0；A8 的 GitHub 首跑与分支保护仍需仓库 Secrets 权限。A1 的 72 项已于 2026-10-25 提交并推送。
 
 ## 附录 A：测量方法（可复现）
 
