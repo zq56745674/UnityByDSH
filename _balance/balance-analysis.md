@@ -299,7 +299,7 @@ Lv.100/P48、传说 Lv.110 武器 + 史诗 Lv.110 衣服、0 技能、满血 5 �
 巅峰会涨），但那意味着玩家要多花几十次重复送死才看到结局。
 
 结论：**`FinalBossStatFactor` 定格 1.6，把「巅峰 100 门槛」的说法作废**，`GameConfig.cs` / `Models.cs`
-的注释已按实测改写。理由是把首通推到 P100 的代价正好落在主循环上（新档通关率腰斩），而终局的门本来
+的注释已按实测改写。（2026-10-26 技能 2.0 后此数改为 **1.25**，见 §3.5.4d；本节是 1.6 时代的历史论证。）理由是把首通推到 P100 的代价正好落在主循环上（新档通关率腰斩），而终局的门本来
 不在这一件 BOSS 的属性上——它在巅峰曲线的长度（P100 13.8 min、P200 64.7 min 纯战斗，见上表）与
 无尽/转生两条副线上。
 
@@ -340,6 +340,27 @@ rank 0 vs 5：rank 5 同时带 `RebirthGoldPerRank=0.20` 的 +100% 金币，金�
 普通怪 `dropLevel=p.level=100`，Lv110 只从 BOSS 出。掉落加成对「Lv110 五槽集齐」没有直接因果。
 **结论：保持 `RebirthDropPerRank = 0.02f`**；降到 +1%/级对终局毕业没有可测收益，只会削弱前中期普通
 掉落。真正的杠杆是 `RebirthGoldPerRank`，不是掉落。详见 `docs/rebirth.md` §14.8。
+
+#### 3.5.4d 2026-10-26：技能 2.0 后终局门从 1.6 下调到 1.25
+
+技能 2.0 把 15 技能换成风暴/山崩双流派后，P48 只有 4 个技能（P10 签名主动 + P20~P40 三次选择），
+而旧系统 4 技能里能拿到铁躯/护盾生成/不死之身这类生存件。维持 1.6 时，11-10 BOSS 变成纯「技能数墙」：
+30 种子（12345/777/2026/4242/8888/31337 + 50000+i*101）的真实推进只有风暴 13 通关 / 17 触底、
+山崩 9 / 21，0 卡死；加签名主动也只能救回 1 和 4 个。
+
+按 1.30 / 1.25 / 1.20 三档复测同一批 30 种子：
+
+| FinalBossStatFactor | 风暴（通关/触底/卡死） | 山崩（通关/触底/卡死） |
+|---:|---|---|
+| 1.6 | 13 / 17 / 0 | 9 / 21 / 0 |
+| 1.3 | 23 / 7 / 0 | 27 / 3 / 0 |
+| **1.25** | **27 / 3 / 0** | **27 / 3 / 0** |
+| 1.2 | 28 / 2 / 0 | 30 / 0 / 0 |
+
+取 **1.25**：两流派对称、都 ≥25 通关、0 卡死，同时也是「不把 1.2 的 28/30 变成过松」的折中。它只作用于
+战役的 11-10（`Models.CreateForLevel` 的 `applyMaxTierAndFinalBoss=true`），无尽走
+`CreateForEndlessFloor` 不吃这个倍率。落地位置 `GameConfig.cs:312` / `GameConfigData.cs:49` /
+`game_config.json:38`，注释与 `Models.cs:715` 同步改写。
 
 ## 4. 100 级之后到底在玩什么
 
@@ -534,7 +555,7 @@ unity command --format json eval -- --code 'return AutoBattle.EditorTools.Balanc
 
 ### 10.3 2026-10-25 D2：EndlessBaseFactor 2.8 → 3.4
 
-> 本节是 2026-10-25 的当前口径；上面的 10.1/10.2 与 `docs/endless-mode.md` §12.5.1–§12.5.3 的 290/242 都是 2.8 口径历史，不要再当现行值引用。
+> 本节是 2026-10-25 的 3.4 口径，现为历史；2026-10-26 技能 2.0 复校后当前为 3.1 + Step 4，见 §10.4。上面的 10.1/10.2 与 `docs/endless-mode.md` §12.5.1–§12.5.3 的 290/242 都是 2.8 口径历史，不要再当现行值引用。
 
 背景：五槽上线后，`EndlessPacing` 的 50 种子 maxGear（P1000、Lv150、满倍率满词条、400 层上限）首死中位 290，高于设计目标 235~250。旧文档说「随机五槽 242 达标」，那是 3 种子口径；同参数 50 种子实际中位 220。也就是说，问题不是「理想配装与随机配装都超标」，而是「理想配装超标、随机配装本来就低于目标」。
 
@@ -545,7 +566,7 @@ unity command --format json eval -- --code 'return AutoBattle.EditorTools.Balanc
 
 方法：`EndlessPacing.Run(50, 400, 20261019, 1000, 150, 0.85f, true)`。为把「词条/暴击上限」与「技能选择」拆开，本轮给 `Run` 与 `BuildFullPlayer` 加了第 13 个参数 `bool fixedSkills`；固定槽位为 `1/2/4/9/14/13`（旋风斩 / 狂暴之心 / 铁躯 / 巨人杀手 / 护盾生成 / 濒死爆发），正是 50 种子 maxGear 基线自动选出的 6 个技能。
 
-技能污染是这轮最重要的教训：`ProbePolicy.ResolvePendingSkills` 会按当前属性实打三选一，改词条或暴击上限会连技能一起换，层数差不能直接归因。固定成同一套技能后，2.8 的 maxGear 基线 20 种子中位 300（与自动 296 一致）；若错固定成没有 IronBody 的 `1/3/10/9/12/11`，防御只有 3,302，中位直接掉到 150。**比较「配装差异」必须用 `fixedSkills=true`，否则会量出 150 层级的假悬崖。**
+技能污染是这轮最重要的教训（技能点自选前的历史口径）：旧 `ProbePolicy.ResolvePendingSkills` 会按当前属性实打三选一，改词条或暴击上限会连技能一起换，层数差不能直接归因。固定成同一套技能后，2.8 的 maxGear 基线 20 种子中位 300（与自动 296 一致）；若错固定成没有 IronBody 的 `1/3/10/9/12/11`，防御只有 3,302，中位直接掉到 150。**比较「配装差异」必须用 `fixedSkills=true`，否则会量出 150 层级的假悬崖。**
 
 例外是随机五槽：它的 181 是默认自动技能口径；强行固定成 IronBody 那套会把防御从 2,752 抬到 5,380、中位变 212，那不是玩家在随机装备下的真实选择，所以随机表不用固定技能。maxGear 在固定/自动两种口径下都是 240，不受影响。
 
@@ -576,4 +597,26 @@ unity command --format json eval -- --code 'return AutoBattle.EditorTools.Balanc
 代价与口径：目标 235~250 按「理想配装」验收，随机配装从 220 降到 181，接受更早死；如果按随机配装验收，目标应改成 175~185，但那会让「完美词条」重新变成无意义的装饰。旧「随机 242」不再引用。3.4 只作用于 `Models.CreateForEndlessFloor`，不碰战役、章节压迫和终局 BOSS；静态哨兵不记录无尽层数，所以 `BalanceRegression.RunStaticOnly()` 仍 PASS，`QuickRegression.RunAllQuick()` 3/3 PASS（成就 644/0、无尽冒烟 2 种子 / 40 层跑通）。
 
 落地位置：`HelloWorldProject/Assets/Scripts/GameConfig.cs:675`（3.4f）、`HelloWorldProject/Assets/Scripts/GameConfigData.cs:146`（3.4f）、`HelloWorldProject/Assets/Resources/game_config.json:128`（3.4）；探针 `HelloWorldProject/Assets/Editor/EndlessPacing.cs` 的 `fixedSkills` 与「技能槽」输出行只服务复现，不改游戏行为。
+
+### 10.4 2026-10-26 技能 2.0：3.1 + EndlessMonsterLevelStep 4（当前口径）
+
+技能表整表替换后，旧「固定 6 技能」模板（1/2/4/9/14/13，含铁躯/护盾生成/不死之身）不存在了。
+用两套毕业 build 在 3.4 / Step 6 下重跑，50 种子首死中位只有 **120（风暴）/ 140（山崩）**：
+输出端并不差（300 秒木桩风暴 57,998 DPS、山崩 61,517 DPS），差的是旧 build 的续航件。
+
+调参时发现等级斜率是主杠杆：只降 `EndlessBaseFactor` 到 2.8 仍到不了 235；把
+`EndlessMonsterLevelStep` 从 6 降到 4、同时把 `EndlessBaseFactor` 校准到 **3.1** 后：
+
+| 口径（50 种子，maxFloor 300，P1000/Lv150/affix 0.85/maxGear） | min | P10 | 中位 | P90 | max | 阵亡 |
+|---|---:|---:|---:|---:|---:|---:|
+| 风暴（3.1 / Step 4） | 210 | 225 | **240** | 255 | 270 | 50/50 |
+| 山崩（3.1 / Step 4） | 210 | 225 | **245** | 260 | 275 | 50/50 |
+
+两套都落在 235~250，差 5 层；山崩的减伤/护盾在高层普攻下更稳。随机五槽在 3.1 / Step 4 下未重测，
+§10.3 的 181 只在 3.4 / Step 6 口径成立。
+
+复现：`EndlessPacing.Run(50, 300, 20261018, 1000, 150, 0.85f, true, 0, 0, 0, 0, 0, true, doctrine)`，
+`doctrine` 1=风暴、2=山崩；探针按 `SkillCatalog.BuildOf(doctrine)` 固定 6 槽。落地位置
+`GameConfig.cs:652`（Step=4）、`GameConfig.cs:675`（Base=3.1f）、`GameConfigData.cs:146`、
+`game_config.json:123/128`。详见 `docs/endless-mode.md` §12.5.5。
 

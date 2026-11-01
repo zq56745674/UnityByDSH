@@ -25,10 +25,12 @@ namespace AutoBattle
         /// v10：加入跨世累计统计（stats）与成就状态（achievements）。
         /// v11：加入无尽 Top-N 历史榜（endlessTop，最多 5 局）。
         /// v12：加入本世计时（lifeSeconds）与最快轮回 Top-5（rebirthTop）；
-        /// v13：加入成就点兑换的无尽起始层等级（endlessStartRank）。
+        /// v13：加入成就点兑换的无尽起始层等级（endlessStartRank）；
+        /// v14：加入营地行商（收藏家等级 / 服务 / 珍藏 / 外观 / 自动出售）；
+        /// v15：加入技能流派（doctrine）与跨世技能掩码（skillEverMask）。
         /// 旧档缺 version 字段时读到 0，据此判断需要迁移。
         /// </summary>
-        private const int CurrentSaveVersion = 13;
+        private const int CurrentSaveVersion = 15;
 
         /// <summary>成就状态结构版本；比它新的档拒绝读取，避免旧版本覆盖新结构。</summary>
         public const int CurrentAchievementSchema = 1;
@@ -468,6 +470,12 @@ namespace AutoBattle
             public int paragonExp;
             public int ownedSkillMask;
 
+            /// <summary>v15 起：本世技能流派（0 未选 / 1 风暴 / 2 山崩）。</summary>
+            public int doctrine;
+
+            /// <summary>v15 起：跨世获得过的技能掩码（成就用，转生不清）。</summary>
+            public int skillEverMask;
+
         // v5：关卡 / 章节进度
         public int chapterIndex;
         public int stageIndex;
@@ -531,6 +539,16 @@ namespace AutoBattle
 
             /// <summary>当前佩戴的称号（成就 id，空 = 未佩戴）。新增字段，旧档读出来为空。</summary>
             public string equippedTitle;
+
+            /// <summary>v14 起：营地行商。收藏家等级、服务/珍藏位掩码与四类外观选择。</summary>
+            public int collectorRank;
+            public int shopServiceMask;
+            public int shopCosmeticMask;
+            public int equippedFrame = -1;
+            public int equippedBackdrop = -1;
+            public int equippedDamage = -1;
+            public int equippedAccent = -1;
+            public int autoSellQuality = -1;
         }
 
         public static bool HasSave => HasSaveIn(CurrentSlot);
@@ -557,6 +575,8 @@ namespace AutoBattle
                 paragonLevel = player.paragonLevel,
                 paragonExp = player.paragonExp,
                 ownedSkillMask = player.ownedSkillMask,
+                doctrine = Mathf.Clamp(player.doctrine, 0, SkillCatalog.DoctrineCount),
+                skillEverMask = player.skillEverMask & ((1 << SkillCatalog.All.Length) - 1),
                 chapterIndex = player.chapterIndex,
                 stageIndex = player.stageIndex,
                 stageKillCount = player.stageKillCount,
@@ -594,6 +614,16 @@ namespace AutoBattle
                 stats = player.stats,
                 achievements = player.achievements,
                 equippedTitle = player.equippedTitle ?? string.Empty,
+                collectorRank = Mathf.Clamp(player.collectorRank, 0, ShopCatalog.MaxCollectorRank),
+                shopServiceMask = player.shopServiceMask & ((1 << ShopCatalog.ServiceCount) - 1),
+                shopCosmeticMask = player.shopCosmeticMask & ((1 << ShopCatalog.CosmeticCount) - 1),
+                // 外观字段存的是 ShopCatalog 的全局下标（背景 6~9、伤害 10~12、强调 13~14），
+                // 不是各自类别内的局部序号；夹取范围必须按全局上界，否则会把 6 夹成 3 直接丢失外观。
+                equippedFrame = Mathf.Clamp(player.equippedFrame, -1, 5),
+                equippedBackdrop = Mathf.Clamp(player.equippedBackdrop, -1, 9),
+                equippedDamage = Mathf.Clamp(player.equippedDamage, -1, 12),
+                equippedAccent = Mathf.Clamp(player.equippedAccent, -1, 14),
+                autoSellQuality = Mathf.Clamp(player.autoSellQuality, -1, 2),
             };
 
             try
@@ -689,8 +719,17 @@ namespace AutoBattle
             player.paragonExp = Mathf.Max(0, data.paragonExp);
             // 技能位掩码只保留真实存在的技能位；越界 bit 会让「已获得技能数」虚高。
             int allSkillMask = (1 << SkillCatalog.All.Length) - 1;
-            player.ownedSkillMask = data.ownedSkillMask & allSkillMask;
-            player.pendingSkillPicks = Mathf.Max(0, data.pendingSkillPicks);
+            // v15 换掉了整套技能表：v14 及更早的技能 id 与语义都不再通用，不能按位映射。
+            // 旧档在这里先清空技能，读完字段后由 pendingLegacyDoctrineGrant 触发流派选择；
+            // 选完流派按巅峰等级获得技能点，由玩家自己选满 9 个，不再自动补发。
+            bool legacySkillMigration = data.version < 15;
+            player.ownedSkillMask = legacySkillMigration ? 0 : (data.ownedSkillMask & allSkillMask);
+            player.skillEverMask = legacySkillMigration ? 0 : (data.skillEverMask & allSkillMask);
+            player.doctrine = legacySkillMigration ? 0 : Mathf.Clamp(data.doctrine, 0, SkillCatalog.DoctrineCount);
+            // 技能 2.0 起没有「待选次数」，旧档字段一律丢弃，避免读档后还能触发旧三选一。
+            player.pendingSkillPicks = 0;
+            player.pendingLegacyDoctrineGrant = legacySkillMigration
+                && (data.paragonLevel >= 10 || data.ownedSkillMask != 0);
 
             // v5 才有的关卡进度。旧档缺这些字段时 JsonUtility 会给 0，
             // 所以不能只看值，必须按版本号决定是「迁移成 1-1」还是「读档」。
@@ -745,12 +784,12 @@ namespace AutoBattle
                     for (int s = 1; s <= last; s++) player.clearedStages.Add(PlayerData.StageKey(c, s));
                 }
             }
-            player.skillActive0 = data.skillActive0;
-            player.skillActive1 = data.skillActive1;
-            player.skillPassive0 = data.skillPassive0;
-            player.skillPassive1 = data.skillPassive1;
-            player.skillTrigger0 = data.skillTrigger0;
-            player.skillTrigger1 = data.skillTrigger1;
+            player.skillActive0 = legacySkillMigration ? -1 : data.skillActive0;
+            player.skillActive1 = legacySkillMigration ? -1 : data.skillActive1;
+            player.skillPassive0 = legacySkillMigration ? -1 : data.skillPassive0;
+            player.skillPassive1 = legacySkillMigration ? -1 : data.skillPassive1;
+            player.skillTrigger0 = legacySkillMigration ? -1 : data.skillTrigger0;
+            player.skillTrigger1 = legacySkillMigration ? -1 : data.skillTrigger1;
             SanitizeSkillState(player);
 
             // 旧档（version < 2）的装备是在暴击与浮动倍率之前生成的。
@@ -880,6 +919,40 @@ namespace AutoBattle
             if (!AchievementCatalog.IsUnlockedTitle(player, player.equippedTitle))
                 player.equippedTitle = string.Empty;
 
+            // v14：营地行商。旧档没有这些字段：等级/掩码为 0，外观为 -1。
+            // 手改档也要夹住，尤其掩码只保留真实存在的位，避免「拥有 32 件珍藏」。
+            if (data.version >= 14)
+            {
+                player.collectorRank = Mathf.Clamp(data.collectorRank, 0, ShopCatalog.MaxCollectorRank);
+                player.shopServiceMask = data.shopServiceMask & ((1 << ShopCatalog.ServiceCount) - 1);
+                player.shopCosmeticMask = data.shopCosmeticMask & ((1 << ShopCatalog.CosmeticCount) - 1);
+                player.equippedFrame = Mathf.Clamp(data.equippedFrame, -1, 5);
+                player.equippedBackdrop = Mathf.Clamp(data.equippedBackdrop, -1, 9);
+                player.equippedDamage = Mathf.Clamp(data.equippedDamage, -1, 12);
+                player.equippedAccent = Mathf.Clamp(data.equippedAccent, -1, 14);
+                player.autoSellQuality = Mathf.Clamp(data.autoSellQuality, -1, 2);
+            }
+            else
+            {
+                player.collectorRank = 0;
+                player.shopServiceMask = 0;
+                player.shopCosmeticMask = 0;
+                player.equippedFrame = -1;
+                player.equippedBackdrop = -1;
+                player.equippedDamage = -1;
+                player.equippedAccent = -1;
+                player.autoSellQuality = -1;
+            }
+
+            // 收藏家等级奖励是免费授予的：等级到了就补进掩码，旧档/手改档也不会漏。
+            player.shopCosmeticMask |= ShopCatalog.CollectorRewardMask(player.collectorRank);
+
+            // 只有买过的珍藏才能被装备；否则手改档能白拿外观。
+            if (player.equippedFrame >= 0 && !ShopCatalog.HasCosmetic(player, player.equippedFrame)) player.equippedFrame = -1;
+            if (player.equippedBackdrop >= 0 && !ShopCatalog.HasCosmetic(player, player.equippedBackdrop)) player.equippedBackdrop = -1;
+            if (player.equippedDamage >= 0 && !ShopCatalog.HasCosmetic(player, player.equippedDamage)) player.equippedDamage = -1;
+            if (player.equippedAccent >= 0 && !ShopCatalog.HasCosmetic(player, player.equippedAccent)) player.equippedAccent = -1;
+
             return true;
         }
 
@@ -922,13 +995,32 @@ namespace AutoBattle
         }
 
         /// <summary>
-        /// 技能状态兜底：清掉越界 / 类别不符 / 未拥有 / 重复装配的技能槽，
-        /// 并把待选次数夹到「还没获得的技能数」以内。
+        /// 技能状态兜底：清掉越界 / 类别不符 / 未拥有 / 重复装配的技能槽；
+        /// 技能点不存档，由巅峰应得数与已掌握数实时派生。
         /// </summary>
         private static void SanitizeSkillState(PlayerData player)
         {
             int allMask = (1 << SkillCatalog.All.Length) - 1;
             player.ownedSkillMask &= allMask;
+            player.skillEverMask &= allMask;
+
+            // 流派一旦确定，就只能拥有本流派 6 个专属 + 3 个通用；
+            // 未选流派时没有任何技能（旧档的补发由 pendingLegacyDoctrineGrant 负责）。
+            if (player.doctrine <= 0)
+            {
+                player.ownedSkillMask = 0;
+            }
+            else
+            {
+                for (int i = 0; i < SkillCatalog.All.Length; i++)
+                {
+                    if (!SkillCatalog.IsAvailableTo(player.doctrine, SkillCatalog.All[i].id))
+                        player.ownedSkillMask &= ~(1 << i);
+                }
+            }
+
+            // 跨世掩码只增不减：本世拥有的技能必然曾经拥有过。
+            player.skillEverMask |= player.ownedSkillMask;
 
             int perKind = PlayerData.SkillSlotsPerKind;
             var used = new bool[SkillCatalog.All.Length];
@@ -951,11 +1043,8 @@ namespace AutoBattle
                 used[id] = true;
             }
 
-            int ownedCount = 0;
-            for (int i = 0; i < SkillCatalog.All.Length; i++)
-                if ((player.ownedSkillMask & (1 << i)) != 0) ownedCount++;
-            player.pendingSkillPicks = Mathf.Clamp(
-                player.pendingSkillPicks, 0, Mathf.Max(0, SkillCatalog.All.Length - ownedCount));
+            // 技能点由「巅峰应得数 - 已掌握数」实时派生，存档里不再保存待选次数。
+            player.pendingSkillPicks = 0;
         }
 
         /// <summary>

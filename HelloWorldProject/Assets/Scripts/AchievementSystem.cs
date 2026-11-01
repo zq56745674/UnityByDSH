@@ -345,19 +345,14 @@ namespace AutoBattle
 
         private static int OwnedSkillCount(PlayerData p)
         {
-            int n = 0;
-            for (int i = 0; i < SkillCatalog.All.Length; i++)
-                if ((p.ownedSkillMask & (1 << i)) != 0) n++;
-            return n;
+            // 技能 2.0：每个流派只有 9 个技能，单个本世永远到不了 15。
+            // 成就口径改成「跨世曾经拥有过」，转生不清，玩家换流派才可能集齐 15 个。
+            return p.EverOwnedSkillCount;
         }
 
         private static int OwnedSkillCountByKind(PlayerData p, SkillKind kind)
         {
-            int n = 0;
-            int mask = p.ownedSkillMask;
-            for (int i = 0; i < SkillCatalog.All.Length; i++)
-                if ((mask & (1 << i)) != 0 && SkillCatalog.All[i].kind == kind) n++;
-            return n;
+            return p.EverOwnedSkillCountByKind(kind);
         }
 
         private static int MinOwnedKindCount(PlayerData p)

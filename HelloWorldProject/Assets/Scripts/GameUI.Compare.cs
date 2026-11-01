@@ -12,8 +12,8 @@ namespace AutoBattle
     public partial class GameUI
     {
         private RectTransform _comparePanel;
-        private readonly Button[] _compareSlotButtons = new Button[EquipmentSlots.Count];
-        private readonly Text[] _compareSlotLabels = new Text[EquipmentSlots.Count];
+        private Button[] _compareSlotButtons = new Button[EquipmentSlots.Count];
+        private Text[] _compareSlotLabels = new Text[EquipmentSlots.Count];
         private Text _compareCurrentText;
         private Text _comparePendingText;
         private Text _compareDeltaText;
@@ -34,6 +34,8 @@ namespace AutoBattle
 
         private void BuildComparePanel(Transform root)
         {
+            _compareSlotButtons = new Button[EquipmentSlots.Count];
+            _compareSlotLabels = new Text[EquipmentSlots.Count];
             _comparePanel = CreatePanel(root, "ComparePanel", 300, 140, 680, 440, GameConfig.OverlayBg, true);
 
             CreateSectionTitle(_comparePanel, "装备对比", 20, 12, 220, FontTitle, "ui_compare");
@@ -131,10 +133,8 @@ namespace AutoBattle
                 EquipmentSlot s = EquipmentSlots.All[i];
                 bool unlocked = p.IsEquipmentSlotUnlocked(s);
                 // 生图底框不染品牌色，只区分选中/未选中亮度。
-                _compareSlotButtons[i].image.color = selected
-                    ? Color.white
-                    : new Color(0.62f, 0.66f, 0.74f, 1f);
-                _compareSlotLabels[i].color = unlocked ? (selected ? Color.white : GameConfig.TextMuted) : GameConfig.BtnDisabledText;
+                _compareSlotButtons[i].image.color = selected ? Color.white : GameConfig.FrameTintDim;
+                _compareSlotLabels[i].color = unlocked ? (selected ? Color.white : GameConfig.BtnText) : GameConfig.BtnTextDim;
                 bool has = _game.HasPendingDrop(s);
                 // 转生 v2 会保留一件装备，保留件可能落在尚未解锁的槽位里；
                 // 这时标签不能写「未解锁」，否则和「装备仍生效」自相矛盾。
@@ -145,7 +145,7 @@ namespace AutoBattle
 
             if (current == null)
             {
-                _compareCurrentText.text = "<color=#8C99B0>（空）</color>";
+                _compareCurrentText.text = "<color=#6F6252>（空）</color>";
                 _compareCurrentText.color = GameConfig.TextMuted;
             }
             else
@@ -153,18 +153,18 @@ namespace AutoBattle
                 _compareCurrentText.color = GameConfig.TextNormal;
                 _compareCurrentText.text =
                     $"<size=14><b>{current.QualityName} {current.SlotName} Lv.{current.level}{current.EnhanceText}</b></size>\n"
-                    + $"<color=#8C99B0>评分</color> <b>{EquipmentScore.Of(p, current, slot):0}</b>"
-                    + (current.locked ? "   <color=#FFC864>🔒 已锁定</color>" : "   <color=#8C99B0>🔓 可替换</color>")
+                    + $"<color=#6F6252>评分</color> <b>{EquipmentScore.Of(p, current, slot):0}</b>"
+                    + (current.locked ? "   <color=#8A5A12>🔒 已锁定</color>" : "   <color=#6F6252>🔓 可替换</color>")
                     + "\n" + current.StatLine
                     + (current.AffixCount > 0 ? "\n" + current.AffixLine : "")
-                    + (current.reforgeCount > 0 ? "\n<color=#8C99B0>" + current.ReforgeCountText + "</color>" : "");
+                    + (current.reforgeCount > 0 ? "\n<color=#6F6252>" + current.ReforgeCountText + "</color>" : "");
             }
 
             if (pending == null)
             {
                 _comparePendingText.color = GameConfig.TextMuted;
                 _comparePendingText.text = "（暂无待选）\n\n"
-                    + "<color=#8C99B0>待选不是背包：每个槽位只留最高分的一件，换装或卖出后立刻腾空；"
+                    + "<color=#6F6252>待选不是背包：每个槽位只留最高分的一件，换装或卖出后立刻腾空；"
                     + "切换存档 / 重开 / 读档也会清空（待选不进存档）。</color>";
                 _compareDeltaText.text = "";
                 _compareHintText.text = "开启「自动换装」时，更高分掉落会直接穿上，不会进待选。";
@@ -180,12 +180,12 @@ namespace AutoBattle
 
                 _comparePendingText.color = GameConfig.TextNormal;
                 string deltaText = delta >= 0f
-                    ? $"<color=#6FE08A>（Δ +{delta:0.#}）</color>"
-                    : $"<color=#E08787>（Δ {delta:0.#}）</color>";
+                    ? $"<color=#2F6B3B>（Δ +{delta:0.#}）</color>"
+                    : $"<color=#9B2C2C>（Δ {delta:0.#}）</color>";
 
                 _comparePendingText.text =
                     $"<size=14><b>{pending.QualityName} {pending.SlotName} Lv.{pending.level}{pending.EnhanceText}</b></size>\n"
-                    + $"<color=#8C99B0>评分</color> <b>{EquipmentScore.Of(p, pending, slot):0}</b> {deltaText}\n"
+                    + $"<color=#6F6252>评分</color> <b>{EquipmentScore.Of(p, pending, slot):0}</b> {deltaText}\n"
                     + pending.StatLine
                     + (pending.AffixCount > 0 ? "\n" + pending.AffixLine : "");
 
@@ -194,7 +194,7 @@ namespace AutoBattle
 
                 _compareHintText.text = delta >= 0f
                     ? "换装后当前装备直接替换（旧的那件不会退回金币）；卖出按等级与品质折价。"
-                    : "<color=#E08787>注意：这件比当前装备差，换装会掉评分。</color>卖出按等级与品质折价。";
+                    : "<color=#9B2C2C>注意：这件比当前装备差，换装会掉评分。</color>卖出按等级与品质折价。";
                 _compareEquipButton.interactable = true;
                 _compareSellButton.interactable = true;
                 _compareEquipLabel.color = Color.white;
@@ -221,12 +221,12 @@ namespace AutoBattle
         {
             if (candidate == null) return "";
             if (current == null)
-                return "<color=#8C99B0>当前槽位为空，换上就是全增量。</color>";
+                return "<color=#6F6252>当前槽位为空，换上就是全增量。</color>";
 
             // 主属性行只放强化后的大数值；词条行把主词条与副词条合并成有效值。
             // 只比 critChance 会漏掉副词条里的暴击率（同一件装备两条都可能出现），
             // 而攻速 / 全属性 / 穿甲只存在于副词条，以前整行都看不到。
-            string main = "<color=#8C99B0>主属性：</color>"
+            string main = "<color=#6F6252>主属性：</color>"
                 + Signed("攻", candidate.EnhancedAttack - current.EnhancedAttack, "0")
                 + Signed("防", candidate.EnhancedDefense - current.EnhancedDefense, "0")
                 + Signed("血", candidate.EnhancedHp - current.EnhancedHp, "0")
@@ -247,7 +247,7 @@ namespace AutoBattle
             float allStats = candidate.affixAllStats - current.affixAllStats;
             float armorPen = candidate.affixArmorPen - current.affixArmorPen;
 
-            string affix = "<color=#8C99B0>词条：</color>"
+            string affix = "<color=#6F6252>词条：</color>"
                 + Signed("暴击率", critChance * 100f, "0.#", "%")
                 + Signed("暴伤", critDamage * 100f, "0.#", "%")
                 + Signed("攻速", speed * 100f, "0.#", "%")
@@ -259,9 +259,9 @@ namespace AutoBattle
 
         private static string Signed(string label, float value, string format, string suffix = "")
         {
-            if (Mathf.Abs(value) < 0.05f) return $"  <color=#8C99B0>{label} ±0{suffix}</color>";
+            if (Mathf.Abs(value) < 0.05f) return $"  <color=#6F6252>{label} ±0{suffix}</color>";
             string text = value > 0f ? $"+{value.ToString(format)}{suffix}" : $"{value.ToString(format)}{suffix}";
-            string color = value > 0f ? "#6FE08A" : "#E08787";
+            string color = value > 0f ? "#2F6B3B" : "#9B2C2C";
             return $"  <color={color}>{label} {text}</color>";
         }
 

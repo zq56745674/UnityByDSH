@@ -101,25 +101,37 @@ namespace AutoBattle
             }
 
             var rt = (RectTransform)button.transform;
+            float w = rt.sizeDelta.x;
             float h = rt.sizeDelta.y;
             float iconY = (h - glyphSize) * 0.5f;
-            // 生图底框有一圈较厚的金边，图标贴太左会被金边吃掉（播放键的左尖、暂停键的左条最明显）。
-            // 按按钮高度给内边距，短按钮不会浪费空间，56 高的开始/暂停也能完整露出。
-            float iconX = Mathf.Clamp(h * 0.44f, 9f, 27f);
+            // 图标先按左上角摆在「假想贴左」的位置，真正的水平位置由 UiButtonCluster 在布局后
+            // 连同文字一起居中——所以这里只需要一个上下居中的初始值。
+            float iconX = Mathf.Clamp(h * 0.5f, 12f, 28f);
             Image icon = CreateIcon(button.transform, glyphKey, iconX, iconY, glyphSize);
 
+            int size = fontSize > 0 ? fontSize : Mathf.Clamp(Mathf.RoundToInt(h * 0.33f), 11, 17);
             if (label != null)
             {
                 label.gameObject.SetActive(true);
-                int size = fontSize > 0 ? fontSize : Mathf.Clamp(Mathf.RoundToInt(h * 0.33f), 11, 17);
                 label.fontSize = size;
                 label.fontStyle = FontStyle.Bold;
-                label.alignment = TextAnchor.MiddleLeft;
-                label.resizeTextForBestFit = true;
-                label.resizeTextMinSize = 9;
-                label.resizeTextMaxSize = size;
-                label.rectTransform.offsetMin = new Vector2(iconX + glyphSize + 6f, 2f);
-                label.rectTransform.offsetMax = new Vector2(-10f, -2f);
+                label.alignment = TextAnchor.MiddleCenter;
+                label.resizeTextForBestFit = false;
+                label.rectTransform.offsetMin = Vector2.zero;
+                label.rectTransform.offsetMax = Vector2.zero;
+            }
+
+            // 图标 + 文字整簇水平居中，并按底框图内芯中心补偿（下缘金边更厚，纯矩形居中会偏低）。
+            if (label != null)
+            {
+                UiButtonCluster cluster = button.GetComponent<UiButtonCluster>();
+                if (cluster == null) cluster = button.gameObject.AddComponent<UiButtonCluster>();
+                cluster.icon = icon;
+                cluster.label = label;
+                cluster.gap = 6f;
+                cluster.insetX = 10f;
+                cluster.maxFontSize = size;
+                cluster.faceOffset = UiFace.Pixels(frameKey, w, h);
             }
 
             AttachTooltip(button, string.IsNullOrEmpty(tooltip) ? (label != null ? label.text : null) : tooltip);
@@ -136,8 +148,9 @@ namespace AutoBattle
             var rt = (RectTransform)button.transform;
             float w = rt.sizeDelta.x;
             float h = rt.sizeDelta.y;
+            Vector2 face = UiFace.Pixels(frameKey, w, h);
             Image icon = CreateIcon(button.transform, glyphKey,
-                (w - glyphSize) * 0.5f, (h - glyphSize) * 0.5f, glyphSize);
+                (w - glyphSize) * 0.5f + face.x, (h - glyphSize) * 0.5f + face.y, glyphSize);
 
             if (label != null)
             {
@@ -146,7 +159,8 @@ namespace AutoBattle
                     const float badgeW = 18f;
                     const float badgeH = 14f;
                     const float badgeBottom = 8f;
-                    float badgeX = w - badgeW - 4f;
+                    // 往里收一点：贴边时黑底方角会探出八角徽章的金边。
+                    float badgeX = w - badgeW - 7f;
                     float badgeY = h - badgeH - badgeBottom;
 
                     Image badgeBg = CreateImage(button.transform, "BadgeBg", badgeX, badgeY, badgeW, badgeH,
@@ -187,18 +201,23 @@ namespace AutoBattle
             var rt = (RectTransform)button.transform;
             float w = rt.sizeDelta.x;
             float h = rt.sizeDelta.y;
+            Vector2 face = UiFace.Pixels(frameKey, w, h);
             Image icon = CreateIcon(button.transform, glyphKey,
-                (w - glyphSize) * 0.5f, 6f, glyphSize);
+                (w - glyphSize) * 0.5f + face.x, 6f + face.y, glyphSize);
 
             if (label != null)
             {
                 label.gameObject.SetActive(true);
                 label.fontSize = 11;
                 label.fontStyle = FontStyle.Bold;
+                // 六边形底框是深皮革，默认按钮文字色（深墨）压上去几乎看不见。
+                label.color = new Color(0.86f, 0.80f, 0.66f);
                 label.alignment = TextAnchor.MiddleCenter;
                 label.resizeTextForBestFit = false;
-                label.rectTransform.offsetMin = new Vector2(2f, 7f);
-                label.rectTransform.offsetMax = new Vector2(-2f, -(h - 21f));
+                // 竖向保持「图标在上、短名在下」的原始分区，只按内芯做水平补偿；
+                // 六边形左右收窄，文字往里退 2px 免得压在斜边上。
+                label.rectTransform.offsetMin = new Vector2(2f + face.x, 7f);
+                label.rectTransform.offsetMax = new Vector2(-2f + face.x, -(h - 21f));
             }
 
             AttachTooltip(button, tooltip);
@@ -218,8 +237,11 @@ namespace AutoBattle
             label.resizeTextForBestFit = true;
             label.resizeTextMinSize = 9;
             label.resizeTextMaxSize = fontSize;
-            label.rectTransform.offsetMin = new Vector2(6f, 1f);
-            label.rectTransform.offsetMax = new Vector2(-6f, -1f);
+            // 底框图下缘金边更厚：文字按矩形居中会看着偏下，往内芯中心挪一点。
+            var rt = (RectTransform)button.transform;
+            Vector2 face = UiFace.Pixels(frameKey, rt.sizeDelta.x, rt.sizeDelta.y);
+            label.rectTransform.offsetMin = new Vector2(6f + face.x, 1f - face.y);
+            label.rectTransform.offsetMax = new Vector2(-6f + face.x, -1f - face.y);
         }
 
         /// <summary>没有图标、只有底框的装饰/选项按钮（装备槽页签、成就分类）。</summary>
@@ -233,7 +255,7 @@ namespace AutoBattle
         private void BuildTooltip(Transform root)
         {
             _tooltipBg = CreateImage(root, "UITooltip", 0, 0, 300, 30,
-                new Color(0.02f, 0.03f, 0.05f, 0.97f), false);
+                GameConfig.TooltipBg, false);
             Round(_tooltipBg, 8);
             AddBorder(_tooltipBg, 8, new Color(0.82f, 0.66f, 0.34f, 0.95f));
             _tooltipRoot = _tooltipBg.rectTransform;
@@ -244,7 +266,7 @@ namespace AutoBattle
             _tooltipParent = root as RectTransform;
 
             _tooltipText = CreateText(_tooltipRoot, "Text", "", 0, 0, 300, 30, 13,
-                GameConfig.TextTitle, TextAnchor.MiddleCenter);
+                GameConfig.TooltipText, TextAnchor.MiddleCenter);
             // 文本必须用固定尺寸（锚点居中 + sizeDelta），不能 Stretch 之后再写 sizeDelta：
             // 拉伸锚点下 sizeDelta 是「相对父框的增量」，写进去等于把文本框撑成父框两倍宽，
             // 文字整体被推出提示框（实测偏右下约 70px）。这里锚点居中，sizeDelta 就是真实尺寸。

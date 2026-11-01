@@ -17,22 +17,24 @@ namespace AutoBattle
         /// </summary>
         private void BuildBanner(Transform root)
         {
+            // 底色用不透明深皮革：原来用 ScreenDim(alpha 0.86)，压在羊皮纸上会把下面的
+            // 装备文字透出来，看着像一块脏抹布。CreatePanel 自己会建硬投影并挂 UiCardShadow。
             _bannerPanel = CreatePanel(root, "Banner", 340, 186, 600, 120,
-                GameConfig.ScreenDim);
+                GameConfig.BannerBg);
 
             // 金边：横幅要盖在日志上，光靠底色压不住下面的字。改用圆角描边 + 顶部金线。
             AddBorder(_bannerPanel.GetComponent<Image>(), RadiusPanel, GameConfig.AccentBanner);
             CreateImage(_bannerPanel, "BannerTopLine", 18, 0, 564, 2, GameConfig.AccentBanner);
 
-            _bannerGroup = _bannerPanel.gameObject.AddComponent<CanvasGroup>();
+            _bannerGroup = UiMotion.GrabCanvasGroup(_bannerPanel.gameObject);
             _bannerGroup.blocksRaycasts = false;
             _bannerGroup.interactable = false;
 
             _bannerTitle = CreateText(_bannerPanel, "BannerTitle", "", 16, 20, 568, 46, 28,
-                GameConfig.AccentBannerTitle, TextAnchor.MiddleCenter, FontStyle.Bold);
+                GameConfig.BannerTitle, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             _bannerSubtitle = CreateText(_bannerPanel, "BannerSubtitle", "", 16, 68, 568, 34, 17,
-                GameConfig.TextInfo, TextAnchor.MiddleCenter);
+                GameConfig.BannerSub, TextAnchor.MiddleCenter);
 
             _bannerPanel.gameObject.SetActive(false);
         }

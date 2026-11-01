@@ -475,7 +475,7 @@ namespace AutoBattle.EditorTools
 
             ResolveDrops(p, m);
 
-            // 巅峰每 10 级欠玩家一次「三选一」：交给决策层挑最优卡并装槽。
+            // 巅峰每 10 级发 1 个技能点：交给决策层按毕业 build 优先挑技能并装槽。
             // 改动前探针没有这一步，等于技能永远不会出现。
             ProbePolicy.ResolvePendingSkills(p);
         }

@@ -34,7 +34,7 @@ namespace AutoBattle
             }
         }
 
-        /// <summary>能否真正开始一局无尽：已解锁、等级满级、且没有待处理的技能三选一/结算。</summary>
+        /// <summary>能否真正开始一局无尽：已解锁、等级满级、且没有待处理的流派选择/结算。</summary>
         public bool CanEnterEndless =>
             EndlessUnlocked && Player != null
             && Player.level >= GameConfig.MaxLevel
@@ -74,7 +74,7 @@ namespace AutoBattle
             }
             if (ChoicePending)
             {
-                AddLog("🔒 先处理完技能三选一或结算面板再进无尽", GameConfig.LogWarn);
+                AddLog("🔒 先处理完流派选择或结算面板再进无尽", GameConfig.LogWarn);
                 return;
             }
 
@@ -207,8 +207,7 @@ namespace AutoBattle
                 EnterRespawnWait(GameConfig.MonsterRespawnDelay);
             }
 
-            if (Player.pendingSkillPicks > 0) OpenSkillChoice();
-
+            // 技能点自选：升级只提示，不弹三选一、不打断无尽节奏。
             // 层结算（endless_best 与金币）已经落地，再统一求值一次。
             EvaluateAchievements();
         }

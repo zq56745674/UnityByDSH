@@ -18,9 +18,9 @@ namespace AutoBattle
         private void BuildSavePanel(Transform root)
         {
             int slots = SaveSystem.SlotCount;
-            // 350 高：给底部「轮回」入口留一行。入口刻意放在存档面板里，而不是左栏，
+            // 424 高：摘要预留长名称及大数值换行，底部「轮回」入口独立排布。入口放在存档面板里，而不是左栏，
             // 因为转生是低频且不可逆的操作，不该和「开始/速度」挤在一起。
-            _savePanel = CreatePanel(root, "SavePanel", 300, 168, 680, 360, GameConfig.OverlayBg, true);
+            _savePanel = CreatePanel(root, "SavePanel", 300, 136, 680, 424, GameConfig.OverlayBg, true);
 
             CreateIcon(_savePanel, "ui_save", 20, 16, 20);
             _savePanelTitle = CreateText(_savePanel, "SavePanelTitle", "", 48, 12, 612, 30, 19,
@@ -35,7 +35,7 @@ namespace AutoBattle
             _saveSlotDeleteLabels = new Text[slots];
 
             const float cardW = 200f;
-            const float cardH = 158f;
+            const float cardH = 222f;
             const float gap = 14f;
             const float y0 = 72f;
 
@@ -49,8 +49,12 @@ namespace AutoBattle
 
                 // CreateButton 把 label 拉满并居中；这里改成左上对齐 + 内缩。
                 cardLabel.alignment = TextAnchor.UpperLeft;
-                // 13 号：摘要现在有 7 行（含第 N 世/印记），14 号会在卡片底部被裁掉。
-                cardLabel.fontSize = 13;
+                // 浅纸卡片必须使用深墨正文，不能继承 CreateButton 的白字。
+                // 摘要留足正常行距，不再把七行信息挤成一团。
+                cardLabel.color = GameConfig.TextNormal;
+                cardLabel.fontSize = 14;
+                cardLabel.lineSpacing = 0.95f;
+                cardLabel.supportRichText = false;
                 cardLabel.fontStyle = FontStyle.Normal;
                 cardLabel.rectTransform.offsetMin = new Vector2(14f, 32f);
                 cardLabel.rectTransform.offsetMax = new Vector2(-12f, -10f);
@@ -77,17 +81,17 @@ namespace AutoBattle
                 _saveSlotLabels[slot] = cardLabel;
             }
 
-            _rebirthEntryButton = CreateButton(_savePanel, "RebirthEntry", "轮回", 20, 250, 120, 34,
+            _rebirthEntryButton = CreateButton(_savePanel, "RebirthEntry", "轮回", 20, 314, 120, 34,
                 GameConfig.BtnGold, out _rebirthEntryLabel);
             StyleBar(_rebirthEntryButton, _rebirthEntryLabel, "frame_pill", "glyph_rebirth", 16f, "进入轮回", 13);
             _rebirthEntryButton.onClick.AddListener(OnRebirthEntryClicked);
 
-            _rebirthEntryStatus = CreateText(_savePanel, "RebirthEntryStatus", "", 148, 250, 420, 34,
+            _rebirthEntryStatus = CreateText(_savePanel, "RebirthEntryStatus", "", 148, 314, 420, 34,
                 12, GameConfig.TextInfo, TextAnchor.MiddleLeft);
 
             // 导出 / 导入（roadmap A6 / C10）：导出写「我的文档\AutoBattle\slotN.json」并复制 JSON 到剪贴板；
             // 导入优先读剪贴板，读不到再读同名导出文件。两个都只动当前槽，不碰其他槽。
-            Button export = CreateButton(_savePanel, "SaveExport", "导出", 20, 306, 100, 34,
+            Button export = CreateButton(_savePanel, "SaveExport", "导出", 20, 370, 100, 34,
                 GameConfig.CardBtn, out Text exportLabel);
             StyleBar(export, exportLabel, "frame_pill", "glyph_save", 14f, "导出当前存档", 13);
             export.onClick.AddListener(() =>
@@ -96,7 +100,7 @@ namespace AutoBattle
                 _savePanelDirty = true;
             });
 
-            Button import = CreateButton(_savePanel, "SaveImport", "导入", 132, 306, 100, 34,
+            Button import = CreateButton(_savePanel, "SaveImport", "导入", 132, 370, 100, 34,
                 GameConfig.CardBtn, out Text importLabel);
             StyleBar(import, importLabel, "frame_pill", "glyph_book", 14f, "从剪贴板或导出文件导入", 13);
             import.onClick.AddListener(() =>
@@ -106,9 +110,9 @@ namespace AutoBattle
             });
 
             CreateText(_savePanel, "SaveExportHint", "导出到文档目录并复制 JSON；导入读剪贴板",
-                244, 306, 332, 34, 12, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+                244, 370, 332, 34, 12, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
-            Button close = CreateButton(_savePanel, "SavePanelClose", "关闭", 586, 306, 74, 34,
+            Button close = CreateButton(_savePanel, "SavePanelClose", "关闭", 586, 370, 74, 34,
                 GameConfig.CardBtn, out Text saveCloseLabel);
             StyleBar(close, saveCloseLabel, "frame_pill", "glyph_close", 14f, "关闭存档槽");
             close.onClick.AddListener(() =>
@@ -136,11 +140,11 @@ namespace AutoBattle
                 GameConfig.InsetBg);
 
             Text value = CreateText(fieldBg.transform, "Text", "", 10, 2, 452, 32, 15,
-                Color.white, TextAnchor.MiddleLeft);
+                GameConfig.TextNormal, TextAnchor.MiddleLeft);
             value.supportRichText = false;
             value.raycastTarget = false;
             Text placeholder = CreateText(fieldBg.transform, "Placeholder", "输入名字，最多 12 个字", 10, 2, 452, 32,
-                15, GameConfig.TextDisabled, TextAnchor.MiddleLeft);
+                15, GameConfig.TextMuted, TextAnchor.MiddleLeft);
             placeholder.raycastTarget = false;
 
             _saveNameInput = fieldBg.gameObject.AddComponent<InputField>();
@@ -259,7 +263,8 @@ namespace AutoBattle
                         : GameConfig.CardBg;
                 }
 
-                _saveSlotDeleteLabels[i].color = info.exists ? Color.white : GameConfig.TextDisabled;
+                _saveSlotLabels[i].color = GameConfig.TextNormal;
+                _saveSlotDeleteLabels[i].color = info.exists ? GameConfig.BtnText : GameConfig.BtnTextDim;
             }
         }
 
@@ -277,7 +282,7 @@ namespace AutoBattle
                 ? $"第 {info.rebirthCount + 1} 世 · 印记 {info.rebirthMarks}"
                 : "第 1 世";
 
-            return $"\nLv.{info.level}   巅峰 {info.paragonLevel}\n" +
+            return $"Lv.{info.level}   巅峰 {info.paragonLevel}\n" +
                    $"第 {info.chapter} 章 {info.chapter}-{info.stage}\n" +
                    $"金币 {info.gold:N0}\n" +
                    $"首通 {info.clearedCount}/{totalStages} 关\n" +
@@ -366,7 +371,7 @@ namespace AutoBattle
             if (_saveNameSlot < 0) return;
             if (!SaveSystem.RenameSlot(_saveNameSlot, _saveNameInput.text, out string error))
             {
-                _game.AddLog("<color=#FF8080>✖ " + error + "</color>", GameConfig.LogWarn);
+                _game.AddLog("<color=#9B2C2C>✖ " + error + "</color>", GameConfig.LogWarn);
                 _saveNameInput.ActivateInputField();
                 return;
             }
@@ -420,7 +425,7 @@ namespace AutoBattle
 
             if (!SaveSystem.CopySlot(_saveCopySource, target, out string error))
             {
-                _game.AddLog("<color=#FF8080>✖ " + error + "</color>", GameConfig.LogWarn);
+                _game.AddLog("<color=#9B2C2C>✖ " + error + "</color>", GameConfig.LogWarn);
                 CloseSaveCopyPanel();
                 return;
             }

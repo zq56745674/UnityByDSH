@@ -68,20 +68,19 @@ namespace AutoBattle
                 || _game.SavePanelOpen || _game.EnhancePanelOpen || _game.ReforgePanelOpen
                 || _game.CompareOpen || _game.AchievementPanelOpen || _game.EndlessPanelOpen
                 || _game.RebirthPanelOpen || _game.GuideOpen || _game.EndlessResultOpen
-                || _game.AboutOpen || _game.DisplayOpen;
+                || _game.AboutOpen || _game.DisplayOpen || _game.DoctrinePanelOpen || _game.ShopPanelOpen;
         }
 
         /// <summary>
         /// Esc：按「最上层」关一个浮层；一个浮层都没有时当作暂停 / 继续。
-        /// 三选一、无尽结算、新手引导不代关——这三层必须由玩家自己做选择。
+        /// 无尽结算、新手引导、流派选择不代关——这几层必须由玩家自己做选择。
         /// </summary>
         private void OnEscapeShortcut()
         {
             HideTooltip();
             if (_game == null) return;
 
-            if (_game.PendingSkillPicks > 0 || _game.CurrentState == GameController.State.SkillChoice
-                || _game.EndlessResultOpen || _game.GuideOpen)
+            if (_game.EndlessResultOpen || _game.GuideOpen || _game.DoctrinePanelOpen)
                 return;
 
             // 关法照抄各面板自己的关闭按钮：有的要顺手清掉确认倒计时（存档 / 无尽 / 轮回）。
@@ -104,6 +103,7 @@ namespace AutoBattle
             if (_game.ReforgePanelOpen) { _game.CloseReforgePanel(); GameAudio.PlayUiClose(); return; }
             if (_game.AboutOpen) { _game.CloseAboutPanel(); GameAudio.PlayUiClose(); return; }
             if (_game.DisplayOpen) { _game.CloseDisplayPanel(); GameAudio.PlayUiClose(); return; }
+            if (_game.ShopPanelOpen) { _game.CloseShopPanel(); GameAudio.PlayUiClose(); return; }
 
             // 没有浮层：暂停 / 继续。
             _game.ToggleRunning();
@@ -267,6 +267,8 @@ namespace AutoBattle
             sig.Add(p.paragonExp);
             sig.Add(p.ParagonExpToNext);
             sig.Add(p.OwnedSkillCount);
+            sig.Add(p.SkillPoints);
+            sig.Add(p.doctrine);
             sig.Add(p.Attack);
             sig.Add(p.BaseAttack);
             sig.Add(p.weapon != null ? p.weapon.EnhancedAttack : 0);
@@ -286,38 +288,45 @@ namespace AutoBattle
             // 关卡制（步骤 4a/4b）：等级行只报等级，关卡与关卡怪级挪到右边的选关按钮上
             // （按钮本身就是入口，一举两得）。
             string lvSuffix = p.paragonLevel > 0
-                ? $"   <color=#8C99B0>巅峰</color> <color=#C9B6FF><b>{p.paragonLevel}</b></color>"
-                : (p.IsMaxLevel ? "   <color=#8C99B0>满级</color>" : string.Empty);
-            _levelText.text = $"<color=#8C99B0>等级</color> <size=24><b>{p.level}</b></size>{lvSuffix}";
+                ? $"   <color=#6F6252>巅峰</color> <color=#4E3A82><b>{p.paragonLevel}</b></color>"
+                : (p.IsMaxLevel ? "   <color=#6F6252>满级</color>" : string.Empty);
+            _levelText.text = $"<color=#6F6252>等级</color> <size=22><b>{p.level}</b></size>{lvSuffix}";
             if (_titleText != null)
             {
                 string title = string.IsNullOrEmpty(p.equippedTitle)
                     ? "无名旅人"
                     : AchievementCatalog.TitleNameOf(p.equippedTitle);
                 if (string.IsNullOrEmpty(title)) title = "无名旅人";
-                _titleText.text = title;
-                _titleText.color = string.IsNullOrEmpty(p.equippedTitle) ? GameConfig.TextMuted : GameConfig.TextGold;
+                _titleText.text = ShopCatalog.CollectorTitle(p, title);
+                bool named = !string.IsNullOrEmpty(p.equippedTitle) || p.collectorRank > 0;
+                // 名牌底色是深皮革，TextMuted 那种「纸面墨」压上去等于没有；
+                // 无名时用暗金灰，有名时把称号色往白里提一档。
+                _titleText.color = named
+                    ? Color.Lerp(ShopCatalog.AccentColor(p), Color.white, 0.35f)
+                    : new Color(0.76f, 0.70f, 0.59f);
             }
+            RefreshPortraitCosmetic(p);
 
             // 「装备」这一项用强化后的主属性：不然强化完总攻击涨了、括号里的分解却没动，看着像算错了。
-            _atkText.text = $"<color=#8C99B0>攻击</color>   <b>{p.Attack}</b>   <color=#5F6779>基础 {p.BaseAttack} + 装备 {(p.weapon != null ? p.weapon.EnhancedAttack : 0)}</color>";
-            _defText.text = $"<color=#8C99B0>防御</color>   <b>{p.Defense}</b>   <color=#5F6779>基础 {p.BaseDefense} + 装备 {(p.armor != null ? p.armor.EnhancedDefense : 0) + (p.helmet != null ? p.helmet.EnhancedDefense : 0)}</color>";
+            _atkText.text = $"<color=#6F6252>攻击</color>   <b>{p.Attack}</b>   <color=#5F6779>基础 {p.BaseAttack} + 装备 {(p.weapon != null ? p.weapon.EnhancedAttack : 0)}</color>";
+            _defText.text = $"<color=#6F6252>防御</color>   <b>{p.Defense}</b>   <color=#5F6779>基础 {p.BaseDefense} + 装备 {(p.armor != null ? p.armor.EnhancedDefense : 0) + (p.helmet != null ? p.helmet.EnhancedDefense : 0)}</color>";
             // 速度进软上限后，单看「速度 109」已经推不出攻击间隔（高速度段收益递减），
             // 所以这里直接报「次/秒 + 间隔」，玩家看到的才是实际出手频率。
             float rate = GameConfig.AttacksPerSecond(p.Speed, p.AttackSpeedBonus);
             float interval = GameConfig.AttackInterval(p.Speed, p.AttackSpeedBonus);
-            _spdText.text = $"<color=#8C99B0>速度</color>   <b>{p.Speed}</b>   <color=#5F6779>攻速 {rate:0.00}/s · {interval:0.00}s</color>";
-            _critText.text = $"<color=#8C99B0>暴击</color> <b>{p.CritChance * 100f:0.#}%</b>    <color=#8C99B0>暴伤</color> <b>{p.CritDamage * 100f:0}%</b>    <color=#8C99B0>穿透</color> <b>{p.ArmorPenetration * 100f:0.#}%</b>";
+            _spdText.text = $"<color=#6F6252>速度</color>   <b>{p.Speed}</b>   <color=#5F6779>攻速 {rate:0.00}/s · {interval:0.00}s</color>";
+            _critText.text = $"<color=#6F6252>暴击</color> <b>{p.CritChance * 100f:0.#}%</b>    <color=#6F6252>暴伤</color> <b>{p.CritDamage * 100f:0}%</b>    <color=#6F6252>穿透</color> <b>{p.ArmorPenetration * 100f:0.#}%</b>";
 
             if (p.IsMaxLevel)
             {
                 _expText.text = p.IsMaxParagon
-                    ? "<color=#8C99B0>巅峰</color>   已达上限"
-                    : $"<color=#8C99B0>巅峰经验</color>   <b>{p.paragonExp}</b><color=#5F6779> / {p.ParagonExpToNext}</color>   <color=#8C99B0>技能</color> {p.OwnedSkillCount}/{SkillCatalog.All.Length}";
+                    ? "<color=#6F6252>巅峰</color>   已达上限"
+                    : $"<color=#6F6252>巅峰经验</color>   <b>{p.paragonExp}</b><color=#5F6779> / {p.ParagonExpToNext}</color>   <color=#6F6252>技能</color> {p.OwnedSkillCount}/{SkillCatalog.TotalPerDoctrine}"
+                      + (p.SkillPoints > 0 ? $"   <color=#8A5A12>技能点 {p.SkillPoints}</color>" : string.Empty);
             }
             else
             {
-                _expText.text = $"<color=#8C99B0>经验</color>   <b>{p.exp}</b><color=#5F6779> / {p.ExpToNextLevel}</color>";
+                _expText.text = $"<color=#6F6252>经验</color>   <b>{p.exp}</b><color=#5F6779> / {p.ExpToNextLevel}</color>";
             }
 
         }
@@ -329,7 +338,7 @@ namespace AutoBattle
             {
                 _cHp = p.currentHp;
                 _cHpMax = p.MaxHp;
-                _hpText.text = $"<color=#8C99B0>生命</color>   <b>{p.currentHp}</b><color=#5F6779> / {p.MaxHp}</color>";
+                _hpText.text = $"<color=#6F6252>生命</color>   <b>{p.currentHp}</b><color=#5F6779> / {p.MaxHp}</color>";
             }
 
             SetBar(_hpFill, p.HpProgress);
@@ -429,7 +438,7 @@ namespace AutoBattle
             {
                 _cGold = p.gold;
                 // 金币会涨到七位数，不写千分位读起来要数零（商店那边同一个数也补了）。
-                _goldText.text = $"<color=#8C99B0>金币</color>   <b>{p.gold:N0}</b>";
+                _goldText.text = $"<color=#6F6252>金币</color>   <b>{p.gold:N0}</b>";
             }
 
             var sig = new Sig();
@@ -479,8 +488,8 @@ namespace AutoBattle
                     // 底框是生图资源，不能整块染成绿色；用亮度区分当前速度。
                     _speedButtons[i].image.color = active
                         ? Color.white
-                        : new Color(0.58f, 0.62f, 0.70f, 1f);
-                    _speedLabels[i].color = active ? GameConfig.TextGold : GameConfig.TextMuted;
+                        : GameConfig.FrameTintDim;
+                    _speedLabels[i].color = active ? GameConfig.BtnTextGold : GameConfig.BtnText;
                     if (_speedIcons != null && _speedIcons[i] != null)
                         _speedIcons[i].color = active ? Color.white : new Color(1f, 1f, 1f, 0.55f);
                 }
@@ -489,11 +498,11 @@ namespace AutoBattle
             // 任意浮层打开时压一层遮罩，视线自然落到浮层上。
             if (_modalDim != null)
             {
-                bool modalOpen = IsOpen(_skillPanel) || IsOpen(_skillChoicePanel) || IsOpen(_stagePanel)
+                bool modalOpen = IsOpen(_skillPanel) || IsOpen(_doctrinePanel) || IsOpen(_stagePanel)
                     || IsOpen(_savePanel) || IsOpen(_enhancePanel) || IsOpen(_reforgePanel)
                     || IsOpen(_settingsPanel) || IsOpen(_musicPanel) || IsOpen(_comparePanel) || IsOpen(_endlessPanel)
                     || IsOpen(_endlessResultPanel) || IsOpen(_rebirthPanel) || IsOpen(_achievementPanel)
-                    || IsOpen(_guideRoot);
+                    || IsOpen(_merchantPanel) || IsOpen(_guideRoot);
                 if (_modalDim.gameObject.activeSelf != modalOpen) _modalDim.gameObject.SetActive(modalOpen);
             }
         }

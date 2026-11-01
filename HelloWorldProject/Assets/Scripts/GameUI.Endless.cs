@@ -90,14 +90,16 @@ namespace AutoBattle
 
             // 规则 / 历史榜 两个页签：共用下面 20..300 的内容区，省得再开一层浮层
             // （面板之间是 CloseAllPanels 互斥的，单开一个「历史榜」面板反而回不到无尽面板）。
+            // 页签统一用生图底框（frame_tab），与成就/行商的页签同一套皮革+黄铜，
+            // 选中态保持原色、未选中压暗，不再用 RowBg 那块平涂圆角矩形。
             _endlessRulesTab = CreateButton(_endlessPanel, "EndlessTabRules", "规则", 20, 112, 96, 28,
-                GameConfig.RowBg, out _endlessRulesTabLabel);
-            _endlessRulesTabLabel.fontSize = FontSmall + 2;
+                GameConfig.BtnHeader, out _endlessRulesTabLabel);
+            StyleTab(_endlessRulesTab, _endlessRulesTabLabel, "frame_tab", 12);
             _endlessRulesTab.onClick.AddListener(OnEndlessRulesTabClicked);
 
             _endlessHistoryTab = CreateButton(_endlessPanel, "EndlessTabHistory", "历史榜", 124, 112, 96, 28,
-                GameConfig.RowBg, out _endlessHistoryTabLabel);
-            _endlessHistoryTabLabel.fontSize = FontSmall + 2;
+                GameConfig.BtnHeader, out _endlessHistoryTabLabel);
+            StyleTab(_endlessHistoryTab, _endlessHistoryTabLabel, "frame_tab", 12);
             _endlessHistoryTab.onClick.AddListener(OnEndlessHistoryTabClicked);
 
             _endlessRulesText = CreateText(_endlessPanel, "EndlessRules", "", 20, 146, 640, 150,
@@ -224,11 +226,11 @@ namespace AutoBattle
                 : "无尽模式";
 
             _endlessBestText.text = best > 0
-                ? $"<color=#8C99B0>本档最高</color>  <b>第 {best} 层</b>"
-                : "<color=#8C99B0>本档最高</color>  <b>—</b>";
+                ? $"<color=#6F6252>本档最高</color>  <b>第 {best} 层</b>"
+                : "<color=#6F6252>本档最高</color>  <b>—</b>";
             _endlessGlobalText.text = globalBest > 0
-                ? $"<color=#8C99B0>全局最高</color>  <b>第 {globalBest} 层</b>"
-                : "<color=#8C99B0>全局最高</color>  <b>—</b>";
+                ? $"<color=#6F6252>全局最高</color>  <b>第 {globalBest} 层</b>"
+                : "<color=#6F6252>全局最高</color>  <b>—</b>";
 
             if (inRun && _game.EndlessRun != null)
             {
@@ -311,10 +313,12 @@ namespace AutoBattle
         {
             if (_endlessRulesTab == null) return;
 
-            _endlessRulesTab.image.color = _endlessHistoryOpen ? GameConfig.RowBg : GameConfig.RowBgSelected;
-            _endlessHistoryTab.image.color = _endlessHistoryOpen ? GameConfig.RowBgSelected : GameConfig.RowBg;
-            _endlessRulesTabLabel.color = _endlessHistoryOpen ? GameConfig.TextMuted : GameConfig.TextTitle;
-            _endlessHistoryTabLabel.color = _endlessHistoryOpen ? GameConfig.TextTitle : GameConfig.TextMuted;
+            // 生图底框不染色：选中保持原皮革亮度，未选中整体压暗。
+            Color dimTab = new Color(0.62f, 0.60f, 0.57f, 1f);
+            _endlessRulesTab.image.color = _endlessHistoryOpen ? dimTab : Color.white;
+            _endlessHistoryTab.image.color = _endlessHistoryOpen ? Color.white : dimTab;
+            _endlessRulesTabLabel.color = _endlessHistoryOpen ? GameConfig.BtnText : Color.white;
+            _endlessHistoryTabLabel.color = _endlessHistoryOpen ? Color.white : GameConfig.BtnText;
 
             _endlessRulesText.gameObject.SetActive(!_endlessHistoryOpen);
             _endlessHistoryHint.gameObject.SetActive(_endlessHistoryOpen);
@@ -361,14 +365,14 @@ namespace AutoBattle
             if (entry.rebirth > 0) detail += $" · 第 {entry.rebirth + 1} 世";
 
             string reason;
-            if (entry.IsRetreat) reason = "<color=#8C99B0>撤退</color>";
-            else if (entry.reason == (int)EndlessEndReason.Death) reason = "<color=#F2683C>阵亡</color>";
-            else reason = "<color=#8C99B0>中断</color>";
+            if (entry.IsRetreat) reason = "<color=#6F6252>撤退</color>";
+            else if (entry.reason == (int)EndlessEndReason.Death) reason = "<color=#A2461E>阵亡</color>";
+            else reason = "<color=#6F6252>中断</color>";
 
             string mark = entry.endedUtc > 0 && entry.endedUtc == lastRecordUtc
-                ? "   <color=#FFE08A>◀ 本次</color>"
+                ? "   <color=#8A5A12>◀ 本次</color>"
                 : "";
-            return $"<color=#FFE08A><b>{rank}</b></color>    {floorText}    {detail} · " +
+            return $"<color=#8A5A12><b>{rank}</b></color>    {floorText}    {detail} · " +
                 $"{FormatEndlessDuration(entry.seconds)} · {FormatEndlessDate(entry.endedUtc)} · {reason}{mark}";
         }
 
@@ -415,13 +419,13 @@ namespace AutoBattle
                 : $"第 {run.reachedFloor} 层阵亡";
 
             string cleared = run.clearedThisRun > 0
-                ? $"本局清除 <color=#9FD8A0>{run.clearedThisRun}</color> 层"
+                ? $"本局清除 <color=#2F6B3B>{run.clearedThisRun}</color> 层"
                 : "尚未清除任何层";
             string rankNote = run.historyRank > 0
-                ? $"历史榜第 <color=#FFE08A>{run.historyRank}</color> 名"
+                ? $"历史榜第 <color=#8A5A12>{run.historyRank}</color> 名"
                 : "未进历史榜前 5";
             _endlessResultBody.text =
-                $"{cleared} · 本档最高 <color=#FFE08A>{best}</color> 层 · 全局最高 <color=#FFE08A>{globalBest}</color> 层\n" +
+                $"{cleared} · 本档最高 <color=#8A5A12>{best}</color> 层 · 全局最高 <color=#8A5A12>{globalBest}</color> 层\n" +
                 $"起始层 第 {run.startFloor} 层 · 本局击杀 {run.runKills} 只\n" +
                 $"用时 {FormatEndlessDuration(run.finishSeconds)} · {rankNote}";
 

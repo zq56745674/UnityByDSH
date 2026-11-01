@@ -261,7 +261,7 @@ namespace AutoBattle.EditorTools
             Debug.Log("[ChapterWinrate]\n" + RunChapterWinrate(30, true, 12));
         }
 
-        /// <summary>构造一个满级主角：传说五件套 + 按「巅峰每 10 级随机一个技能」自动装备。</summary>
+        /// <summary>构造一个满级主角：传说五件套 + 按技能点自选（探针按推荐分取前 3 实打）。</summary>
         static PlayerData Build(int paragon, bool smartPick = true,
             int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
             int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0)
@@ -273,13 +273,20 @@ namespace AutoBattle.EditorTools
             for (int i = 0; i < EquipmentSlots.Count; i++)
                 p.SetEquipment(LootSystem.CreateEquipment(EquipmentSlots.All[i], 100, EquipmentQuality.Legendary));
 
-            int want = Mathf.Min(paragon / GameConfig.ParagonPassiveEvery, SkillCatalog.All.Length);
-            while (p.OwnedSkillCount < want)
-            {
-                var candidates = p.RollSkillCandidates(GameConfig.SkillChoiceCount);
-                if (candidates.Count == 0) break;
+            if (paragon >= 10) p.BeginDoctrine(ProbePolicy.ProbeDoctrine);
 
-                // 与游戏内 TryAutoEquip 一致：只填空槽，槽满了就只进「已获得」。
+            // 技能 2.1：没有随机候选。每次花 1 点，从本流派未掌握里按推荐分取前 3 实打。
+            for (int guard = 0; guard < SkillCatalog.TotalPerDoctrine && p.SkillPoints > 0; guard++)
+            {
+                List<SkillId> candidates = p.AvailableSkillIds();
+                if (candidates.Count == 0) break;
+                if (candidates.Count > 3)
+                {
+                    candidates.Sort((a, b) => SkillAdvice.Score(p, b).CompareTo(SkillAdvice.Score(p, a)));
+                    candidates.RemoveRange(3, candidates.Count - 3);
+                }
+
+                // 与游戏内 TryAutoEquip 一致：只填空槽，槽满只进「已获得」。
                 // 以前这里允许替换，结果巅峰 100+ 的模拟会拿 5 场评估出来的「更优技能」
                 // 把好技能换掉，胜率随巅峰非单调（P100 27%、P150 10%）。
                 bool hasEmpty = false;
@@ -293,7 +300,7 @@ namespace AutoBattle.EditorTools
 
                 if (hasEmpty && smartPick)
                 {
-                    PickAndEquipBest(p, candidates);   // 真人会在三选一里挑最优（只填空槽）
+                    PickAndEquipBest(p, candidates);   // 真人会在技能面板挑最优（只填空槽）
                 }
                 else
                 {
@@ -307,7 +314,7 @@ namespace AutoBattle.EditorTools
                     }
                 }
             }
-            // 转生加成在技能挑选之后套：先套会改变三选一评分，构筑与正常玩家不可比。
+            // 转生加成在技能挑选之后套：先套会改变技能点评分，构筑与正常玩家不可比。
             if (rebirthBattleRank + rebirthGrowthRank + rebirthFortuneRank + rebirthLegacyRank + rebirthAlchemyRank > 0)
             {
                 p.rebirthCount = 1;
@@ -322,10 +329,10 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>
-        /// 模拟真人玩三选一：对每个候选实际打一场 Lv.110 盗贼 Boss，用「胜 = 1，
+        /// 模拟真人在技能面板自选：对每个候选实际打一场 Lv.110 盗贼 Boss，用「胜 = 1，
         /// 败 = 1 − 怪物剩余血量占比」打分，取分最高者；同时决定装哪个槽
         /// （空槽优先，满槽就把两个槽都试一遍，取表现更好的那个）。
-        /// 旧口径是随机直接送技能，那套胜率相当于「技能乱给」的下界。
+        /// 候选由调用方按 SkillAdvice 取前 3，不再随机。
         /// </summary>
         static SkillId PickAndEquipBest(PlayerData p, List<SkillId> candidates)
         {

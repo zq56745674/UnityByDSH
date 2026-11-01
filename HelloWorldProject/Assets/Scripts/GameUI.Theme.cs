@@ -26,6 +26,40 @@ namespace AutoBattle
         private static readonly Dictionary<int, Sprite> _roundCache = new Dictionary<int, Sprite>();
         private static readonly Dictionary<int, Sprite> _ringCache = new Dictionary<int, Sprite>();
 
+        // ---- 字体 ----
+
+        /// <summary>
+        /// 大标题使用得意黑；正文、数字和小按钮使用思源黑体。
+        /// 展示字只用于 18 号及以上的标题，不让斜体笔形干扰密集数据。
+        /// </summary>
+        private Font PickFont(FontStyle style, int fontSize)
+        {
+            if (_fontDisplay != null && style == FontStyle.Bold && fontSize >= FontSection) return _fontDisplay;
+            return _font != null ? _font : _fontDisplay;
+        }
+
+        // ---- 贴图 ----
+
+        private static readonly Dictionary<string, Sprite> _uiSpriteCache = new Dictionary<string, Sprite>();
+
+        /// <summary>
+        /// 从 Resources 载入 UI 用的整张贴图并当场包成 Sprite。
+        /// 不依赖工程的贴图导入设置（本工程的 PNG 默认 spriteImportMode=Multiple，
+        /// 直接 Resources.Load&lt;Sprite&gt; 会拿到 null）。
+        /// </summary>
+        public static Sprite LoadUiSprite(string path, bool repeat = false, float pixelsPerUnit = 100f)
+        {
+            if (_uiSpriteCache.TryGetValue(path, out Sprite cached) && cached != null) return cached;
+            Texture2D tex = Resources.Load<Texture2D>(path);
+            if (tex == null) return null;
+            if (repeat) tex.wrapMode = TextureWrapMode.Repeat;
+            var sp = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f), pixelsPerUnit, 0, SpriteMeshType.FullRect);
+            sp.name = path;
+            _uiSpriteCache[path] = sp;
+            return sp;
+        }
+
         /// <summary>圆角矩形（白色形状，靠 Image.color 染色）。按半径缓存，4 倍超采样抗锯齿。</summary>
         public static Sprite RoundSprite(int radius)
         {
@@ -133,13 +167,56 @@ namespace AutoBattle
             return img;
         }
 
-        /// <summary>卡片：圆角底 + 细描边。返回底图，内容用它的 transform 作父级。</summary>
+        /// <summary>
+        /// 硬投影：纸片压在木桌上，影子是实心的（偏移 4,6、不模糊），不是柔光。
+        /// 必须**先于**卡片创建，靠兄弟顺序自然垫在下面。
+        /// </summary>
+        private static Image CreateHardShadow(Transform parent, string name, float x, float y, float w, float h, int radius)
+        {
+            Image img = CreateImage(parent, name, x + 4f, y + 6f, w, h, new Color(0f, 0f, 0f, 0.34f));
+            Round(img, radius);
+            return img;
+        }
+
+        /// <summary>把硬投影绑到卡片上：卡片隐藏/销毁时投影跟着走。</summary>
+        private static void LinkShadow(GameObject card, Image shadow)
+        {
+            if (card == null || shadow == null) return;
+            var link = card.GetComponent<UiCardShadow>();
+            if (link == null) link = card.AddComponent<UiCardShadow>();
+            link.shadow = shadow.gameObject;
+            // 建面板时常先建后 SetActive(false)：组件已在，OnDisable 会把它关掉。
+            if (!card.activeInHierarchy) shadow.gameObject.SetActive(false);
+        }
+
+        /// <summary>纸面上缘的 2px 高光：给平面色块一点厚度，不然羊皮纸会像塑料板。</summary>
+        private static void AddPaperSheen(Image card)
+        {
+            if (card == null) return;
+            RectTransform rt = CreateRect(card.transform, "Sheen", 0, 0, 0, 0);
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.offsetMin = new Vector2(9f, -2f);
+            rt.offsetMax = new Vector2(-9f, 0f);
+            var img = rt.gameObject.AddComponent<Image>();
+            img.sprite = RoundSprite(RadiusBar);
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = 1f;
+            img.color = new Color(1f, 1f, 1f, 0.42f);
+            img.raycastTarget = false;
+        }
+
+        /// <summary>卡片：硬投影 + 圆角纸底 + 烫金细边。返回底图，内容用它的 transform 作父级。</summary>
         private Image CreateCard(Transform parent, string name, float x, float y, float w, float h,
             Color fill, int radius = RadiusCard, Color? border = null, bool raycast = false)
         {
+            Image shadow = CreateHardShadow(parent, name + "Shadow", x, y, w, h, radius);
             Image img = CreateImage(parent, name, x, y, w, h, fill, raycast);
             Round(img, radius);
             AddBorder(img, radius, border ?? GameConfig.Border);
+            AddPaperSheen(img);
+            LinkShadow(img.gameObject, shadow);
             return img;
         }
 

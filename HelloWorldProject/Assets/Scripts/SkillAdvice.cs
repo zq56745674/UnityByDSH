@@ -8,11 +8,8 @@ namespace AutoBattle
     /// （攻击、攻速、暴击率/暴伤、生命、防御）折算成两个 0~1 的系数：
     /// 输出增益与生存增益，再合成 35~99 的整数分，给新手一个比较起点。
     ///
-    /// 主动技能按「每次冷却能多打多少」估算：命中数 × 倍率 × 攻击间隔 ÷ 冷却，
-    /// 就是相对普通攻击的每秒伤害提升比例。斩杀因为只在低血线释放，乘 0.55 折价。
-    /// 被动/触发不经过战斗循环，直接按属性公式估算相对增益。
-    ///
-    /// 分数只用于排序与提示，不参与任何战斗计算；调数值不会改变战斗结果。
+    /// 技能 2.0 起只对「本流派 + 通用」给出正常分数；另一流派的专属技能返回低分，
+    /// UI 会把它灰显。分数只用于排序与提示，不参与任何战斗计算。
     /// </summary>
     public static class SkillAdvice
     {
@@ -23,6 +20,7 @@ namespace AutoBattle
 
             SkillDef def = SkillCatalog.Get(id);
             if (def == null) return 50;
+            if (!SkillCatalog.IsAvailableTo(player.doctrine, id)) return 30;
 
             float interval = Mathf.Max(0.25f, BattleSystem.PlayerAttackInterval(player));
             float critMult = Mathf.Max(1f, 1f + player.CritChance * (player.CritDamage - 1f));
@@ -33,75 +31,77 @@ namespace AutoBattle
 
             switch (id)
             {
-                case SkillId.HeavyStrike:
-                    offense = def.hits * def.value * interval / Mathf.Max(0.5f, def.cooldown);
+                case SkillId.ThunderRush:
+                    offense = def.value * interval / Mathf.Max(0.5f, def.cooldown)
+                              + def.value3 * def.duration / Mathf.Max(0.5f, def.cooldown);
                     break;
 
-                case SkillId.Whirlwind:
-                    offense = def.hits * def.value * interval / Mathf.Max(0.5f, def.cooldown);
+                case SkillId.ThunderGod:
+                    // 按平均 4 层雷印估算；满层爆发属于上限，不计入期望。
+                    offense = (def.value + 4f * def.value2) * interval / Mathf.Max(0.5f, def.cooldown);
                     break;
 
-                case SkillId.Berserk:
-                    // 持续/冷却 × (攻击加成 + 暴击率加成换算的暴击收益)
-                    offense = def.duration / Mathf.Max(0.5f, def.cooldown)
-                              * (def.value + def.critBonus * (player.CritDamage - 1f));
+                case SkillId.MountainSlam:
+                    // 按平均 2 层岩层估算，再计入破甲带来的后续收益。
+                    offense = (def.value + 2f * def.value2) * interval / Mathf.Max(0.5f, def.cooldown) * 1.15f;
                     break;
 
-                case SkillId.Execute:
-                    // 处决是最强单体倍率，但只在怪物残血时释放，按 55% 折价。
-                    offense = def.hits * def.value * interval / Mathf.Max(0.5f, def.cooldown) * 0.55f;
+                case SkillId.Bulwark:
+                    survival = def.value * 1.4f;
+                    offense = def.value2 * def.duration2 / Mathf.Max(0.5f, def.cooldown) * 0.5f;
                     break;
 
-                case SkillId.IronBody:
-                    // 防御加成相对当前防御的比例；有效生命近似线性，再折半。
+                case SkillId.WarCry:
+                    offense = def.value * def.duration / Mathf.Max(0.5f, def.cooldown);
+                    survival = def.value2 * def.duration / Mathf.Max(0.5f, def.cooldown);
+                    break;
+
+                case SkillId.StaticResonance:
+                    offense = (def.critBonus * (player.CritDamage - 1f) + player.OverflowCritDamage) / critMult;
+                    break;
+
+                case SkillId.StormHaste:
+                    offense = def.value + def.value2 * 3f;
+                    break;
+
+                case SkillId.MountainBody:
                     survival = 0.5f * (def.value * player.BaseDefense) / defense;
+                    offense = Mathf.Min(player.EquipmentDefense * def.value2, player.AttackBeforeMountain * def.value3)
+                              / Mathf.Max(1f, player.AttackBeforeMountain);
                     break;
 
-                case SkillId.BerserkHeart:
-                    offense = def.value * (player.CritDamage - 1f) / critMult;
-                    break;
-
-                case SkillId.LethalStrike:
-                    offense = player.CritChance * (player.CritDamage * def.value) / critMult;
+                case SkillId.HeavyImpact:
+                    offense = def.value * (player.CritDamage - 1f) / critMult
+                              + def.value3 * 0.55f
+                              + def.value2; // 攻速为负，直接计入
                     break;
 
                 case SkillId.Vampire:
                     survival = def.value * 0.6f;
                     break;
 
-                case SkillId.Swiftness:
-                    offense = def.value;
-                    break;
-
-                case SkillId.GiantSlayer:
-                    // 只对精英/Boss 生效，按战斗中约 1/4 的占比折算。
-                    offense = def.value * 0.25f;
-                    break;
-
-                case SkillId.Undying:
-                    survival = def.value * 0.5f;
-                    break;
-
-                case SkillId.Counter:
-                    survival = def.triggerChance * def.value * 0.4f;
-                    break;
-
-                case SkillId.CritChain:
+                case SkillId.Arc:
                     offense = player.CritChance * def.triggerChance * def.value * interval;
                     break;
 
-                case SkillId.NearDeathBurst:
-                    offense = def.value * def.duration / Mathf.Max(0.5f, def.cooldown);
-                    survival = 0.15f;
+                case SkillId.ThunderPunish:
+                    offense = 0.25f * def.value * interval;
                     break;
 
-                case SkillId.ShieldGen:
-                    // 每 0.5 秒给 10% 最大生命的护盾，是稳定的减伤而非爆发。
-                    survival = def.value * 1.6f;
+                case SkillId.Aftershock:
+                    offense = def.triggerChance * def.value * 0.45f;
+                    break;
+
+                case SkillId.RockArmor:
+                    survival = def.triggerChance * def.value * 2.2f;
+                    break;
+
+                case SkillId.LastStand:
+                    survival = 0.22f + Mathf.Min(0.12f, player.MaxHp / 200000f);
                     break;
             }
 
-            float score = 45f + offense * 140f + survival * 70f;
+            float score = 55f + offense * 120f + survival * 70f;
             return Mathf.Clamp(Mathf.RoundToInt(score), 35, 99);
         }
 
@@ -110,21 +110,21 @@ namespace AutoBattle
         {
             switch (id)
             {
-                case SkillId.HeavyStrike: return "稳定单体爆发";
-                case SkillId.Whirlwind: return "多段清场";
-                case SkillId.Berserk: return "长线增伤";
-                case SkillId.Execute: return "终局斩杀";
-                case SkillId.IronBody: return "前排耐力";
-                case SkillId.BerserkHeart: return "暴击流核心";
-                case SkillId.LethalStrike: return "暴伤流核心";
+                case SkillId.ThunderRush: return "叠印起手";
+                case SkillId.ThunderGod: return "满印核弹";
+                case SkillId.MountainSlam: return "破甲重击";
+                case SkillId.Bulwark: return "护盾增伤";
+                case SkillId.WarCry: return "通用爆发";
+                case SkillId.StaticResonance: return "暴击转化";
+                case SkillId.StormHaste: return "越暴越快";
+                case SkillId.MountainBody: return "越肉越痛";
+                case SkillId.HeavyImpact: return "低频重击";
                 case SkillId.Vampire: return "战斗续航";
-                case SkillId.Swiftness: return "攻速流核心";
-                case SkillId.GiantSlayer: return "精英/Boss 特攻";
-                case SkillId.Undying: return "低血保命";
-                case SkillId.Counter: return "受击反伤";
-                case SkillId.CritChain: return "暴击联动";
-                case SkillId.NearDeathBurst: return "残血反打";
-                case SkillId.ShieldGen: return "护盾续航";
+                case SkillId.Arc: return "暴击补刀";
+                case SkillId.ThunderPunish: return "闪电收官";
+                case SkillId.Aftershock: return "崩山回声";
+                case SkillId.RockArmor: return "受击护盾";
+                case SkillId.LastStand: return "免死容错";
                 default: return string.Empty;
             }
         }

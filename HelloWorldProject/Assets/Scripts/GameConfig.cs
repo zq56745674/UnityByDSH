@@ -298,18 +298,14 @@ namespace AutoBattle
         public static float MaxTierDefenseFactor = 3.0f;
 
         /// <summary>
-        /// 终局 BOSS（Lv.110 章末关底）额外的全属性倍率：战斗探针实测，只叠 MaxTier ×3 时
-        /// 传说装备 + 巅峰 26 的玩家平均 7 次挑战就能打下来——终局只硬一分钟。
-        /// 这一层再抬 60%，把 11-10 变成一个明确的「关卡门」（不是巅峰门槛）。
-        /// 2026-10-23 复测（EndgamePacing，种子 20261018~20261022）：首通第 2~62 次挑战、
-        /// 巅峰 P15~P58（中位 P31）、战斗 0.2~9.9 min，不是原注释说的「巅峰 100 之后」——
-        /// 这个说法在两槽时代（2026-10-19）实测就是 P23，从未成立。
-        /// 抬倍率能把首通推到 1.8→P44 / 3.0→P50~P71 / 5.0→P75~P90，但同一件 BOSS 也是
-        /// 新档 11-10 的门：30 种子真实推进的通关率 1.6→25/30、1.8→17、2.2→16、3.0→9、5.0→3，
-        /// 所以定格 1.6；终局的门由巅峰曲线 + 无尽/转生承担。详见 _balance/balance-analysis.md §3.5.4a。
-        /// 只作用于 Boss，不碰 11-1~11-9 的精英。
+        /// 终局 BOSS（Lv.110 章末关底）额外的全属性倍率。只作用于 Boss，不碰 11-1~11-9 的精英。
+        /// 2026-10-23 的两槽时代口径定格在 1.6（30 种子新档 25/30 通关，详见 balance-analysis §3.5.4a）。
+        /// 技能 2.0 把 P48 的技能数从 4 收到 3，1.6 下新档只剩 12/30（风暴）、5/30（山崩），
+        /// 11-10 变成单纯卡技能数的墙。2026-10-26 复测（同 30 种子，含 P10 流派签名主动）：
+        /// 1.25 → 风暴 27/30、山崩 27/30，均为 0 卡死；1.2 → 28/30、30/30，1.3 → 23/30、27/30。
+        /// 取 1.25，与旧系统 1.6 的实际通关率（25/30）基本持平。
         /// </summary>
-        public static float FinalBossStatFactor = 1.6f;
+        public static float FinalBossStatFactor = 1.25f;
 
         /// <summary>最高档的额外速度倍率（速度对攻击间隔是非线性的，所以单独给，且比全属性保守）。</summary>
         public static float MaxTierSpeedFactor = 2.0f;
@@ -631,9 +627,9 @@ namespace AutoBattle
         public static int SkillSlotsPerKind = 2;
 
         /// <summary>
-        /// 巅峰每 ParagonPassiveEvery 级触发一次「技能三选一」时的候选数量。
-        /// 由「随机直接送一个」改成三选一：随机送技能会让同巅峰的强度方差极大
-        /// （实测巅峰 20 的 Lv.110 Boss 胜率在 0.4%~24% 之间跳），玩家也没有任何决策空间。
+        /// 已废弃（2026-10-26 技能点自选后无使用）：旧「技能三选一」的候选数量。
+        /// 保留字段只为兼容 game_config.json 的既有键，避免缺键告警。
+        /// 技能获取现为 P10 起每 10 级 1 点、共 9 点，玩家在技能面板自选。
         /// </summary>
         public static int SkillChoiceCount = 3;
 
@@ -652,8 +648,8 @@ namespace AutoBattle
         /// <summary>无尽第 1 层的怪物等级。默认从终局档（Lv.110）起步。</summary>
         public static int EndlessBaseMonsterLevel = 110;
 
-        /// <summary>每往下一层怪物等级 +N。默认 +6：第 50 层是 Lv.404（探针基线，见 docs/endless-mode.md §12）。</summary>
-        public static int EndlessMonsterLevelStep = 6;
+        /// <summary>每往下一层怪物等级 +N。2026-10-26 技能 2.0：6→4；两套毕业 build 的无尽首死中位重新落回 235~250（见 docs/skill-system-v2-design.md §12）。</summary>
+        public static int EndlessMonsterLevelStep = 4;
 
         /// <summary>第 1 层需要击杀的怪物数。</summary>
         public static int EndlessKillTargetBase = 3;
@@ -673,8 +669,10 @@ namespace AutoBattle
         /// 改用这一个显式倍率，强度才可单独调。
         /// 2026-10-25 D2：2.8→3.4。50 种子满倍率模板首死中位 296→240（P10 227 / P90 250），
         /// 随机五槽 220→181；235~250 的目标按「理想配装」口径保留，随机配装按设计更早死。
+        /// 2026-10-26 技能 2.0：3.4→3.1。新技能表没有旧版 ShieldGen/IronBody 的续航，
+        /// 配合怪物等级步长 6→4 后，风暴/山崩两套毕业 build 的 10 种子首死中位都是 240。
         /// </summary>
-        public static float EndlessBaseFactor = 3.4f;
+        public static float EndlessBaseFactor = 3.1f;
 
         public static int EndlessFloorGoldBase = 300;
         public static int EndlessFloorGoldPerFloor = 40;

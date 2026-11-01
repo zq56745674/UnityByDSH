@@ -43,10 +43,10 @@ namespace AutoBattle.EditorTools
             sb.AppendLine($"SkillDef 仍存在 extra 字段：{hasExtra}（应为 False）");
 
             // ---- 4. 覆盖生效 ----
-            float before = SkillCatalog.Get(SkillId.HeavyStrike).value;
-            string patched = SkillCatalog.ExportJson().Replace("\"value\": 2.5,", "\"value\": 9.99,");
+            float before = SkillCatalog.Get(SkillId.ThunderRush).value;
+            string patched = SkillCatalog.ExportJson().Replace("\"value\": 3.2,", "\"value\": 9.99,");
             int applied = SkillCatalog.ApplyJson(patched);
-            float after = SkillCatalog.Get(SkillId.HeavyStrike).value;
+            float after = SkillCatalog.Get(SkillId.ThunderRush).value;
             sb.AppendLine($"覆盖测试：{before} -> applied={applied} -> {after}（应为 9.99）");
 
             // ---- 5. 非法 JSON / 缺 skills 数组 -> 整表拒绝 ----
@@ -63,7 +63,7 @@ namespace AutoBattle.EditorTools
 
             // ---- 8. Reload 从磁盘恢复（验证前面的破坏都只影响内存）----
             bool reloaded = SkillCatalog.Reload();
-            sb.AppendLine($"Reload：{reloaded}  value(破坏前 2.5 -> 现在 {SkillCatalog.Get(SkillId.HeavyStrike).value})");
+            sb.AppendLine($"Reload：{reloaded}  value(破坏前 3.2 -> 现在 {SkillCatalog.Get(SkillId.ThunderRush).value})");
 
             // ---- 9. 真·热改：改磁盘 json -> 重新导入 -> Reload -> 值应变化 ----
             RunHotReloadCheck(sb);
@@ -83,12 +83,11 @@ namespace AutoBattle.EditorTools
             string original = File.ReadAllText(JsonAssetPath);
             try
             {
-                // 探针必须落在「全表唯一」的数值上：0.55 只属于不死之身，
-                // 而 0.08 同时属于迅捷和狂暴之心，Replace 会一次改两条。
-                string tweaked = original.Replace("\"value\": 0.55,", "\"value\": 0.99,");
+                // 探针必须落在「全表唯一」的数值上：0.06 只属于岩甲的护盾比例。
+                string tweaked = original.Replace("\"value\": 0.06,", "\"value\": 0.09,");
                 if (tweaked == original)
                 {
-                    sb.AppendLine("热改测试：没找到可替换的 \"value\": 0.55,，跳过。");
+                    sb.AppendLine("热改测试：没找到可替换的 \"value\": 0.06,，跳过。");
                     return;
                 }
 
@@ -96,17 +95,17 @@ namespace AutoBattle.EditorTools
                 AssetDatabase.ImportAsset(JsonAssetPath, ImportAssetOptions.ForceUpdate);
                 SkillCatalog.Reload();
 
-                float undying = SkillCatalog.Get(SkillId.Undying).value;
-                float counter = SkillCatalog.Get(SkillId.Counter).value;
-                sb.AppendLine($"热改测试：不死之身 value 0.55 -> {undying:0.####}（应为 0.99）"
-                    + $"；反击 {counter:0.####}（应仍为 0.7，确认只改了目标条目）");
+                float rockArmor = SkillCatalog.Get(SkillId.RockArmor).value;
+                float bulwark = SkillCatalog.Get(SkillId.Bulwark).value;
+                sb.AppendLine($"热改测试：岩甲护盾 value 0.06 -> {rockArmor:0.####}（应为 0.09）"
+                    + $"；磐石壁垒 {bulwark:0.####}（应仍为 0.15，确认只改了目标条目）");
             }
             finally
             {
                 File.WriteAllText(JsonAssetPath, original);
                 AssetDatabase.ImportAsset(JsonAssetPath, ImportAssetOptions.ForceUpdate);
                 SkillCatalog.Reload();
-                sb.AppendLine($"热改测试：已还原，不死之身 value={SkillCatalog.Get(SkillId.Undying).value:0.####}（应为 0.55）");
+                sb.AppendLine($"热改测试：已还原，岩甲护盾 value={SkillCatalog.Get(SkillId.RockArmor).value:0.####}（应为 0.06）");
             }
         }
 

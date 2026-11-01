@@ -298,9 +298,17 @@ namespace AutoBattle.EditorTools
             return min + Mathf.Clamp01(quality) * (max - min) + (quality >= 0.8f ? 0.000001f : 0f);
         }
 
+        /// <summary>测试用：直接标记「已拥有」，不经过技能点/流派校验（这里只验成就口径）。</summary>
+        private static void OwnSkill(PlayerData p, SkillId id)
+        {
+            p.ownedSkillMask |= 1 << (int)id;
+            p.skillEverMask |= 1 << (int)id;
+        }
+
         private static void SetEquippedSkills(PlayerData p, int count)
         {
             p.ownedSkillMask = 0;
+            p.skillEverMask = 0;
             for (int i = 0; i < PlayerData.SkillSlotCount; i++) p.SetSkillSlot(i, -1);
             List<SkillId> chosen = new List<SkillId>();
             SkillKind[] kinds = { SkillKind.Active, SkillKind.Passive, SkillKind.Trigger };
@@ -317,7 +325,7 @@ namespace AutoBattle.EditorTools
             }
             for (int i = 0; i < count && i < chosen.Count && i < PlayerData.SkillSlotCount; i++)
             {
-                p.GrantSkill(chosen[i]);
+                OwnSkill(p, chosen[i]);
                 p.SetSkillSlot(i, (int)chosen[i]);
             }
         }
@@ -325,12 +333,13 @@ namespace AutoBattle.EditorTools
         private static void SetOwnedSkills(PlayerData p, int count)
         {
             p.ownedSkillMask = 0;
+            p.skillEverMask = 0;
             for (int i = 0; i < PlayerData.SkillSlotCount; i++) p.SetSkillSlot(i, -1);
             int n = 0;
             foreach (SkillDef def in SkillCatalog.All)
             {
                 if (n >= count) break;
-                p.GrantSkill(def.id);
+                OwnSkill(p, def.id);
                 n++;
             }
         }
@@ -338,12 +347,13 @@ namespace AutoBattle.EditorTools
         private static void SetOwnedActive(PlayerData p, int count)
         {
             p.ownedSkillMask = 0;
+            p.skillEverMask = 0;
             for (int i = 0; i < PlayerData.SkillSlotCount; i++) p.SetSkillSlot(i, -1);
             int n = 0;
             foreach (SkillDef def in SkillCatalog.All)
             {
                 if (def.kind != SkillKind.Active || n >= count) continue;
-                p.GrantSkill(def.id);
+                OwnSkill(p, def.id);
                 n++;
             }
         }
@@ -351,6 +361,7 @@ namespace AutoBattle.EditorTools
         private static void SetOwnedEachKind(PlayerData p, int count)
         {
             p.ownedSkillMask = 0;
+            p.skillEverMask = 0;
             for (int i = 0; i < PlayerData.SkillSlotCount; i++) p.SetSkillSlot(i, -1);
             SkillKind[] kinds = { SkillKind.Active, SkillKind.Passive, SkillKind.Trigger };
             foreach (SkillKind kind in kinds)
@@ -359,7 +370,7 @@ namespace AutoBattle.EditorTools
                 foreach (SkillDef def in SkillCatalog.All)
                 {
                     if (def.kind != kind || n >= count) continue;
-                    p.GrantSkill(def.id);
+                    OwnSkill(p, def.id);
                     n++;
                 }
             }
@@ -785,6 +796,7 @@ namespace AutoBattle.EditorTools
                 LoadRejectsNewerSchema();
                 LoadRejectsBadJson();
                 LoadSanitizes();
+                LoadV14SkillMigration();
                 LoadIsIdempotent();
             }
             finally
@@ -799,10 +811,11 @@ namespace AutoBattle.EditorTools
             PlayerData p = Fresh();
             p.level = 42;
             p.gold = 12345;
-            p.paragonLevel = 7;
+            p.paragonLevel = 40;
             p.paragonExp = 3;
+            p.doctrine = 1;
             p.ownedSkillMask = (1 << 0) | (1 << 4);
-            p.pendingSkillPicks = 1;
+            p.skillEverMask = (1 << 0) | (1 << 4);
             p.chapterIndex = 2;
             p.stageIndex = 3;
             p.stageKillCount = 1;
@@ -840,8 +853,9 @@ namespace AutoBattle.EditorTools
             bool loaded = SaveSystem.Load(q);
             Check(loaded, "Load 返回 true");
             Check(q.level == 42 && q.gold == expectedGold, "基础字段往返", "level=" + q.level + " gold=" + q.gold + " 期望 " + expectedGold);
-            Check(q.paragonLevel == 7 && q.paragonExp == 3, "巅峰字段往返");
-            Check(q.ownedSkillMask == ((1 << 0) | (1 << 4)) && q.pendingSkillPicks == 1, "技能字段往返");
+            Check(q.paragonLevel == 40 && q.paragonExp == 3, "巅峰字段往返");
+            Check(q.doctrine == 1 && q.ownedSkillMask == ((1 << 0) | (1 << 4))
+                && q.skillEverMask == ((1 << 0) | (1 << 4)) && q.pendingSkillPicks == 0, "技能字段往返");
             Check(q.chapterIndex == 2 && q.stageIndex == 3 && q.stageKillCount == 1, "关卡字段往返");
             Check(q.clearedStages.Count == 2 && q.clearedStages.Contains(PlayerData.StageKey(1, 1)), "通关列表往返");
             Check(q.potionCount == 3, "药剂往返");
@@ -1025,11 +1039,13 @@ namespace AutoBattle.EditorTools
         private static void LoadSanitizes()
         {
             ClearSlot0();
-            SaveSystem.SaveData d = BaseData(10);
+            SaveSystem.SaveData d = BaseData(15);
             d.level = 50;
             d.gold = -5;
             d.potionCount = 999;
+            d.doctrine = 1;
             d.ownedSkillMask = -1;
+            d.skillEverMask = -1;
             d.pendingSkillPicks = 999;
             d.skillActive0 = 99;
             d.skillActive1 = 98;
@@ -1049,8 +1065,12 @@ namespace AutoBattle.EditorTools
             bool ok = LoadFromRaw(JsonUtility.ToJson(d), out p);
             Check(ok, "异常字段档仍可加载");
             Check(p.gold == 0 && p.potionCount <= 5, "金币/药剂夹取", "gold=" + p.gold + " potion=" + p.potionCount);
-            Check(p.ownedSkillMask == 0x7FFF, "技能掩码夹到 15 位", "实际 " + p.ownedSkillMask);
-            Check(p.pendingSkillPicks == 0, "待选次数上限夹取", "实际 " + p.pendingSkillPicks);
+            int stormMask = 0;
+            foreach (SkillId id in SkillCatalog.KitOf(1)) stormMask |= 1 << (int)id;
+            Check((p.ownedSkillMask & ~stormMask) == 0 && p.OwnedSkillCount == 9,
+                "技能掩码只保留本流派 9 个", "实际 " + p.ownedSkillMask);
+            Check(p.skillEverMask == 0x7FFF, "跨世技能掩码夹到 15 位", "实际 " + p.skillEverMask);
+            Check(p.pendingSkillPicks == 0, "旧待选字段固定为 0", "实际 " + p.pendingSkillPicks);
             Check(p.stats.kills == 0 && p.stats.drops == 0, "负统计夹到 0");
             Check(p.stats.bestEnhanceLevel == 0 && p.stats.bestAffixQuality == 1f, "质量/强化夹取");
             Check(p.stats.noDeathChapterMask == 0x700, "无阵亡掩码只保留 9~11 章", "实际 " + p.stats.noDeathChapterMask);
@@ -1072,6 +1092,57 @@ namespace AutoBattle.EditorTools
                 "清洗后按已证明条件补发成就");
             Check(p.achievements.IsUnlocked("skills_15") && p.achievements.IsUnlocked("all_active")
                 && p.achievements.IsUnlocked("skill_triple_4"), "全技能掩码补发技能成就");
+        }
+
+        private static void LoadV14SkillMigration()
+        {
+            ClearSlot0();
+            SaveSystem.SaveData d = BaseData(14);
+            d.level = 100;
+            d.paragonLevel = 100;
+            d.ownedSkillMask = (1 << 0) | (1 << 4) | (1 << 9);
+            d.skillActive0 = 0;
+            d.skillPassive0 = 4;
+            PlayerData p;
+            bool ok = LoadFromRaw(JsonUtility.ToJson(d), out p);
+            Check(ok, "v14 旧档可加载");
+            Check(p.doctrine == 0 && p.ownedSkillMask == 0 && p.skillEverMask == 0,
+                "v14 旧技能清零等流派", "doctrine=" + p.doctrine + " owned=" + p.ownedSkillMask);
+            Check(p.pendingLegacyDoctrineGrant, "v14 巅峰 100 标记待选流派");
+            Check(p.skillActive0 == -1 && p.skillPassive0 == -1, "v14 旧技能槽清空");
+            Check(p.SkillPoints == 0, "未选流派时没有技能点", "points=" + p.SkillPoints);
+
+            Check(p.BeginDoctrine(1), "v14 迁移选择风暴流派");
+            Check(p.SkillPoints == 9 && p.OwnedSkillCount == 0,
+                "选完流派获得 9 技能点、不自送技能", "points=" + p.SkillPoints + " owned=" + p.OwnedSkillCount);
+            foreach (SkillId id in SkillCatalog.KitOf(1))
+                Check(p.GrantSkill(id), "花 1 点学习 " + SkillCatalog.Get(id).name);
+            Check(p.OwnedSkillCount == 9 && p.EverOwnedSkillCount == 9 && p.SkillPoints == 0,
+                "9 技能点学满本流派", "owned=" + p.OwnedSkillCount + " ever=" + p.EverOwnedSkillCount
+                    + " points=" + p.SkillPoints);
+            p.EquipDoctrineBuild(1);
+            Check(p.GetSkillSlot(0) == (int)SkillId.ThunderRush
+                && p.GetSkillSlot(1) == (int)SkillId.ThunderGod
+                && p.GetSkillSlot(2) == (int)SkillId.StaticResonance
+                && p.GetSkillSlot(3) == (int)SkillId.StormHaste
+                && p.GetSkillSlot(4) == (int)SkillId.Arc
+                && p.GetSkillSlot(5) == (int)SkillId.ThunderPunish,
+                "按风暴毕业 build 装槽", "slots=" + p.GetSkillSlot(0) + "," + p.GetSkillSlot(1) + "," + p.GetSkillSlot(2)
+                    + "," + p.GetSkillSlot(3) + "," + p.GetSkillSlot(4) + "," + p.GetSkillSlot(5));
+            p.pendingLegacyDoctrineGrant = false;
+            Check(SaveSystem.Save(p), "迁移后保存 v15");
+            PlayerData q = Fresh();
+            Check(SaveSystem.Load(q), "迁移后重载 v15");
+            Check(q.doctrine == 1 && q.OwnedSkillCount == 9 && q.skillActive0 == (int)SkillId.ThunderRush,
+                "迁移结果往返", "doctrine=" + q.doctrine + " owned=" + q.OwnedSkillCount);
+
+            ClearSlot0();
+            SaveSystem.SaveData low = BaseData(14);
+            low.paragonLevel = 9;
+            low.ownedSkillMask = 0;
+            PlayerData r;
+            Check(LoadFromRaw(JsonUtility.ToJson(low), out r), "v14 低巅峰旧档可加载");
+            Check(!r.pendingLegacyDoctrineGrant && r.doctrine == 0, "v14 低巅峰不预授流派");
         }
 
         private static void LoadIsIdempotent()

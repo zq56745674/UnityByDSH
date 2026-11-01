@@ -27,9 +27,14 @@ namespace AutoBattle
             RectTransform panel = CreatePanel(root, "RightPanel", RightPanelX, 12, RightPanelW, PanelH, GameConfig.PanelBg);
 
             // 怪物区整块做成一张卡：名字、血条、属性都在卡内，和下面的日志区分开层次。
-            CreateCard(panel, "MonsterCard", 8, 6, 808, 108, GameConfig.CardBg);
+            CreateCard(panel, "MonsterCard", 8, 6, 808, 124, GameConfig.CardBg);
 
-            _monsterTitle = CreateText(panel, "MonsterTitle", "", 20, 10, 784, 30, 20, GameConfig.AccentMonsterTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+            // 名牌做成深皮革压条：名字是暖金色的，压在羊皮纸卡上根本读不出来（对比度 ~1.6:1），
+            // 压到深底上就变成 8:1。高度 36 与下面 43 的血条边框留 1px 缝。
+            Image namePlate = CreateImage(panel, "MonsterNamePlate", 8, 6, 808, 36, GameConfig.NamePlateBg);
+            Round(namePlate, RadiusCard);
+            AddBorder(namePlate, RadiusCard, GameConfig.Border);
+            _monsterTitle = CreateText(panel, "MonsterTitle", "", 22, 8, 780, 32, 20, GameConfig.AccentMonsterTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             // 精英/Boss 的血条边框：先建外框，再建血条盖住中间，只露出边缘。
             _monsterHpBorder = CreateImage(panel, "MonsterHpBorder", 17, 43, 790, 32, GameConfig.Clear);
@@ -39,19 +44,19 @@ namespace AutoBattle
             _monsterHpTrack = _monsterHpFill.transform.parent.GetComponent<Image>();
             _monsterHpText = CreateText(panel, "MonsterHpText", "", 20, 45, 784, 26, 15, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
 
-            _monsterStatText = CreateText(panel, "MonsterStat", "", 20, 78, 784, 32, 15, GameConfig.TextNormal, TextAnchor.UpperLeft);
+            _monsterStatText = CreateText(panel, "MonsterStat", "", 20, 76, 784, 48, 15, GameConfig.TextNormal, TextAnchor.UpperLeft);
 
             // ---- Buff / Debuff 栏（步骤 6）：狂暴、免死窗口、护盾、技能冷却 ----
-            CreateCard(panel, "BuffCard", 8, 116, 808, 32, GameConfig.InsetBg);
-            _buffText = CreateText(panel, "BuffText", "", 20, 116, 784, 32, 15, Color.white, TextAnchor.MiddleLeft);
+            CreateCard(panel, "BuffCard", 8, 134, 808, 32, GameConfig.InsetBg);
+            _buffText = CreateText(panel, "BuffText", "", 20, 134, 784, 32, 15, GameConfig.TextNormal, TextAnchor.MiddleLeft);
 
             // ---- P4 战斗舞台（布局 A）：原来的整块日志卡让位给「主角 vs 怪物」，
             // 日志压成底部两行 ticker，点 ▲ 才往上展开成可滚动的大日志。
             BuildBattleStage(panel);
 
             // ---- 实时 DPS（步骤 8）：做成舞台右上角的小胶囊，避开左上角的章节标签 ----
-            _dpsPill = CreateCard(panel, "DpsPill", 592, 163, 216, 26, GameConfig.RowBg, 13, GameConfig.BorderSoft);
-            _dpsText = CreateText(_dpsPill.rectTransform, "DpsText", "", 0, 0, 216, 26, 14, GameConfig.TextMint, TextAnchor.MiddleCenter);
+            _dpsPill = CreateCard(panel, "DpsPill", 512, 183, 296, 28, GameConfig.RowBg, 13, GameConfig.BorderSoft);
+            _dpsText = CreateText(_dpsPill.rectTransform, "DpsText", "", 0, 0, 296, 28, 14, GameConfig.TextNormal, TextAnchor.MiddleCenter);
             Stretch(_dpsText.rectTransform);
 
             // ---- 伤害飘字层（步骤 7）：不参与布局 ----
@@ -62,11 +67,10 @@ namespace AutoBattle
             BuildShopPanel(panel);
 
             // ---- 按钮区 ----
-            _startButton = CreateButton(panel, "StartButton", "开始", 16, 612, 200, 56, GameConfig.BtnPrimary, out _startButtonLabel);
+            _startButton = CreateButton(panel, "StartButton", "开始", 16, 606, 200, 52, GameConfig.BtnPrimary, out _startButtonLabel);
+            // 开始/暂停是整屏唯一的主按钮：图标 + 文字整簇居中由 UiButtonCluster 统一处理，
+            // 不再手工钉 iconX/offsetMin（那套硬编码在换字号后就对不齐）。
             _startButtonIcon = StyleBar(_startButton, _startButtonLabel, "frame_bar_round", "glyph_play", 30f, "开始 / 暂停");
-            // 开始/暂停是整屏唯一的主按钮，图标+文字整体居中；StyleBar 默认靠左，200 宽会显得右半边空。
-            if (_startButtonIcon != null) _startButtonIcon.rectTransform.anchoredPosition = new Vector2(60f, -13f);
-            _startButtonLabel.rectTransform.offsetMin = new Vector2(96f, 2f);
             _startButton.onClick.AddListener(OnStartClicked);
 
             var speedLabels = new string[GameConfig.SpeedOptions.Length];
@@ -79,7 +83,7 @@ namespace AutoBattle
             for (int i = 0; i < GameConfig.SpeedOptions.Length; i++)
             {
                 int captured = i; // 闭包捕获
-                _speedButtons[i] = CreateButton(panel, $"Speed{i}", speedLabels[i], 232 + i * 88, 612, 84, 56,
+                _speedButtons[i] = CreateButton(panel, $"Speed{i}", speedLabels[i], 232 + i * 142, 606, 128, 52,
                     GameConfig.BtnNeutral, out _speedLabels[i]);
                 _speedIcons[i] = StyleStack(_speedButtons[i], _speedLabels[i], "frame_hex", "glyph_speed", 23f,
                     $"战斗速度 {speedLabels[i]}");
@@ -87,23 +91,23 @@ namespace AutoBattle
             }
 
             // 148 宽是为了「确认重置？」五个字在 15 号下能一行放下；右边缘仍对齐 808。
-            Button reset = CreateButton(panel, "ResetButton", "重置", 660, 612, 148, 56, GameConfig.RowBg, out _resetLabel);
+            Button reset = CreateButton(panel, "ResetButton", "重置", 660, 606, 148, 52, GameConfig.RowBg, out _resetLabel);
             StyleBar(reset, _resetLabel, "frame_bar_notched", "glyph_reset", 28f, "重置游戏", 15);
-            _resetLabel.color = new Color(0.95f, 0.55f, 0.55f);
+            _resetLabel.color = new Color(0.95f, 0.80f, 0.58f);
             reset.onClick.AddListener(OnResetClicked);
 
-            // ---- B8：当前目标条（按钮行下缘 668 → 面板底 696，高 26） ----
-            CreateCard(panel, "GoalCard", 8, 670, 808, 26, GameConfig.InsetBg);
-            _goalMainText = CreateText(panel, "GoalMain", "", 20, 670, 508, 26,
-                13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
-            _goalSideText = CreateText(panel, "GoalSide", "", 536, 670, 264, 26,
-                13, GameConfig.TextMuted, TextAnchor.MiddleRight);
+            // ---- B8：按钮与目标条之间留 6px；目标条连投影也留在主面板内。 ----
+            CreateCard(panel, "GoalCard", 8, 664, 808, 24, GameConfig.InsetBg);
+            _goalMainText = CreateText(panel, "GoalMain", "", 20, 662, 508, 24,
+                13, GameConfig.TextInfoDeep, TextAnchor.MiddleLeft);
+            _goalSideText = CreateText(panel, "GoalSide", "", 536, 662, 264, 24,
+                13, GameConfig.TextNormal, TextAnchor.MiddleRight);
         }
 
         /// <summary>商店面板：目前只卖生命药剂（价格随主角等级变化）。</summary>
         private void BuildShopPanel(Transform panel)
         {
-            _shopCard = CreateCard(panel, "ShopCard", 8, 492, 808, 116, GameConfig.InsetBg);
+            _shopCard = CreateCard(panel, "ShopCard", 8, 492, 808, 108, GameConfig.InsetBg);
 
             CreateIcon(panel, "ui_shop", 28, 502, 20);
             CreateText(panel, "ShopTitle", "商店", 52, 498, 46, 28, 18,
@@ -111,11 +115,11 @@ namespace AutoBattle
 
             CreateIcon(panel, "ui_gold", 100, 503, 18);
             _shopGoldText = CreateText(panel, "ShopGold", "", 122, 498, 148, 28, 16,
-                GameConfig.TextGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+                GameConfig.TextGoldDeep, TextAnchor.MiddleLeft, FontStyle.Bold);
 
             CreateIcon(panel, "ui_potion", 274, 503, 18);
             _shopPotionText = CreateText(panel, "ShopPotion", "", 296, 498, 258, 28, 15,
-                Color.white, TextAnchor.MiddleLeft);
+                GameConfig.TextNormal, TextAnchor.MiddleLeft);
 
             _buyButton = CreateButton(panel, "BuyPotion", "购买", 556, 496, 88, 32,
                 GameConfig.BtnPrimary, out _buyButtonLabel);
@@ -128,11 +132,11 @@ namespace AutoBattle
             _autoBuyIcon = StyleBar(autoBuy, _autoBuyLabel, "frame_bar_notched", "glyph_auto_buy", 18f, "自动购买生命药剂");
             autoBuy.onClick.AddListener(OnAutoBuyClicked);
 
-            _shopTipText = CreateText(panel, "ShopTip", "", 28, 532, 500, 26, 15,
-                GameConfig.LogWarn, TextAnchor.MiddleLeft);
+            _shopTipText = CreateText(panel, "ShopTip", "", 28, 530, 500, 26, 15,
+                GameConfig.TextWarningDeep, TextAnchor.MiddleLeft);
 
             CreateText(panel, "ShopHelp", "低于 40% 生命自动使用（冷却 3 秒）；商店只在精英/Boss 前开放，自动购买会补满",
-                28, 566, 764, 28, 13, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+                28, 566, 764, 28, 13, GameConfig.TextNormal, TextAnchor.MiddleLeft);
         }
 
         // ==================== 按钮回调 ====================

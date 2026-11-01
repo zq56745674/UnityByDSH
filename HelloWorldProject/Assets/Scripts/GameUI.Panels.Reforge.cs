@@ -39,11 +39,9 @@ namespace AutoBattle
                 EquipmentSlot s = EquipmentSlots.All[i];
                 bool selected = i == _reforgeSlotIndex;
                 bool unlocked = p.IsEquipmentSlotUnlocked(s);
-                _reforgeSlotButtons[i].image.color = selected
-                    ? Color.white
-                    : new Color(0.60f, 0.64f, 0.72f, 1f);
+                _reforgeSlotButtons[i].image.color = selected ? Color.white : GameConfig.FrameTintDim;
                 _reforgeSlotLabels[i].color = selected ? Color.white
-                    : unlocked ? GameConfig.TextMuted : GameConfig.BtnDisabledText;
+                    : unlocked ? GameConfig.BtnText : GameConfig.BtnTextDim;
                 // 保留件可能落在尚未解锁的槽位（转生 v2），不要误写成「未解锁」。
                 string lockText = unlocked ? string.Empty
                     : p.GetEquipment(s) != null ? " · 保留件" : " · 未解锁";
@@ -70,11 +68,11 @@ namespace AutoBattle
 
             if (e != null)
             {
-                _reforgeCardLabel.text = $"{e.Title}\n<size=13><color=#C6CEE0>{e.StatLine}</color></size>";
+                _reforgeCardLabel.text = $"{e.Title}\n<size=13><color=#5E6B80>{e.StatLine}</color></size>";
             }
             else
             {
-                _reforgeCardLabel.text = $"{EquipmentSlots.Name(slot)}\n<size=13><color=#8C99B0>（空）</color></size>";
+                _reforgeCardLabel.text = $"{EquipmentSlots.Name(slot)}\n<size=13><color=#6F6252>（空）</color></size>";
             }
 
             // 小件只有 2 条词条，按枚举序号固定排会留下空行；这里把显示出来的行紧凑重排。
@@ -93,7 +91,7 @@ namespace AutoBattle
 
                 bool isLocked = (mask & bit) != 0;
                 _reforgeAffixLabels[j].text =
-                    (isLocked ? "<color=#FFC857>◆ 已锁</color>  " : "<color=#8C99B0>◇ 未锁</color>  ") +
+                    (isLocked ? "<color=#8A5A12>◆ 已锁</color>  " : "<color=#6F6252>◇ 未锁</color>  ") +
                     Equipment.AffixText(kind, e.AffixValue(kind));
 
                 var rowBg = _reforgeAffixButtons[j].targetGraphic as Image;
@@ -110,11 +108,13 @@ namespace AutoBattle
             _reforgeQualityLabel.gameObject.SetActive(e != null);
             _reforgeCostLabel.gameObject.SetActive(e != null);
             _reforgeActionButton.gameObject.SetActive(e != null);
+            bool hasReforgeTen = e != null && ShopCatalog.HasService(p, 1);
+            _reforgeTenButton.gameObject.SetActive(hasReforgeTen);
 
             if (e == null)
             {
                 _reforgeInfoText.text =
-                    $"<color=#C6CEE0>{EquipmentSlots.Name(slot)}</color>\n\n" +
+                    $"<color=#5E6B80>{EquipmentSlots.Name(slot)}</color>\n\n" +
                     "空槽位，没有可洗练的词条。\n" +
                     "装备掉落并自动穿上后，这里会显示词条容量、质量分档与锁定费用。";
                 return;
@@ -126,13 +126,13 @@ namespace AutoBattle
 
             // 右侧信息栏：容量、质量分档、锁定倍率。宽 236、11 号字，行数控制在 ~12 行内不裁切。
             _reforgeInfoText.text =
-                $"<color=#C6CEE0>词条容量</color>  {e.AffixCount} / {capacity} 条\n" +
+                $"<color=#5E6B80>词条容量</color>  {e.AffixCount} / {capacity} 条\n" +
                 $"洗练只重抽种类与数值，条数不变\n\n" +
-                $"<color=#C6CEE0>当前质量 {quality}% · {tier}</color>\n" +
+                $"<color=#5E6B80>当前质量 {quality}% · {tier}</color>\n" +
                 "≥85 极品 · ≥70 优秀\n" +
                 "≥50 合格 · <50 偏低\n" +
                 "质量 = 各词条数值百分位的平均\n\n" +
-                $"<color=#C6CEE0>锁定 ×{GameConfig.ReforgeLockFactor:0.#}/条</color>  当前锁 {locked} 条 → ×{Equipment.ReforgeLockMultiplier(locked):0.#}";
+                $"<color=#5E6B80>锁定 ×{GameConfig.ReforgeLockFactor:0.#}/条</color>  当前锁 {locked} 条 → ×{Equipment.ReforgeLockMultiplier(locked):0.#}";
 
             _reforgeQualityLabel.text =
                 $"词条质量 {quality}%（{e.AffixCount} 条）    {e.ReforgeCountText}";
@@ -166,6 +166,16 @@ namespace AutoBattle
             if (_reforgeActionIcon != null)
                 _reforgeActionIcon.color = canPay ? Color.white : new Color(1f, 1f, 1f, 0.45f);
             _reforgeActionLabel.color = canPay ? Color.white : GameConfig.BtnDisabledText;
+
+            if (hasReforgeTen)
+            {
+                _reforgeTenButton.interactable = canPay;
+                _reforgeTenButton.image.color = canPay ? Color.white : new Color(0.62f, 0.66f, 0.74f, 1f);
+                _reforgeTenLabel.color = canPay ? Color.white : GameConfig.BtnDisabledText;
+                SetTooltip(_reforgeTenButton, free > 0
+                    ? $"连续洗练最多 10 次，锁定 {locked} 条照旧不抽；每次按当前费用扣钱，钱不够就停"
+                    : "全部词条都被锁住了，至少解锁一条再洗练");
+            }
         }
 
 
@@ -216,6 +226,14 @@ namespace AutoBattle
             _game.AddLog(
                 $"{(wasLocked ? "解锁" : "锁定")} {Equipment.AffixText(kind, e.AffixValue(kind))} —— 锁 {locked} 条，洗练费用 ×{mult:0.#}",
                 GameConfig.LogInfo);
+        }
+
+        /// <summary>营地行商服务：同一槽位连洗 10 次，锁定掩码沿用当前临时锁定。</summary>
+        private void OnReforgeTenClicked()
+        {
+            int side = Mathf.Clamp(_reforgeSlotIndex, 0, EquipmentSlots.Count - 1);
+            _game.ReforgeMultiple(EquipmentSlots.All[side], _reforgeLockMasks[side], 10);
+            _reforgePanelDirty = true;
         }
 
         private void OnReforgeSlotClicked(EquipmentSlot slot)

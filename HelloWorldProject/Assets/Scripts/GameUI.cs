@@ -23,6 +23,9 @@ namespace AutoBattle
         private GameController _game;
         private Font _font;
 
+        /// <summary>展示标题使用得意黑，正文保留思源黑体以保证小字可读性。</summary>
+        private Font _fontDisplay;
+
         // ---- 需要在刷新时更新的控件 ----
         private Text _levelText;
         private Text _titleText;
@@ -85,14 +88,11 @@ namespace AutoBattle
         private Button[] _skillPoolButtons;
         private Text[] _skillPoolLabels;
         private Image[] _skillPoolIcons;
-
-        // ---- 技能三选一面板 ----
-        private RectTransform _skillChoicePanel;
-        private Text _skillChoiceTitle;
-        private Button[] _skillChoiceButtons;
-        private Text[] _skillChoiceLabels;
-        private Image[] _choiceAccents;
-        private Image[] _skillChoiceIcons;
+        private Image[] _skillPoolAccents;
+        private int[] _skillPoolIds;
+        private Image _skillPanelSchoolBar;
+        private Text _skillPanelSchoolText;
+        private Text _skillPanelOtherText;
 
         /// <summary>技能面板当前选中的槽位（0~5）。</summary>
         private int _selectedSkillSlot;
@@ -172,6 +172,11 @@ namespace AutoBattle
         private Text _enhanceBulk5Label;
         private Button _enhanceBulkMaxButton;
         private Text _enhanceBulkMaxLabel;
+        // 营地行商服务：全槽强化 / 一键锁定（没买服务时按钮不创建显示）
+        private Button _enhanceAllButton;
+        private Text _enhanceAllLabel;
+        private Button _enhanceLockAllButton;
+        private Text _enhanceLockAllLabel;
         private int _enhanceSlotIndex;
         private bool _enhancePanelWasOpen;
         private bool _enhancePanelDirty = true;
@@ -191,6 +196,9 @@ namespace AutoBattle
         private Button _reforgeActionButton;
         private Text _reforgeActionLabel;
         private Image _reforgeActionIcon;
+        // 营地行商服务：连续洗练 10 次
+        private Button _reforgeTenButton;
+        private Text _reforgeTenLabel;
         private int _reforgeSlotIndex;
         // 锁词条：当前选中那件的 5 行词条按钮（实际只显示 AffixCount 行），点击即切换锁定。
         // 锁定状态只活在界面层、不进存档——它是「这次准备怎么洗」的临时意图，
@@ -265,7 +273,7 @@ namespace AutoBattle
         public void Initialize(GameController game)
         {
             _game = game;
-            _font = LoadFont();
+            LoadFonts();
 
             EnsureEventSystem();
             BuildCanvas();
@@ -280,12 +288,23 @@ namespace AutoBattle
             if (!GameSettings.GuideDone) BeginGuide();
         }
 
-        private static Font LoadFont()
+        /// <summary>
+        /// 载入主题字体：得意黑用于展示标题，思源黑体用于正文、数字与小按钮。
+        /// 字体缺失时退回 Unity 内置字体——不会因为资源被删就整个 UI 崩掉，
+        /// 但那样就退回旧观感（这也是判断字体是否真的生效的办法）。
+        /// </summary>
+        private void LoadFonts()
         {
-            // Unity 2022+ 的内置字体名；老版本回退到 Arial。
-            Font f = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (f == null) f = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            return f;
+            _font = Resources.Load<Font>("Fonts/NotoSansSC-Regular");
+            _fontDisplay = Resources.Load<Font>("Fonts/SmileySans-Oblique");
+
+            if (_font == null)
+            {
+                // Unity 2022+ 的内置字体名；老版本回退到 Arial。
+                _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+            if (_fontDisplay == null) _fontDisplay = _font;
         }
 
         /// <summary>UGUI 的按钮点击依赖 EventSystem；工程可能启用新旧两套输入系统，这里都兼容。</summary>
@@ -325,6 +344,15 @@ namespace AutoBattle
             Image bg = CreateImage(canvasGo.transform, "Background", 0, 0, 1280, 720, GameConfig.WindowBg, false);
             Stretch(bg.rectTransform);
 
+            // 主题「桌面实体卡牌」的底：一张木桌。贴图缺失时保持 WindowBg 纯色。
+            Sprite wood = LoadUiSprite("UI/ui_bg_wood");
+            if (wood != null)
+            {
+                bg.sprite = wood;
+                bg.type = Image.Type.Simple;
+                bg.color = Color.white;
+            }
+
             // 设计稿是写死坐标的 1280×720。Expand 模式下视口比 16:9 宽或高时，画布会比设计稿大，
             // 面板直接挂画布上就全贴左上角、右侧留一条空带。装进一个居中的 1280×720 容器，
             // 多出来的空间左右/上下均分，宽屏和 4:3 都不会偏。
@@ -349,7 +377,7 @@ namespace AutoBattle
             _modalDim.gameObject.SetActive(false);
 
             BuildSkillPanel(root);
-            BuildSkillChoicePanel(root);
+            BuildDoctrinePanel(root);
             BuildStagePanel(root);
             BuildSavePanel(root);
             BuildEnhancePanel(root);
@@ -362,6 +390,7 @@ namespace AutoBattle
             BuildEndlessPanel(root);
             BuildRebirthPanel(root);
             BuildAchievements(root);
+            BuildShopPanel2(root);
             // 引导最后建（横幅之下另算）：它的遮罩与高亮框要压住所有浮层。
             BuildGuide(root);
             // 横幅必须压住选关 / 技能面板；成就 toast 再建在横幅之后，保证它是最上层提示。
@@ -369,6 +398,17 @@ namespace AutoBattle
             BuildAchievementToast(root);
             // 悬停名称必须最后建：否则会被横幅/成就 toast 压住。
             BuildTooltip(root);
+
+            // 全局颗粒：把所有平面色块统一到「印在纸上」的质感上。挂在画布最上层、
+            // 不吃点击、很淡——它盖的是整块画面，不是单个面板。
+            Sprite grain = LoadUiSprite("UI/ui_noise", true, 1f);
+            if (grain != null)
+            {
+                Image noise = CreateImage(canvasGo.transform, "Grain", 0, 0, 1280, 720, new Color(0f, 0f, 0f, 0.22f));
+                Stretch(noise.rectTransform);
+                noise.sprite = grain;
+                noise.type = Image.Type.Tiled;
+            }
         }
 
     }

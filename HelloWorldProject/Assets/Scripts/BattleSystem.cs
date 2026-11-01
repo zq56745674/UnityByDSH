@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace AutoBattle
@@ -15,13 +14,13 @@ namespace AutoBattle
         PlayerCrit,
         /// <summary>重击类技能。</summary>
         SkillHeavy,
-        /// <summary>旋风斩。</summary>
+        /// <summary>旋风斩（旧特效，保留给连锁闪电的跳射）。</summary>
         SkillWhirlwind,
-        /// <summary>斩杀。</summary>
+        /// <summary>斩杀 / 崩山类大伤害。</summary>
         SkillExecute,
-        /// <summary>反击。</summary>
+        /// <summary>反击 / 余震。</summary>
         SkillCounter,
-        /// <summary>其他主动技能（暴击连锁等）。</summary>
+        /// <summary>其他主动技能。</summary>
         SkillOther,
         /// <summary>怪物普通命中。</summary>
         MonsterHit,
@@ -33,23 +32,23 @@ namespace AutoBattle
         Shield,
         /// <summary>剧毒词缀。</summary>
         Poison,
-        /// <summary>狂暴开启。</summary>
+        /// <summary>战吼开启。</summary>
         Berserk,
-        /// <summary>暴击连锁（暴击后追加的一击）。</summary>
+        /// <summary>电弧 / 连锁闪电。</summary>
         SkillCritChain,
-        /// <summary>濒死爆发（致死一击时保命）。</summary>
+        /// <summary>保命触发。</summary>
         SkillNearDeath,
-        /// <summary>不死之身（低血减伤生效）。</summary>
+        /// <summary>减伤类被动（保留）。</summary>
         SkillUndying,
-        /// <summary>巨人杀手（对精英/Boss 的伤害加成收尾）。</summary>
+        /// <summary>雷殛 / 大伤害收官。</summary>
         SkillGiantSlayer,
-        /// <summary>纯属性被动：钢铁之躯（只在学到的瞬间表现一次）。</summary>
+        /// <summary>纯属性被动：山岳之躯。</summary>
         PassiveIronBody,
-        /// <summary>纯属性被动：狂暴之心。</summary>
+        /// <summary>纯属性被动：静电共鸣。</summary>
         PassiveBerserkHeart,
-        /// <summary>纯属性被动：致命打击。</summary>
+        /// <summary>纯属性被动：沉重打击。</summary>
         PassiveLethalStrike,
-        /// <summary>纯属性被动：迅捷。</summary>
+        /// <summary>纯属性被动：风暴加速。</summary>
         PassiveSwiftness,
     }
 
@@ -69,15 +68,12 @@ namespace AutoBattle
     /// <summary>
     /// 实时自动战斗（要求 5、6）。主角与怪物各自按「速度换算出的攻击间隔」独立计时，
     /// 谁的计时先到谁先出手，互不等待。
-    /// 技能运行状态（冷却 / Buff / 护盾计时）保存在本类里，**跨战斗保留**，
-    /// 只有调用 <see cref="ResetSkillState"/> 才清空（新游戏 / 读档 / 重置）。
+    ///
+    /// 技能 2.0：风暴流的雷印、山崩流的岩层、感电 / 破甲 / 压制 / 护盾计时都保存在本类，
+    /// 跨怪物保留冷却，但核心资源（雷印 / 岩层）每只怪重新开始。
     /// </summary>
     public class BattleSystem
     {
-        /// <summary>
-        /// 战斗表现事件：参数是 (发生了什么, 数值)。数值目前是伤害/回复量，
-        /// UI 没用到时可以直接忽略（挂机跑回归时没有订阅者，开销为 0）。
-        /// </summary>
         public event System.Action<BattleFx, int> Visual;
 
         private void RaiseVisual(BattleFx fx, int value = 0)
@@ -89,115 +85,154 @@ namespace AutoBattle
         /// <summary>主角距离下次攻击的剩余时间。</summary>
         private float _playerAttackTimer;
 
-        /// <summary>本场战斗累计出手次数，用于统计展示。</summary>
         public int PlayerHits { get; private set; }
         public int MonsterHits { get; private set; }
-
-        /// <summary>本场战斗累计暴击次数。</summary>
         public int PlayerCrits { get; private set; }
         public int MonsterCrits { get; private set; }
 
         // ==================== 技能运行状态 ====================
 
-        /// <summary>
-        /// 单次 Tick 最多结算多少次出手。极端 dt（编辑器卡顿、断点恢复、探针直接传大值）
-        /// 会让 while 追帧循环跑上很久；超过这个上限就丢弃剩余追帧时间。
-        /// 正常帧（60fps，最慢 0.2 秒一次）远达不到这个值。
-        /// </summary>
         private const int MaxCatchUpAttacks = 256;
 
-        /// <summary>两个主动技能槽各自的剩余冷却（游戏内秒）。</summary>
         private readonly float[] _activeCooldown = new float[PlayerData.SkillSlotsPerKind];
-
-        /// <summary>主动技能共享的公共冷却剩余。</summary>
         private float _globalCooldown;
 
-        /// <summary>狂暴 Buff 剩余时间。</summary>
-        private float _berserkTimer;
+        // 通用主动
+        private float _warCryTimer;
+        private float _lastStandTimer;
+        private float _lastStandCooldown;
+        private float _bulwarkAttackTimer;
+        private float _bulwarkShieldTimer;
+        private int _bulwarkShieldAmount;
 
-        /// <summary>濒死爆发 Buff 剩余时间与它的触发冷却。</summary>
-        private float _nearDeathTimer;
-        private float _nearDeathCooldown;
+        // 风暴
+        private int _stormMarks;
+        private float _stormCritMarkIcd;
+        private float _rushHasteTimer;
+        private int _stormHasteStacks;
+        private float _stormHasteTimer;
+        private float _shockTimer;
+        private int _shockStacks;
+        private int _lightningHits;
 
-        /// <summary>护盾生成的计时。</summary>
-        private float _shieldTimer;
+        // 山崩
+        private int _mountainLayers;
+        private float _mountainHitIcd;
+        private int _mountainAttackCounter;
+        private float _armorBreakTimer;
+        private float _armorBreakFactor = 1f;
+        private float _suppressTimer;
+        private float _rockShieldTimer;
+        private int _rockShieldAmount;
+        private float _rockArmorIcd;
 
-        /// <summary>清空全部技能运行状态（新游戏 / 读档 / 重置时调用）。</summary>
+        public int StormMarks => _stormMarks;
+        public const int StormMarkMax = 8;
+        public int MountainLayers => _mountainLayers;
+        public const int MountainLayerMax = 3;
+        public int ShockStacks => _shockStacks;
+        public float ShockTimeLeft => Mathf.Max(0f, _shockTimer);
+        public float ArmorBreakTimeLeft => Mathf.Max(0f, _armorBreakTimer);
+        public float SuppressTimeLeft => Mathf.Max(0f, _suppressTimer);
+        public bool StormReady => _stormMarks >= StormMarkMax;
+        public bool MountainReady => _mountainLayers >= MountainLayerMax;
+
         public void ResetSkillState()
         {
             for (int i = 0; i < _activeCooldown.Length; i++) _activeCooldown[i] = 0f;
             _globalCooldown = 0f;
-            _berserkTimer = 0f;
-            _nearDeathTimer = 0f;
-            _nearDeathCooldown = 0f;
-            _shieldTimer = 0f;
+
+            _warCryTimer = 0f;
+            _lastStandTimer = 0f;
+            _lastStandCooldown = 0f;
+            _bulwarkAttackTimer = 0f;
+            _bulwarkShieldTimer = 0f;
+            _bulwarkShieldAmount = 0;
+
+            ResetBattleResources();
         }
 
-        /// <summary>供 UI 查询：某个主动槽的剩余冷却与冷却总时长。</summary>
+        /// <summary>每只怪开打时清空核心资源与 Debuff；主动冷却跨怪保留。</summary>
+        private void ResetBattleResources()
+        {
+            _stormMarks = 0;
+            _stormCritMarkIcd = 0f;
+            _rushHasteTimer = 0f;
+            _stormHasteStacks = 0;
+            _stormHasteTimer = 0f;
+            _shockTimer = 0f;
+            _shockStacks = 0;
+            _lightningHits = 0;
+
+            _mountainLayers = 0;
+            _mountainHitIcd = 0f;
+            _mountainAttackCounter = 0;
+            _armorBreakTimer = 0f;
+            _armorBreakFactor = 1f;
+            _suppressTimer = 0f;
+            _rockShieldTimer = 0f;
+            _rockShieldAmount = 0;
+            _rockArmorIcd = 0f;
+        }
+
         public float GetActiveCooldown(int slot)
         {
             if (slot < 0 || slot >= _activeCooldown.Length) return 0f;
             return Mathf.Max(0f, _activeCooldown[slot]);
         }
 
-        /// <summary>公共冷却剩余（UI 用）。</summary>
         public float GlobalCooldown => Mathf.Max(0f, _globalCooldown);
 
-        /// <summary>狂暴剩余时间（UI Buff 栏用）。</summary>
-        public float BerserkTimeLeft => Mathf.Max(0f, _berserkTimer);
+        /// <summary>战吼剩余时间（Buff 栏继续叫「狂暴」的位置，文案已在 UI 改）。</summary>
+        public float BerserkTimeLeft => Mathf.Max(0f, _warCryTimer);
 
-        /// <summary>狂暴的总时长，用来画剩余比例。</summary>
-        public float BerserkDuration => SkillCatalog.Get(SkillId.Berserk).duration;
+        public float BerserkDuration => SkillCatalog.Get(SkillId.WarCry).duration;
 
-        /// <summary>濒死爆发的免死窗口剩余（UI Buff 栏用）。</summary>
-        public float NearDeathTimeLeft => Mathf.Max(0f, _nearDeathTimer);
+        /// <summary>保命的免死窗口剩余。</summary>
+        public float NearDeathTimeLeft => Mathf.Max(0f, _lastStandTimer);
 
-        /// <summary>濒死爆发的免死总时长。</summary>
-        public float NearDeathDuration => SkillCatalog.Get(SkillId.NearDeathBurst).duration;
+        public float NearDeathDuration => SkillCatalog.Get(SkillId.LastStand).duration;
 
-        /// <summary>护盾生成的下次触发倒计时（UI Buff 栏用）。</summary>
-        public float ShieldReadyIn => Mathf.Max(0f, _shieldTimer);
+        /// <summary>岩甲的下次可触发倒计时。</summary>
+        public float ShieldReadyIn => Mathf.Max(0f, _rockArmorIcd);
 
-        /// <summary>护盾生成的总冷却。</summary>
-        public float ShieldInterval => SkillCatalog.Get(SkillId.ShieldGen).cooldown;
+        public float ShieldInterval => SkillCatalog.Get(SkillId.RockArmor).value3;
 
-        /// <summary>狂暴 Buff 是否生效中。</summary>
-        public bool BerserkActive => _berserkTimer > 0f;
+        public bool BerserkActive => _warCryTimer > 0f;
 
-        /// <summary>濒死爆发是否生效中。</summary>
-        public bool NearDeathActive => _nearDeathTimer > 0f;
+        public bool NearDeathActive => _lastStandTimer > 0f;
 
-        /// <summary>开始一场新战斗：主角立即进入准备状态。技能冷却跨战斗保留，所以这里不重置。</summary>
+        /// <summary>开始一场新战斗：清空本场资源，冷却保留。</summary>
         public void BeginBattle(PlayerData player)
         {
             PlayerHits = 0;
             MonsterHits = 0;
             PlayerCrits = 0;
             MonsterCrits = 0;
+            ResetBattleResources();
             _playerAttackTimer = PlayerAttackInterval(player);
         }
 
-        /// <summary>
-        /// 主角的实际出手间隔：速度与攻速加成一起进入软上限曲线（见 GameConfig.AttacksPerSecond）。
-        /// 攻速乘在线性部分内，超过软上限后只渐近逼近硬上限，不会像旧公式那样直接撞 0.2s。
-        /// </summary>
+        /// <summary>静态口径的出手间隔（UI / 评分用；不含雷印与临时攻速）。</summary>
         public static float PlayerAttackInterval(PlayerData player)
         {
             if (player == null) return Mathf.Max(0.01f, GameConfig.MinAttackInterval);
             return GameConfig.AttackInterval(player.Speed, player.AttackSpeedBonus);
         }
 
-        /// <summary>某单位当前的有效攻速（次/秒），UI 与评分共用同一口径。</summary>
         public static float AttacksPerSecond(float speed, float haste = 0f) =>
             GameConfig.AttacksPerSecond(speed, haste);
 
-        /// <summary>
-        /// 百分比减伤伤害公式：
-        /// 有效防御 = 防御 × (1 - 护甲穿透)，减伤率 = 有效防御 / (有效防御 + 100 + 20 × 防御方等级)；
-        /// 基础伤害 = 攻击 × (1 - 减伤率)；
-        /// 伤害 = Round(基础伤害 × 随机 0.9~1.1)；
-        /// 若暴击，再 Round(伤害 × 暴击伤害倍率)；最后不低于 GameConfig.MinDamage。
-        /// </summary>
+        /// <summary>当前实际出手间隔：装备攻速 + 雷印 + 风暴加速层数 + 雷霆突袭临时攻速。</summary>
+        private float CurrentAttackInterval(PlayerData player)
+        {
+            float haste = player.AttackSpeedBonus
+                        + 0.015f * _stormMarks
+                        + 0.02f * _stormHasteStacks
+                        + (_rushHasteTimer > 0f ? SkillCatalog.Get(SkillId.ThunderRush).value3 : 0f);
+            return GameConfig.AttackInterval(player.Speed, haste);
+        }
+
         public static int RollDamage(int attack, int defense, int defenderLevel,
             float critChance, float critDamage, out bool isCrit, float armorPen = 0f)
         {
@@ -213,14 +248,12 @@ namespace AutoBattle
             return Mathf.Max(GameConfig.MinDamage, damage);
         }
 
-        /// <summary>把一次攻击按减伤公式折算成实际伤害（技能伤害用，不再随机浮动）。</summary>
         private static int ApplyDefense(int rawAttack, int defense, int defenderLevel, float armorPen = 0f)
         {
             float reduction = GameConfig.DamageReduction(defense, defenderLevel, armorPen);
             return Mathf.Max(GameConfig.MinDamage, Mathf.RoundToInt(rawAttack * (1f - reduction)));
         }
 
-        /// <summary>护盾优先吸收，返回（吸收量, 实际掉血量）。</summary>
         private static void SplitShield(ref int shield, int damage, out int absorbed, out int hpDamage)
         {
             absorbed = Mathf.Min(shield, damage);
@@ -228,31 +261,26 @@ namespace AutoBattle
             hpDamage = damage - absorbed;
         }
 
-        /// <summary>当前有效攻击力（叠加狂暴 / 濒死爆发的百分比加成）。</summary>
         private int EffectiveAttack(PlayerData player)
         {
             float mult = 1f;
-            if (_berserkTimer > 0f)
-                mult += GameConfig.ScaleSkillValue(SkillCatalog.Get(SkillId.Berserk).value, player.SkillLevel);
-            if (_nearDeathTimer > 0f)
-                mult += GameConfig.ScaleSkillValue(SkillCatalog.Get(SkillId.NearDeathBurst).value, player.SkillLevel);
+            if (_warCryTimer > 0f) mult += SkillCatalog.Get(SkillId.WarCry).value;
+            if (_bulwarkAttackTimer > 0f && player.shield > 0f) mult += SkillCatalog.Get(SkillId.Bulwark).value2;
             return Mathf.RoundToInt(player.Attack * mult);
         }
 
-        /// <summary>当前有效暴击率（叠加狂暴）。</summary>
-        private float EffectiveCritChance(PlayerData player)
+        private int EffectiveMonsterDefense(MonsterData monster)
         {
-            float chance = player.CritChance;
-            if (_berserkTimer > 0f)
-                chance += GameConfig.ScaleSkillValue(SkillCatalog.Get(SkillId.Berserk).critBonus, player.SkillLevel);
-            return Mathf.Min(GameConfig.MaxCritChance, chance);
+            float factor = _armorBreakTimer > 0f ? _armorBreakFactor : 1f;
+            return Mathf.Max(0, Mathf.RoundToInt(monster.defense * factor));
         }
 
-        /// <summary>巨人杀手：对精英 / Boss 的伤害乘区。</summary>
-        private static float GiantSlayerFactor(PlayerData player, MonsterData monster) =>
-            monster.tier == MonsterTier.Normal ? 1f : 1f + player.GiantSlayerBonus;
+        private float EffectiveMonsterInterval(MonsterData monster)
+        {
+            float speed = monster.speed * (_suppressTimer > 0f ? 0.8f : 1f);
+            return GameConfig.AttackInterval(speed);
+        }
 
-        /// <summary>吸血鬼：把造成伤害的一部分转回主角生命。</summary>
         private static int ApplyLifesteal(PlayerData player, int damageDealt)
         {
             if (damageDealt <= 0 || player.Lifesteal <= 0f) return 0;
@@ -264,10 +292,6 @@ namespace AutoBattle
             return player.currentHp - before;
         }
 
-        /// <summary>
-        /// 推进 dt 秒的战斗。dt 应当已经乘过游戏速度倍率。
-        /// 顺序：技能计时 → 主动技能释放 → 主角出手 → 怪物出手。
-        /// </summary>
         public BattleTickResult Tick(PlayerData player, MonsterData monster, float dt, BattleLog log)
         {
             if (player == null || monster == null) return BattleTickResult.Ongoing;
@@ -280,58 +304,24 @@ namespace AutoBattle
             int catchUp = 0;
             while (_playerAttackTimer <= 0f && !monster.IsDead && catchUp++ < MaxCatchUpAttacks)
             {
-                float giant = GiantSlayerFactor(player, monster);
-                int attack = EffectiveAttack(player);
-
-                bool crit;
-                int dmg = RollDamage(Mathf.RoundToInt(attack * giant), monster.defense, monster.level,
-                    EffectiveCritChance(player), player.CritDamage, out crit, player.ArmorPenetration);
-                PlayerHits++;
-                if (crit) PlayerCrits++;
-
-                // 护盾先扛，剩余部分才进生命。
-                int absorbed;
-                int hpDamage;
-                SplitShield(ref monster.shield, dmg, out absorbed, out hpDamage);
-                if (hpDamage > 0) monster.currentHp = Mathf.Max(0, monster.currentHp - hpDamage);
-
-                string shieldNote = absorbed > 0 ? $"  (护盾吸收 {absorbed})" : "";
-                string shieldLeft = monster.shield > 0 ? $"  护盾 {monster.shield}" : "";
-
-                log.AddCombat(
-                    $"主角 → 怪物  {(crit ? "暴击 " : "")}{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp}{shieldLeft})",
-                    crit ? GameConfig.LogGold : GameConfig.LogInfo);
-                GameAudio.PlayHit(crit);
-                RaiseVisual(crit ? BattleFx.PlayerCrit : BattleFx.PlayerHit, dmg);
-
-                // 巨人杀手只在「这一下真的把精英/Boss 打死」时表现，避免每次命中都叠一层金光。
-                if (monster.IsDead && giant > 1.0001f && player.HasSkill(SkillId.GiantSlayer))
-                    RaiseVisual(BattleFx.SkillGiantSlayer, dmg);
-
-                // 吸血鬼：按实际造成的伤害（含护盾吸收部分）回血。
-                int healed = ApplyLifesteal(player, dmg);
-                if (healed > 0)
+                if (player.doctrine == 1 && _stormMarks >= StormMarkMax)
                 {
-                    RaiseVisual(BattleFx.Drain, healed);
-                    log.AddCombat($"✦ 吸血 +{healed}   (主角 {player.currentHp}/{player.MaxHp})",
-                        SkillCatalog.Get(SkillId.Vampire).color);
+                    CastChainLightning(player, monster, EffectiveAttack(player), log);
+                }
+                else if (player.doctrine == 2 && _mountainLayers >= MountainLayerMax)
+                {
+                    AutoMountainSlam(player, monster, EffectiveAttack(player), log);
+                }
+                else
+                {
+                    NormalAttack(player, monster, log);
                 }
 
-                // 暴击连锁：暴击时按概率追加一次伤害。
-                if (crit && !monster.IsDead && player.HasSkill(SkillId.CritChain))
-                {
-                    SkillDef chain = SkillCatalog.Get(SkillId.CritChain);
-                    if (Random.value < GameConfig.ScaleSkillValue(chain.triggerChance, player.SkillLevel))
-                        DealSkillDamage(player, monster, giant, chain, attack, log);
-                }
-
-                _playerAttackTimer += PlayerAttackInterval(player);
+                _playerAttackTimer += CurrentAttackInterval(player);
             }
 
             if (monster.IsDead) return BattleTickResult.MonsterKilled;
-
-            // 追帧上限触发时 timer 仍可能是负数，直接归位，避免下一帧继续补算同一段丢失时间。
-            if (_playerAttackTimer <= 0f) _playerAttackTimer = PlayerAttackInterval(player);
+            if (_playerAttackTimer <= 0f) _playerAttackTimer = CurrentAttackInterval(player);
 
             // ---- 怪物出手 ----
             monster.attackTimer -= dt;
@@ -339,214 +329,85 @@ namespace AutoBattle
             while (monster.attackTimer <= 0f && !monster.IsDead && player.currentHp > 0
                    && catchUp++ < MaxCatchUpAttacks)
             {
-                float giant = GiantSlayerFactor(player, monster);
-
-                bool crit;
-                int dmg = RollDamage(monster.attack, player.Defense, player.level,
-                    monster.critChance, monster.critDamage, out crit);
-
-                // 不死之身：生命低于阈值时额外减伤。
-                bool undying = player.HasSkill(SkillId.Undying)
-                               && player.currentHp < player.MaxHp * player.UndyingThreshold;
-                if (undying)
-                {
-                    dmg = Mathf.Max(GameConfig.MinDamage,
-                        Mathf.RoundToInt(dmg * (1f - player.UndyingReduction)));
-                    RaiseVisual(BattleFx.SkillUndying, dmg);
-                }
-
-                // 主角护盾先扛。
-                int absorbed;
-                int hpDamage;
-                SplitShield(ref player.shield, dmg, out absorbed, out hpDamage);
-                if (hpDamage > 0) player.currentHp = Mathf.Max(0, player.currentHp - hpDamage);
-                MonsterHits++;
-                if (crit) MonsterCrits++;
-
-                string notes = "";
-                if (absorbed > 0) notes += $"  护盾吸收 {absorbed}";
-                if (undying) notes += "  不死之身";
-                if (player.shield > 0) notes += $"  护盾 {player.shield}";
-
-                // 剧毒：每次攻击附加目标最大生命 2% 的伤害。
-                if (monster.affix == MonsterAffix.Poison && player.currentHp > 0)
-                {
-                    int poison = Mathf.Max(1, Mathf.RoundToInt(player.MaxHp * GameConfig.PoisonAffixPercent));
-                    player.currentHp = Mathf.Max(0, player.currentHp - poison);
-                    notes += $"  剧毒 {poison}";
-                    RaiseVisual(BattleFx.Poison, poison);
-                }
-
-                // 吸血：把本次伤害的 30% 转回自身生命。
-                if (monster.affix == MonsterAffix.Lifesteal && !monster.IsDead)
-                {
-                    int before = monster.currentHp;
-                    monster.currentHp = Mathf.Min(monster.maxHp,
-                        monster.currentHp + Mathf.RoundToInt(dmg * GameConfig.LifestealAffixPercent));
-                    int mHealed = monster.currentHp - before;
-                    if (mHealed > 0) notes += $"  吸血 +{mHealed}";
-                }
-
-                log.AddCombat(
-                    $"怪物 → 主角  {(crit ? "暴击 " : "")}{dmg} 伤害{notes}   (主角 {player.currentHp}/{player.MaxHp})",
-                    crit ? GameConfig.LogDanger : GameConfig.LogWarn);
-                GameAudio.PlayHit(crit);
-                RaiseVisual(crit ? BattleFx.MonsterCrit : BattleFx.MonsterHit, dmg);
-
-                // 反击：受击时按概率反弹伤害。
-                if (player.HasSkill(SkillId.Counter) && !monster.IsDead && player.currentHp > 0)
-                {
-                    SkillDef counter = SkillCatalog.Get(SkillId.Counter);
-                    if (Random.value < GameConfig.ScaleSkillValue(counter.triggerChance, player.SkillLevel))
-                        DealSkillDamage(player, monster, giant, counter, EffectiveAttack(player), log);
-                }
-
-                monster.attackTimer += GameConfig.AttackInterval(monster.speed);
+                MonsterAttack(player, monster, log);
+                monster.attackTimer += EffectiveMonsterInterval(monster);
             }
 
-            // 追帧上限触发时同样把负计时归位，避免跨帧补算。
             if (monster.attackTimer <= 0f && !monster.IsDead && player.currentHp > 0)
-                monster.attackTimer = GameConfig.AttackInterval(monster.speed);
+                monster.attackTimer = EffectiveMonsterInterval(monster);
 
-            // 反击可能在本轮怪物出手时直接打死怪物。这里必须立刻结算，
-            // 否则 Tick 会先返回 Ongoing，击杀要晚一帧才被 GameController 处理。
             if (monster.IsDead) return BattleTickResult.MonsterKilled;
 
-            // 濒死爆发（触发）：这一击本来会致死时留 1 点血，并进入「5 秒内不会死亡」。
-            // 冷却没就绪时，只要还在那 5 秒窗口里同样不会死。
-            if (player.currentHp <= 0 && player.HasSkill(SkillId.NearDeathBurst))
+            // 保命：致死一击时留 1 血并进入 2 秒无敌。
+            if (player.currentHp <= 0 && player.HasSkill(SkillId.LastStand))
             {
-                SkillDef nd = SkillCatalog.Get(SkillId.NearDeathBurst);
-                if (_nearDeathCooldown <= 0f)
+                SkillDef def = SkillCatalog.Get(SkillId.LastStand);
+                if (_lastStandCooldown <= 0f)
                 {
-                    _nearDeathTimer = nd.duration;
-                    _nearDeathCooldown = nd.cooldown;
+                    _lastStandTimer = def.duration;
+                    _lastStandCooldown = def.cooldown;
                     player.currentHp = 1;
-
-                    int pct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(nd.value, player.SkillLevel) * 100f);
-                    log.AddCombat($"✦ 濒死爆发！攻击 +{pct}%，{nd.duration:0} 秒内不会死亡", nd.color);
-                    RaiseVisual(BattleFx.SkillNearDeath, player.currentHp);
+                    log.AddCombat($"✦ 保命！保留 1 点生命，{def.duration:0} 秒内不会死亡", def.color);
+                    RaiseVisual(BattleFx.SkillNearDeath, 1);
                 }
-                else if (_nearDeathTimer > 0f)
+                else if (_lastStandTimer > 0f)
                 {
                     player.currentHp = 1;
                 }
             }
 
             if (player.currentHp <= 0) return BattleTickResult.PlayerDied;
-
             return BattleTickResult.Ongoing;
         }
 
-        /// <summary>推进技能冷却与周期性效果（护盾生成、濒死爆发）。</summary>
-        private void TickSkillTimers(PlayerData player, float dt, BattleLog log)
+        // ==================== 主角出手 ====================
+
+        private void NormalAttack(PlayerData player, MonsterData monster, BattleLog log)
         {
-            if (_globalCooldown > 0f) _globalCooldown -= dt;
-            for (int i = 0; i < _activeCooldown.Length; i++)
-                if (_activeCooldown[i] > 0f) _activeCooldown[i] -= dt;
+            int attack = EffectiveAttack(player);
+            bool crit;
+            int dmg = HitMonster(player, monster, attack, true, out crit, "主角 → 怪物", GameConfig.LogInfo,
+                BattleFx.PlayerHit, false, log);
+            PlayerHits++;
+            if (crit) PlayerCrits++;
 
-            if (_berserkTimer > 0f) _berserkTimer -= dt;
-            if (_nearDeathTimer > 0f) _nearDeathTimer -= dt;
-            if (_nearDeathCooldown > 0f) _nearDeathCooldown -= dt;
+            if (crit) OnPlayerCrit(player, monster, attack, log);
 
-            // ---- 护盾生成：按 cd 反复刷新护盾（取较大值，不叠加） ----
-            // 计时器永远走：以前只在「当前装备了护盾技能」时递减，卸下技能后 timer 冻结，
-            // 再装回来会保留一个旧倒计时（甚至立刻触发）。
-            if (_shieldTimer > 0f) _shieldTimer = Mathf.Max(0f, _shieldTimer - dt);
-            if (player.HasSkill(SkillId.ShieldGen))
+            if (player.doctrine == 1)
             {
-                SkillDef def = SkillCatalog.Get(SkillId.ShieldGen);
-
-                if (_shieldTimer <= 0f)
+                AddStormMark(player, 1);
+                if (crit && _stormCritMarkIcd <= 0f)
                 {
-                    int amount = Mathf.RoundToInt(
-                        player.MaxHp * GameConfig.ScaleSkillValue(def.value, player.SkillLevel));
-                    _shieldTimer = def.cooldown;
-
-                    // cd 很短（0.5 秒）时不重复刷日志，只在护盾真的变厚时记一条。
-                    if (amount > player.shield)
-                    {
-                        player.shield = amount;
-                        log.AddCombat($"✦ 护盾生成  +{amount}  (护盾 {player.shield})", def.color);
-                        RaiseVisual(BattleFx.Shield, amount);
-                    }
+                    AddStormMark(player, 1);
+                    _stormCritMarkIcd = 1f;
                 }
             }
-
-            // 濒死爆发改为「受到致死一击时触发」（含 5 秒免死），触发点在主角结算掉血之后，这里不再按血线判断。
-        }
-
-        /// <summary>主动技能自动释放：公共冷却结束、该技能冷却结束、满足条件就放一个。</summary>
-        private void TryCastActiveSkills(PlayerData player, MonsterData monster, BattleLog log)
-        {
-            if (_globalCooldown > 0f || monster.IsDead) return;
-
-            for (int slot = 0; slot < _activeCooldown.Length; slot++)
+            else if (player.doctrine == 2)
             {
-                int id = player.GetSkillSlot(slot); // 槽位 0~1 是主动
-                if (id < 0 || id >= SkillCatalog.All.Length) continue;
-
-                SkillDef def = SkillCatalog.All[id];
-                if (!def.IsActive) continue;
-                if (_activeCooldown[slot] > 0f) continue;
-
-                // 斩杀只在怪物残血时放，否则留着。血线来自技能表（skills.json 可改）。
-                if (def.id == SkillId.Execute && monster.currentHp > monster.maxHp * def.hpThreshold)
-                    continue;
-
-                CastActive(player, monster, def, slot, log);
-                return; // 一次只放一个，其余等公共冷却
-            }
-        }
-
-        /// <summary>释放一个主动技能。</summary>
-        private void CastActive(PlayerData player, MonsterData monster, SkillDef def, int slot, BattleLog log)
-        {
-            _activeCooldown[slot] = def.cooldown;
-            _globalCooldown = GameConfig.SkillGlobalCooldown;
-
-            if (def.id == SkillId.Berserk)
-            {
-                _berserkTimer = def.duration;
-
-                int atkPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.value, player.SkillLevel) * 100f);
-                int critPct = Mathf.RoundToInt(GameConfig.ScaleSkillValue(def.critBonus, player.SkillLevel) * 100f);
-                log.AddCombat($"✦ 狂暴！{def.duration:0} 秒内攻击 +{atkPct}%、暴击率 +{critPct}%", def.color);
-                RaiseVisual(BattleFx.Berserk);
-                return;
+                _mountainAttackCounter++;
+                if (_mountainAttackCounter % 2 == 0) AddMountainLayer(player, 1);
             }
 
-            float giant = GiantSlayerFactor(player, monster);
-            int hits = Mathf.Max(1, def.hits);
-
-            for (int h = 0; h < hits && !monster.IsDead; h++)
-                DealSkillDamage(player, monster, giant, def, EffectiveAttack(player), log);
         }
 
-        /// <summary>技能 id → 表现事件。没单独做特效的技能统一走 SkillOther，不额外加分支。</summary>
-        private static BattleFx SkillVisualOf(SkillId skillId)
+        private int HitMonster(PlayerData player, MonsterData monster, int rawAttack, bool canCrit,
+            out bool crit, string prefix, Color color, BattleFx fx, bool lightning, BattleLog log)
         {
-            switch (skillId)
+            int defense = EffectiveMonsterDefense(monster);
+            int dmg;
+            if (canCrit)
             {
-                case SkillId.HeavyStrike: return BattleFx.SkillHeavy;
-                case SkillId.Whirlwind: return BattleFx.SkillWhirlwind;
-                case SkillId.Execute: return BattleFx.SkillExecute;
-                case SkillId.Counter: return BattleFx.SkillCounter;
-                case SkillId.CritChain: return BattleFx.SkillCritChain;
-                default: return BattleFx.SkillOther;
+                dmg = RollDamage(Mathf.RoundToInt(rawAttack), defense, monster.level,
+                    player.CritChance, player.CritDamage, out crit, player.ArmorPenetration);
             }
-        }
+            else
+            {
+                crit = false;
+                dmg = ApplyDefense(Mathf.RoundToInt(rawAttack), defense, monster.level, player.ArmorPenetration);
+            }
 
-        /// <summary>
-        /// 结算一次技能伤害：伤害 = 有效攻击 × 技能倍率（随等级放大）× 巨人杀手，再走减伤。
-        /// 技能伤害不吃暴击（保证倍率可预期）。触发技能的日志文案单独给。
-        /// </summary>
-        private void DealSkillDamage(PlayerData player, MonsterData monster, float giant,
-            SkillDef def, int attack, BattleLog log)
-        {
-            float mult = GameConfig.ScaleSkillValue(def.value, player.SkillLevel);
-            int dmg = ApplyDefense(Mathf.RoundToInt(attack * mult * giant), monster.defense, monster.level,
-                player.ArmorPenetration);
+            if (_shockStacks > 0)
+                dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f + 0.06f * _shockStacks)));
 
             int absorbed;
             int hpDamage;
@@ -554,14 +415,11 @@ namespace AutoBattle
             if (hpDamage > 0) monster.currentHp = Mathf.Max(0, monster.currentHp - hpDamage);
 
             string shieldNote = absorbed > 0 ? $"  (护盾吸收 {absorbed})" : "";
-            string label = def.name;
-            log.AddCombat(
-                $"✦ {label}！{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp})",
-                def.color);
-            RaiseVisual(SkillVisualOf(def.id), dmg);
-
-            if (monster.IsDead && giant > 1.0001f && player.HasSkill(SkillId.GiantSlayer))
-                RaiseVisual(BattleFx.SkillGiantSlayer, dmg);
+            string shieldLeft = monster.shield > 0 ? $"  护盾 {monster.shield}" : "";
+            log.AddCombat($"{prefix}  {(crit ? "暴击 " : "")}{dmg} 伤害{shieldNote}   (怪物 {monster.currentHp}/{monster.maxHp}{shieldLeft})",
+                color);
+            GameAudio.PlayHit(crit);
+            RaiseVisual(crit && fx == BattleFx.PlayerHit ? BattleFx.PlayerCrit : fx, dmg);
 
             int healed = ApplyLifesteal(player, dmg);
             if (healed > 0)
@@ -569,6 +427,360 @@ namespace AutoBattle
                 RaiseVisual(BattleFx.Drain, healed);
                 log.AddCombat($"✦ 吸血 +{healed}   (主角 {player.currentHp}/{player.MaxHp})",
                     SkillCatalog.Get(SkillId.Vampire).color);
+            }
+
+            if (lightning && !monster.IsDead) OnLightningHit(player, monster, log);
+            return dmg;
+        }
+
+        private void OnLightningHit(PlayerData player, MonsterData monster, BattleLog log)
+        {
+            AddShock(player);
+            if (!player.HasSkill(SkillId.ThunderPunish) || monster.IsDead) return;
+
+            _lightningHits++;
+            int need = Mathf.Max(2, SkillCatalog.Get(SkillId.ThunderPunish).hits);
+            if (_lightningHits < need) return;
+
+            _lightningHits = 0;
+            SkillDef def = SkillCatalog.Get(SkillId.ThunderPunish);
+            int dmg = HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * def.value),
+                false, out _, $"✦ {def.name}！", def.color, BattleFx.SkillGiantSlayer, false, log);
+            if (dmg > 0) AddStormMark(player, 1);
+        }
+
+        private void OnPlayerCrit(PlayerData player, MonsterData monster, int attack, BattleLog log)
+        {
+            if (player.doctrine == 1 && player.HasSkill(SkillId.StormHaste))
+            {
+                _stormHasteStacks = Mathf.Min(5, _stormHasteStacks + 1);
+                _stormHasteTimer = SkillCatalog.Get(SkillId.StormHaste).duration;
+            }
+
+            if (player.doctrine == 1 && player.HasSkill(SkillId.Arc) && !monster.IsDead)
+            {
+                SkillDef arc = SkillCatalog.Get(SkillId.Arc);
+                if (Random.value < arc.triggerChance)
+                {
+                    HitMonster(player, monster, Mathf.RoundToInt(attack * arc.value), false, out _,
+                        $"✦ {arc.name}！", arc.color, BattleFx.SkillCritChain, true, log);
+                }
+            }
+        }
+
+        private void CastChainLightning(PlayerData player, MonsterData monster, int attack, BattleLog log)
+        {
+            SkillDef core = SkillCatalog.Get(SkillId.ThunderRush); // 只用配色
+            _stormMarks = 0;
+
+            int dmg = HitMonster(player, monster, Mathf.RoundToInt(attack * 1.80f), true, out bool crit,
+                "✦ 连锁闪电！", SkillCatalog.StormColor, BattleFx.SkillCritChain, true, log);
+            if (crit) PlayerCrits++;
+            HealFromLightning(player, log);
+            if (monster.IsDead) return;
+
+            for (int i = 0; i < 2 && !monster.IsDead; i++)
+            {
+                HitMonster(player, monster, Mathf.RoundToInt(attack * 0.90f), false, out _,
+                    "  ↳ 连锁闪电 · 跳射", core.color, BattleFx.SkillWhirlwind, true, log);
+                HealFromLightning(player, log);
+            }
+        }
+
+        private void HealFromLightning(PlayerData player, BattleLog log)
+        {
+            if (player.currentHp <= 0 || player.currentHp >= player.MaxHp) return;
+            int heal = Mathf.Max(1, Mathf.RoundToInt(player.MaxHp * SkillCatalog.Get(SkillId.ThunderRush).value4));
+            int before = player.currentHp;
+            player.currentHp = Mathf.Min(player.MaxHp, player.currentHp + heal);
+            int healed = player.currentHp - before;
+            if (healed > 0)
+            {
+                RaiseVisual(BattleFx.Drain, healed);
+                log.AddCombat($"  ↳ 闪电回流 +{healed}", SkillCatalog.StormColor);
+            }
+        }
+
+        private void AutoMountainSlam(PlayerData player, MonsterData monster, int attack, BattleLog log)
+        {
+            _mountainLayers = 0;
+            ApplyArmorBreak(0.75f, 5f);
+            _suppressTimer = Mathf.Max(_suppressTimer, 1.5f);
+
+            float mult = 3.30f * (1f + player.MountainSkillDamageBonus);
+            HitMonster(player, monster, Mathf.RoundToInt(attack * mult), true, out bool crit,
+                "✦ 崩山！", SkillCatalog.MountainColor, BattleFx.SkillExecute, false, log);
+            if (crit)
+            {
+                PlayerCrits++;
+                OnPlayerCrit(player, monster, attack, log);
+            }
+            if (!monster.IsDead) OnMountainHit(player, monster, attack, log);
+        }
+
+        private void CastThunderRush(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
+        {
+            HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * def.value), false, out _,
+                $"✦ {def.name}！", def.color, BattleFx.SkillHeavy, true, log);
+            AddStormMark(player, Mathf.RoundToInt(def.value2));
+            _rushHasteTimer = def.duration;
+            log.AddCombat($"  ↳ 雷印 {_stormMarks}/{StormMarkMax}，攻速 +{def.value3 * 100f:0}% {def.duration:0} 秒",
+                def.color);
+        }
+
+        private void CastThunderGod(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
+        {
+            int marks = _stormMarks;
+            float mult = def.value + def.value2 * marks;
+            bool full = marks >= StormMarkMax;
+            if (full) mult *= def.value3;
+
+            HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * mult), false, out _,
+                $"✦ {def.name}！", def.color, BattleFx.SkillHeavy, true, log);
+            if (full)
+            {
+                _activeCooldown[0] = 0f;
+                log.AddCombat("  ↳ 满雷印爆发，雷霆突袭冷却已重置", def.color);
+            }
+            log.AddCombat($"  ↳ 本次按 {marks} 层雷印结算（不消耗）", def.color);
+        }
+
+        private void CastMountainSlam(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
+        {
+            int layers = _mountainLayers;
+            float mult = def.value + def.value2 * layers;
+            mult *= (1f + player.MountainSkillDamageBonus);
+
+            HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * mult), false, out _,
+                $"✦ {def.name}！", def.color, BattleFx.SkillExecute, false, log);
+            ApplyArmorBreak(1f - def.value3, def.duration);
+            _suppressTimer = Mathf.Max(_suppressTimer, def.duration2);
+            if (!monster.IsDead) OnMountainHit(player, monster, EffectiveAttack(player), log);
+        }
+
+        private void OnMountainHit(PlayerData player, MonsterData monster, int attack, BattleLog log)
+        {
+            if (!player.HasSkill(SkillId.Aftershock) || monster.IsDead) return;
+            SkillDef def = SkillCatalog.Get(SkillId.Aftershock);
+            if (Random.value >= def.triggerChance) return;
+
+            float mult = def.value * (1f + player.MountainSkillDamageBonus);
+            HitMonster(player, monster, Mathf.RoundToInt(attack * mult), false, out _,
+                $"✦ {def.name}！", def.color, BattleFx.SkillCounter, false, log);
+        }
+
+        private void CastBulwark(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
+        {
+            int amount = Mathf.RoundToInt(player.MaxHp * def.value);
+            _bulwarkShieldAmount = amount;
+            _bulwarkShieldTimer = def.duration;
+            player.shield = Mathf.Max(player.shield, amount);
+            _bulwarkAttackTimer = def.duration2;
+
+            log.AddCombat($"✦ {def.name}！护盾 {amount}，{def.duration:0} 秒；攻击 +{def.value2 * 100f:0}% {def.duration2:0} 秒",
+                def.color);
+            RaiseVisual(BattleFx.Shield, amount);
+        }
+
+        private void CastWarCry(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
+        {
+            _warCryTimer = def.duration;
+            log.AddCombat($"✦ {def.name}！攻击 +{def.value * 100f:0}%、受伤 -{def.value2 * 100f:0}% {def.duration:0} 秒",
+                def.color);
+            RaiseVisual(BattleFx.Berserk);
+        }
+
+        // ==================== 怪物出手 ====================
+
+        private void MonsterAttack(PlayerData player, MonsterData monster, BattleLog log)
+        {
+            if (_lastStandTimer > 0f)
+            {
+                // 免死窗口内完全免疫，但仍要推进攻击间隔。
+                log.AddCombat("怪物 → 主角  免死窗口，伤害无效", GameConfig.LogWarn);
+                return;
+            }
+
+            bool crit;
+            int dmg = RollDamage(monster.attack, player.Defense, player.level,
+                monster.critChance, monster.critDamage, out crit);
+
+            if (_warCryTimer > 0f)
+                dmg = Mathf.Max(GameConfig.MinDamage,
+                    Mathf.RoundToInt(dmg * (1f - SkillCatalog.Get(SkillId.WarCry).value2)));
+
+            // 流派核心减伤：风暴按雷印层数、山崩按岩层数，资源越满越硬。
+            float doctrineGuard = player.doctrine == 1 ? 0.03f * _stormMarks
+                : player.doctrine == 2 ? 0.06f * _mountainLayers : 0f;
+            if (doctrineGuard > 0f)
+                dmg = Mathf.Max(GameConfig.MinDamage, Mathf.RoundToInt(dmg * (1f - doctrineGuard)));
+
+            int absorbed;
+            int hpDamage;
+            SplitShield(ref player.shield, dmg, out absorbed, out hpDamage);
+            if (hpDamage > 0) player.currentHp = Mathf.Max(0, player.currentHp - hpDamage);
+            MonsterHits++;
+            if (crit) MonsterCrits++;
+
+            string notes = "";
+            if (absorbed > 0) notes += $"  护盾吸收 {absorbed}";
+            if (player.shield > 0) notes += $"  护盾 {player.shield}";
+
+            if (monster.affix == MonsterAffix.Poison && player.currentHp > 0)
+            {
+                int poison = Mathf.Max(1, Mathf.RoundToInt(player.MaxHp * GameConfig.PoisonAffixPercent));
+                player.currentHp = Mathf.Max(0, player.currentHp - poison);
+                notes += $"  剧毒 {poison}";
+                RaiseVisual(BattleFx.Poison, poison);
+            }
+
+            if (monster.affix == MonsterAffix.Lifesteal && !monster.IsDead)
+            {
+                int before = monster.currentHp;
+                monster.currentHp = Mathf.Min(monster.maxHp,
+                    monster.currentHp + Mathf.RoundToInt(dmg * GameConfig.LifestealAffixPercent));
+                int mHealed = monster.currentHp - before;
+                if (mHealed > 0) notes += $"  吸血 +{mHealed}";
+            }
+
+            log.AddCombat($"怪物 → 主角  {(crit ? "暴击 " : "")}{dmg} 伤害{notes}   (主角 {player.currentHp}/{player.MaxHp})",
+                crit ? GameConfig.LogDanger : GameConfig.LogWarn);
+            GameAudio.PlayHit(crit);
+            RaiseVisual(crit ? BattleFx.MonsterCrit : BattleFx.MonsterHit, dmg);
+
+            OnPlayerHit(player);
+        }
+
+        private void OnPlayerHit(PlayerData player)
+        {
+            if (player.doctrine == 2 && _mountainHitIcd <= 0f)
+            {
+                AddMountainLayer(player, 1);
+                _mountainHitIcd = 1.5f;
+            }
+
+            if (player.HasSkill(SkillId.RockArmor) && _rockArmorIcd <= 0f)
+            {
+                SkillDef def = SkillCatalog.Get(SkillId.RockArmor);
+                if (Random.value < def.triggerChance)
+                {
+                    int amount = Mathf.RoundToInt(player.MaxHp * def.value);
+                    int cap = Mathf.RoundToInt(player.MaxHp * def.value2);
+                    _rockShieldAmount = Mathf.Min(amount, cap);
+                    _rockShieldTimer = def.duration;
+                    player.shield = Mathf.Max(player.shield, _rockShieldAmount);
+                    _rockArmorIcd = def.value3;
+                    RaiseVisual(BattleFx.Shield, _rockShieldAmount);
+                }
+            }
+        }
+
+        // ==================== 计时与资源 ====================
+
+        private void TickSkillTimers(PlayerData player, float dt, BattleLog log)
+        {
+            if (_globalCooldown > 0f) _globalCooldown -= dt;
+            for (int i = 0; i < _activeCooldown.Length; i++)
+                if (_activeCooldown[i] > 0f) _activeCooldown[i] -= dt;
+
+            if (_warCryTimer > 0f) _warCryTimer = Mathf.Max(0f, _warCryTimer - dt);
+            if (_lastStandTimer > 0f) _lastStandTimer = Mathf.Max(0f, _lastStandTimer - dt);
+            if (_lastStandCooldown > 0f) _lastStandCooldown = Mathf.Max(0f, _lastStandCooldown - dt);
+            if (_bulwarkAttackTimer > 0f) _bulwarkAttackTimer = Mathf.Max(0f, _bulwarkAttackTimer - dt);
+            if (_bulwarkShieldTimer > 0f) _bulwarkShieldTimer = Mathf.Max(0f, _bulwarkShieldTimer - dt);
+            if (_rushHasteTimer > 0f) _rushHasteTimer = Mathf.Max(0f, _rushHasteTimer - dt);
+            if (_stormCritMarkIcd > 0f) _stormCritMarkIcd = Mathf.Max(0f, _stormCritMarkIcd - dt);
+            if (_stormHasteTimer > 0f)
+            {
+                _stormHasteTimer = Mathf.Max(0f, _stormHasteTimer - dt);
+                if (_stormHasteTimer <= 0f) _stormHasteStacks = 0;
+            }
+            if (_shockTimer > 0f)
+            {
+                _shockTimer = Mathf.Max(0f, _shockTimer - dt);
+                if (_shockTimer <= 0f) _shockStacks = 0;
+            }
+            if (_mountainHitIcd > 0f) _mountainHitIcd = Mathf.Max(0f, _mountainHitIcd - dt);
+            if (_armorBreakTimer > 0f)
+            {
+                _armorBreakTimer = Mathf.Max(0f, _armorBreakTimer - dt);
+                if (_armorBreakTimer <= 0f) _armorBreakFactor = 1f;
+            }
+            if (_suppressTimer > 0f) _suppressTimer = Mathf.Max(0f, _suppressTimer - dt);
+            if (_rockArmorIcd > 0f) _rockArmorIcd = Mathf.Max(0f, _rockArmorIcd - dt);
+            if (_rockShieldTimer > 0f) _rockShieldTimer = Mathf.Max(0f, _rockShieldTimer - dt);
+
+            int cap = 0;
+            if (_bulwarkShieldTimer > 0f) cap = Mathf.Max(cap, _bulwarkShieldAmount);
+            if (_rockShieldTimer > 0f) cap = Mathf.Max(cap, _rockShieldAmount);
+            if (cap < player.shield) player.shield = cap;
+            if (_bulwarkShieldTimer <= 0f) _bulwarkShieldAmount = 0;
+            if (_rockShieldTimer <= 0f) _rockShieldAmount = 0;
+        }
+
+        private void AddStormMark(PlayerData player, int amount)
+        {
+            if (player.doctrine != 1 || amount <= 0) return;
+            _stormMarks = Mathf.Min(StormMarkMax, _stormMarks + amount);
+        }
+
+        private void AddMountainLayer(PlayerData player, int amount)
+        {
+            if (player.doctrine != 2 || amount <= 0) return;
+            _mountainLayers = Mathf.Min(MountainLayerMax, _mountainLayers + amount);
+        }
+
+        private void AddShock(PlayerData player)
+        {
+            if (player.doctrine != 1) return;
+            _shockStacks = Mathf.Min(3, _shockStacks + 1);
+            _shockTimer = 6f;
+        }
+
+        private void ApplyArmorBreak(float factor, float duration)
+        {
+            _armorBreakFactor = Mathf.Clamp(factor, 0.1f, 1f);
+            _armorBreakTimer = Mathf.Max(_armorBreakTimer, duration);
+        }
+
+        // ==================== 主动技能 ====================
+
+        private void TryCastActiveSkills(PlayerData player, MonsterData monster, BattleLog log)
+        {
+            if (_globalCooldown > 0f || monster.IsDead) return;
+
+            for (int slot = 0; slot < _activeCooldown.Length; slot++)
+            {
+                int id = player.GetSkillSlot(slot);
+                if (id < 0 || id >= SkillCatalog.All.Length) continue;
+
+                SkillDef def = SkillCatalog.All[id];
+                if (!def.IsActive) continue;
+                if (_activeCooldown[slot] > 0f) continue;
+
+                // 让自动释放看起来像人：雷神降临等雷印过半、战吼不覆盖、磐石不叠空盾。
+                if (def.id == SkillId.ThunderGod && _stormMarks < 4) continue;
+                if (def.id == SkillId.WarCry && _warCryTimer > 0f) continue;
+                if (def.id == SkillId.Bulwark && player.shield >= Mathf.RoundToInt(player.MaxHp * 0.10f)) continue;
+
+                CastActive(player, monster, def, slot, log);
+                return;
+            }
+        }
+
+        private void CastActive(PlayerData player, MonsterData monster, SkillDef def, int slot, BattleLog log)
+        {
+            _activeCooldown[slot] = def.cooldown;
+            _globalCooldown = GameConfig.SkillGlobalCooldown;
+
+            switch (def.id)
+            {
+                case SkillId.ThunderRush: CastThunderRush(player, monster, def, log); break;
+                case SkillId.ThunderGod: CastThunderGod(player, monster, def, log); break;
+                case SkillId.MountainSlam: CastMountainSlam(player, monster, def, log); break;
+                case SkillId.Bulwark: CastBulwark(player, monster, def, log); break;
+                case SkillId.WarCry: CastWarCry(player, monster, def, log); break;
+                default: break;
             }
         }
     }

@@ -50,9 +50,14 @@ namespace AutoBattle
         private RectTransform CreatePanel(Transform parent, string name, float x, float y, float w, float h,
             Color color, bool blockClicks = false)
         {
+            Image shadow = CreateHardShadow(parent, name + "Shadow", x, y, w, h, RadiusPanel);
             Image img = CreateImage(parent, name, x, y, w, h, color, blockClicks);
             Round(img, RadiusPanel);
             AddBorder(img, RadiusPanel, GameConfig.Border);
+            AddPaperSheen(img);
+            LinkShadow(img.gameObject, shadow);
+            // 浮层面板打开时淡入 + 落位；SetActive(true) 会重放。
+            UiMotion.PanelIn(img.gameObject);
             return img.rectTransform;
         }
 
@@ -61,12 +66,14 @@ namespace AutoBattle
         {
             RectTransform rt = CreateRect(parent, name, x, y, w, h);
             var t = rt.gameObject.AddComponent<Text>();
-            t.font = _font;
+            t.font = PickFont(style, fontSize);
             t.text = content;
             t.fontSize = fontSize;
             t.color = color;
             t.alignment = anchor;
-            t.fontStyle = style;
+            // 展示字采用原生笔形，避免再次合成粗体。
+            t.fontStyle = t.font == _fontDisplay && _fontDisplay != _font
+                ? FontStyle.Normal : style;
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
             t.verticalOverflow = VerticalWrapMode.Overflow;
             t.supportRichText = true;
@@ -107,12 +114,17 @@ namespace AutoBattle
             colors.highlightedColor = new Color(1.30f, 1.30f, 1.30f, 1f);
             colors.pressedColor = new Color(0.78f, 0.78f, 0.78f, 1f);
             colors.selectedColor = new Color(1.10f, 1.10f, 1.10f, 1f);
-            colors.disabledColor = new Color(1f, 1f, 1f, 0.45f);
+            // 禁用态：只压暗、不要半透明。旧值 (1,1,1,0.45) 会把深皮革底框染成半透明，
+            // 透出后面的羊皮纸，看起来像一张发白的空壳（无尽「开始挑战」就是这样）。
+            colors.disabledColor = new Color(0.62f, 0.60f, 0.57f, 1f);
             colors.fadeDuration = 0.08f;
             btn.colors = colors;
 
             labelText = CreateText(img.rectTransform, name + "Label", label, 0, 0, w, h, 17, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
             Stretch(labelText.rectTransform);
+
+            // 悬停抬起 1px、按下沉 2px。
+            UiMotion.Attach(btn);
 
             return btn;
         }

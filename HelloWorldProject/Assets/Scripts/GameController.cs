@@ -31,12 +31,6 @@ namespace AutoBattle
             Shopping,
 
             /// <summary>
-            /// 技能三选一中：巅峰升级发技能时战斗暂停，等玩家从候选里选一个。
-            /// 和商店不同，这里没有倒计时——必须选完才继续。
-            /// </summary>
-            SkillChoice,
-
-            /// <summary>
             /// 无尽一局已结束（阵亡 / 主动撤退）：战斗完全停住，
             /// 只剩结果面板等玩家选择「再次挑战」或「返回战役」。战役里不会出现这个状态。
             /// </summary>
@@ -191,6 +185,9 @@ namespace AutoBattle
             // 旧档补发新槽位的解锁赠礼（只发一次，靠 slotStarterMask 记账）。
             EnsureEquipmentSlotStarters();
 
+            // v15 流派：P10 起第一次进入（或 v14 旧档迁移）先弹流派面板。
+            TryPromptDoctrine();
+
             // 未开始时先不生成怪物，等玩家点开始。
             CurrentState = State.WaitingRespawn;
 
@@ -219,9 +216,10 @@ namespace AutoBattle
             // 设置 / 引导 / 对比同理：它们都能从常驻按钮点开，必须和别的浮层一样有冻结权。
             if (StagePanelOpen || SavePanelOpen || EnhancePanelOpen || ReforgePanelOpen || SkillPanelOpen
                 || SettingsOpen || MusicPanelOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen
-                || RebirthPanelOpen || AchievementPanelOpen || AboutOpen || DisplayOpen) return;
+                || RebirthPanelOpen || AchievementPanelOpen || AboutOpen || DisplayOpen || ShopPanelOpen
+                || DoctrinePanelOpen) return;
 
-            // 本世计时（v12）：暂停 / 浮层不计；刷怪等待、复活、商店倒计时与三选一都计真实秒。
+            // 本世计时（v12）：暂停 / 浮层不计；刷怪等待、复活与商店倒计时都计真实秒。
             // 速度倍率不影响它，读的是 realDt；上限防手改档把计时写爆。
             if (Player != null && Player.lifeSeconds < RebirthHistory.MaxSeconds)
             {
@@ -255,9 +253,6 @@ namespace AutoBattle
                     if (_shopTimer <= 0f) SpawnMonsterNow();
                     break;
 
-                case State.SkillChoice:
-                    // 等玩家选技能：不推进战斗，等 ChooseSkill 里恢复。
-                    break;
             }
         }
 
@@ -279,6 +274,9 @@ namespace AutoBattle
         /// </summary>
         public bool TrySave()
         {
+            // 旧档迁移还没选流派：此时写盘会把 v14 覆盖成 v15，而 9 个技能还没补发。
+            // 保持原档不动，等 ChooseDoctrine 补完再存。
+            if (Player != null && Player.pendingLegacyDoctrineGrant) return false;
             if (SaveSystem.Save(Player)) return true;
 
             AddLog("⚠ 存档写入失败：本机存储不可写（磁盘满 / 权限 / 注册表被锁），进度仍在内存，稍后自动重试",
@@ -297,7 +295,7 @@ namespace AutoBattle
         /// 开始 / 暂停切换（要求 16）。
         /// 只负责开关时间推进：**暂停期间状态机原地冻结，继续时原样恢复**。
         /// 早先的实现会在"继续"时无条件把状态打回 WaitingRespawn，导致两个可利用的洞：
-        /// 商店里暂停再继续会把 _shopTimer 充满（无限刷商店时间）、三选一里暂停再继续会把这次选择吞掉。
+        /// 商店里暂停再继续会把 _shopTimer 充满（无限刷商店时间）；浮层打开时必须冻结。
         /// </summary>
         public void ToggleRunning()
         {
@@ -440,9 +438,8 @@ namespace AutoBattle
 
         // ---- 五个浮层（选关 / 技能 / 存档 / 强化 / 洗练）互斥，规则只在这一处 ----
 
-        /// <summary>三选一还没选完时不许开任何浮层：候选卡会压在浮层上面，两层叠着没法看。</summary>
-        private bool ChoicePending =>
-            CurrentState == State.SkillChoice || PendingSkillPicks > 0 || EndlessResultOpen;
+        /// <summary>必须先处理的无浮层状态：流派未选、无尽结算未确认时，不许开其它浮层。</summary>
+        private bool ChoicePending => EndlessResultOpen || DoctrinePanelOpen;
 
         /// <summary>关掉全部浮层。任何 Open 之前先走这里，保证同时只开一个。</summary>
         private void CloseAllPanels()
@@ -461,6 +458,9 @@ namespace AutoBattle
             AchievementPanelOpen = false;
             AboutOpen = false;
             DisplayOpen = false;
+            ShopPanelOpen = false;
+            DoctrinePanelOpen = false;
+            CancelShopConfirm();
         }
 
         /// <summary>打开 / 关闭选关面板。</summary>
@@ -484,10 +484,16 @@ namespace AutoBattle
         /// <summary>关闭选关面板。</summary>
         public void CloseStagePanel() => StagePanelOpen = false;
 
-        /// <summary>打开技能面板（同时关掉其它浮层）。</summary>
+        /// <summary>打开技能面板（同时关掉其它浮层）；还没选流派时改开流派面板。</summary>
         public void OpenSkillPanel()
         {
             if (ChoicePending) return;
+            if (Player == null) return;
+            if (!Player.HasDoctrine)
+            {
+                OpenDoctrinePanel();
+                return;
+            }
             CloseAllPanels();
             SkillPanelOpen = true;
         }
@@ -1047,6 +1053,9 @@ namespace AutoBattle
             BannerTitle = string.Empty;
             BannerSubtitle = string.Empty;
             BannerTimeLeft = 0f;
+
+            // 读档 / 切槽 / 新档之后都可能需要选流派（P10 起）。
+            TryPromptDoctrine();
         }
 
         // ==================== 技能装配 ====================
@@ -1086,9 +1095,15 @@ namespace AutoBattle
                 return false;
             }
 
+            if (!SkillCatalog.IsAvailableTo(Player.doctrine, id))
+            {
+                AddLog($"◆ {def.name} 不属于当前流派", GameConfig.LogWarn);
+                return false;
+            }
+
             if (!Player.IsSkillOwned(id))
             {
-                AddLog($"◆ {def.name} 尚未获得（100 级后每升 10 级巅峰随机获得一个技能）", GameConfig.LogWarn);
+                AddLog($"◆ {def.name} 尚未获得（在技能面板花 1 技能点学习）", GameConfig.LogWarn);
                 return false;
             }
 
@@ -1136,71 +1151,49 @@ namespace AutoBattle
                 }
             }
 
-            AddLog($"  → {KindName(def.kind)}槽位已满，可在技能面板中替换", GameConfig.LogInfo);
+            AddLog($"  → {KindName(def.kind)}槽位已满，技能已入池，可在技能面板中替换", GameConfig.LogInfo);
+            ShowBanner("技能已入池", $"{def.name} · 同类槽位已满，可在技能面板替换");
         }
 
-        // ==================== 技能三选一 ====================
+        // ==================== 技能点自选 ====================
 
-        private readonly List<SkillId> _skillChoices = new List<SkillId>();
+        /// <summary>当前可用技能点（UI 只读）。</summary>
+        public int SkillPoints => Player != null ? Player.SkillPoints : 0;
 
-        /// <summary>当前待选的技能候选（空表表示没在选）。UI 只读。</summary>
-        public IReadOnlyList<SkillId> SkillChoices => _skillChoices;
-
-        /// <summary>是否正在等玩家选技能。</summary>
-        public bool IsChoosingSkill => CurrentState == State.SkillChoice;
-
-        /// <summary>还剩几次没选。</summary>
-        public int PendingSkillPicks => Player != null ? Player.pendingSkillPicks : 0;
-
-        /// <summary>抽出候选并暂停战斗，等玩家三选一。</summary>
-        private void OpenSkillChoice()
+        /// <summary>
+        /// 花 1 技能点学习本流派技能：校验流派/重复/点数，写入后自动装进同类空槽。
+        /// 学习不暂停战斗；技能点由巅峰等级派生，不单独存档。
+        /// </summary>
+        public bool LearnSkill(SkillId id)
         {
-            _skillChoices.Clear();
-            _skillChoices.AddRange(Player.RollSkillCandidates(GameConfig.SkillChoiceCount));
-
-            if (_skillChoices.Count == 0)
+            if (Player == null) return false;
+            if (!Player.HasDoctrine)
             {
-                // 技能已全部拥有：没有候选，清掉待选次数，别把状态卡死。
-                Player.pendingSkillPicks = 0;
-                AddLog("✧ 技能已全部获得", GameConfig.LogInfo);
-                return;
+                OpenDoctrinePanel();
+                return false;
             }
 
-            CurrentState = State.SkillChoice;
-        }
+            SkillDef def = SkillCatalog.Get(id);
+            if (Player.IsSkillOwned(id)) return false;
+            if (!SkillCatalog.IsAvailableTo(Player.doctrine, id))
+            {
+                AddLog($"◆ {def.name} 不属于当前流派", GameConfig.LogWarn);
+                return false;
+            }
+            if (Player.SkillPoints <= 0)
+            {
+                AddLog("◆ 没有可用技能点：巅峰每 10 级获得 1 点", GameConfig.LogWarn);
+                return false;
+            }
+            if (!Player.GrantSkill(id)) return false;
 
-        /// <summary>玩家从候选里选一个（index 为候选下标），选完自动装备并恢复战斗。</summary>
-        public void ChooseSkill(int index)
-        {
-            if (CurrentState != State.SkillChoice) return;
-            if (index < 0 || index >= _skillChoices.Count) return;
+            AddLog($"✧ 学习技能：{def.name}（{KindName(def.kind)}，剩余技能点 {Player.SkillPoints}）", def.color);
+            Debug.Log($"[AutoBattle] 花 1 技能点学习 {def.name}，剩余 {Player.SkillPoints}");
 
-            SkillId picked = _skillChoices[index];
-            if (!Player.GrantSkill(picked)) return;
-
-            Player.pendingSkillPicks = Mathf.Max(0, Player.pendingSkillPicks - 1);
-
-            SkillDef def = SkillCatalog.Get(picked);
-            AddLog($"✧ 获得技能：{def.name}（{KindName(def.kind)}）", def.color);
-            Debug.Log($"[AutoBattle] 三选一获得技能 {def.name}");
-
-            TryAutoEquip(picked);
+            TryAutoEquip(id);
             EvaluateAchievements();
-            _skillChoices.Clear();
-
-            // 还有待选次数就接着抽下一组。
-            // 抽不到候选（技能池已全拥有）时 OpenSkillChoice 只清待选、不改状态，
-            // 此时若直接 return 会把状态永久留在 SkillChoice 且候选为空（UI 空面板 + 战斗冻结），
-            // 所以只有真的进了 SkillChoice 才返回，否则落到下面回 WaitingRespawn。
-            if (Player.pendingSkillPicks > 0)
-            {
-                OpenSkillChoice();
-                if (CurrentState == State.SkillChoice) return;
-            }
-
-            // 选完回到「等待重生」，让循环继续。
-            CurrentState = State.WaitingRespawn;
-            _respawnTimer = GameConfig.MonsterRespawnDelay;
+            TrySave();
+            return true;
         }
 
         private static string KindName(SkillKind kind)
@@ -1553,9 +1546,7 @@ namespace AutoBattle
             // 5) 进入重生等待
             EnterRespawnWait();
 
-            // 技能三选一放在状态复位之后，让它覆盖 WaitingRespawn（选完再回到等待重生）。
-            if (Player.pendingSkillPicks > 0) OpenSkillChoice();
-
+            // 技能改为技能点自选：升级时只提示，不再暂停战斗弹三选一。
             // 本只怪引发的击杀/关卡/掉落/升级全部落地后，统一求值一次。
             EvaluateAchievements();
         }
@@ -1747,11 +1738,12 @@ namespace AutoBattle
 
         /// <summary>
         /// 升级结算。满级之后升的是巅峰等级：每级 +1 攻击 / +1 防御，
-        /// 且每 ParagonPassiveEvery 级给一次「技能三选一」。
+        /// 且每 ParagonPassiveEvery 级给 1 技能点（P10 的 1 点要先选流派）。
         /// </summary>
         private void ResolveLevelUp(int reward)
         {
             bool wasMax = Player.IsMaxLevel;
+            int pointsBefore = Player.SkillPoints;
             int levelsGained = Player.AddExp(reward);
             if (levelsGained <= 0) return;
             GameAudio.PlayLevelUp();
@@ -1762,15 +1754,16 @@ namespace AutoBattle
                     GameConfig.LogParagon);
                 Debug.Log($"[AutoBattle] 巅峰等级提升到 {Player.paragonLevel}");
 
-                // 每 10 级给一次「技能三选一」；一次可能跨过多个节点，累加待选次数。
-                int wantSkills = Mathf.Min(Player.paragonLevel / GameConfig.ParagonPassiveEvery,
-                    SkillCatalog.All.Length);
-                int owed = wantSkills - Player.OwnedSkillCount - Player.pendingSkillPicks;
-                if (owed > 0)
+                // P10 先选流派；P20 起每 10 级获得 1 技能点，一次可能跨过多个节点。
+                bool promptDoctrine = Player.paragonLevel >= 10 && !Player.HasDoctrine && !Player.pendingLegacyDoctrineGrant;
+                if (promptDoctrine) OpenDoctrinePanel();
+
+                int gainedPoints = Player.SkillPoints - pointsBefore;
+                if (gainedPoints > 0 && !promptDoctrine)
                 {
-                    Player.pendingSkillPicks += owed;
-                    AddLog($"✧ 获得 {owed} 次技能选择（待选 {Player.pendingSkillPicks} 次）",
+                    AddLog($"✧ 获得 {gainedPoints} 技能点（可用 {Player.SkillPoints} 点），在技能面板自选",
                         GameConfig.LogParagon);
+                    ShowBanner($"技能点 +{gainedPoints}", $"打开技能面板自选本流派技能（可用 {Player.SkillPoints} 点）");
                 }
             }
             else
@@ -1833,6 +1826,19 @@ namespace AutoBattle
                     TotalEquipped++;
                     AddLog($"  ↑ 评分更高，已自动穿戴（评分 {EquipmentScore.Of(Player, dropped, dropped.slot):0}）", GameConfig.LogSuccess);
                     Debug.Log($"[AutoBattle] 自动穿戴 {dropped.Title} {dropped.StatLine}");
+                }
+                else if (ShopCatalog.AutoSellApplies(Player, dropped))
+                {
+                    // 服务 4「自动出售规则」：按玩家设的品质阈值，把没穿上的掉落直接折现。
+                    // 必须在 pending 分支之前：花 25 万买的服务，不该因为「当前装备被锁」
+                    // 就把一件普通装备留在待选托盘里。
+                    if (pending) _pendingDrops[(int)dropped.slot] = null;
+                    int autoGold = Player.AddGold(GameConfig.SellPrice(dropped.level, dropped.quality));
+                    TotalSold++;
+                    TotalGoldEarned += autoGold;
+                    RecordSaleStats();
+                    AddLog($"  $ 自动出售 {dropped.Title}（{ShopCatalog.AutoSellLabel(Player.autoSellQuality)}）+{autoGold} 金币",
+                        GameConfig.LogGold);
                 }
                 else if (pending)
                 {

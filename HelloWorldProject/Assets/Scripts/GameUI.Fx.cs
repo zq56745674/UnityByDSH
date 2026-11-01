@@ -102,13 +102,13 @@ namespace AutoBattle
             {
                 if (b.BerserkTimeLeft > 0f)
                 {
-                    sb.Append("<color=#FF9A3C>◆ 狂暴 ");
+                    sb.Append("<color=#").Append(GameConfig.InkHex(new Color(1f, 0.60f, 0.24f))).Append(">◆ 狂暴 ");
                     sb.Append(b.BerserkTimeLeft.ToString("0.0"));
                     sb.Append("s</color>    ");
                 }
                 if (b.NearDeathTimeLeft > 0f)
                 {
-                    sb.Append("<color=#FF6B9D>◆ 免死 ");
+                    sb.Append("<color=#").Append(GameConfig.InkHex(new Color(1f, 0.42f, 0.62f))).Append(">◆ 免死 ");
                     sb.Append(b.NearDeathTimeLeft.ToString("0.0"));
                     sb.Append("s</color>    ");
                 }
@@ -116,7 +116,7 @@ namespace AutoBattle
 
             if (p.shield > 0)
             {
-                sb.Append("<color=#7FE8FF>◆ 护盾 ");
+                sb.Append("<color=#").Append(GameConfig.InkHex(new Color(0.50f, 0.91f, 1f))).Append(">◆ 护盾 ");
                 sb.Append(p.shield);
                 sb.Append("</color>    ");
             }
@@ -124,7 +124,7 @@ namespace AutoBattle
             // 这里以前还会把每个技能的冷却/就绪也拼进来，跟下方技能栏重复：
             // 空状态时整行是「重击 就绪 吸血鬼 就绪 …」，看着像坏掉的日志。
             _buffText.text = sb.Length == 0
-                ? "<color=#5F6470>状态：无（技能冷却在下方技能栏）</color>"
+                ? "<color=#4E463C>状态：无（技能冷却在下方技能栏）</color>"
                 : sb.ToString();
         }
 
@@ -192,10 +192,10 @@ namespace AutoBattle
             _dpsShown = shown;
             _dpsExpect = expect;
 
-            string expectText = hasExpect ? "    期望 " + _dpsExpectValue : string.Empty;
+            string expectText = hasExpect ? "  期望 " + _dpsExpectValue : string.Empty;
             _dpsText.text = shown >= 0
-                ? "<color=#7C869D>实时 DPS</color>  <b>" + shown + "</b>" + expectText
-                : "<color=#7C869D>实时 DPS</color>  <color=#5F6779>—</color>" + expectText;
+                ? "实时 DPS  <b>" + shown + "</b>" + expectText
+                : "实时 DPS  —" + expectText;
         }
 
         // ==================== P2：日志 → 飘字 / DPS ====================
@@ -238,7 +238,7 @@ namespace AutoBattle
                     {
                         // 落点跟着怪物走：飘字层压在舞台上方，怪物躯干在层内的 y 约 250~290。
                         SpawnFloat(crit ? dmg + "!" : dmg.ToString(),
-                            crit ? GameConfig.FloatCrit : GameConfig.TextNormal,
+                            crit ? GameConfig.FloatCrit : ShopCatalog.DamageColor(_game != null ? _game.Player : null),
                             crit ? 19 : 14,
                             522f + GameRandom.Range(0f, 140f),
                             250f + GameRandom.Range(0f, 34f));

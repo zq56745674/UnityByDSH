@@ -192,7 +192,7 @@ namespace AutoBattle
                 GameConfig.OverlayBg, false);
             AddBorder(_achToastPanel.GetComponent<Image>(), RadiusPanel, GameConfig.AccentBanner);
 
-            _achToastGroup = _achToastPanel.gameObject.AddComponent<CanvasGroup>();
+            _achToastGroup = UiMotion.GrabCanvasGroup(_achToastPanel.gameObject);
             _achToastGroup.alpha = 0f;
             _achToastGroup.blocksRaycasts = false;
             _achToastGroup.interactable = false;
@@ -405,17 +405,13 @@ namespace AutoBattle
             {
                 bool active = i == _achTabIndex;
                 // 生图页签底框不染品牌色；选中页签保持原色，未选中压暗。
-                _achTabButtons[i].image.color = active
-                    ? Color.white
-                    : new Color(0.60f, 0.64f, 0.72f, 1f);
-                _achTabLabels[i].color = active ? Color.white : GameConfig.TextMuted;
+                _achTabButtons[i].image.color = active ? Color.white : GameConfig.FrameTintDim;
+                _achTabLabels[i].color = active ? Color.white : GameConfig.BtnText;
             }
 
-            _achFilterButton.image.color = _achOnlyUnfinished
-                ? Color.white
-                : new Color(0.60f, 0.64f, 0.72f, 1f);
+            _achFilterButton.image.color = _achOnlyUnfinished ? Color.white : GameConfig.FrameTintDim;
             _achFilterLabel.text = _achOnlyUnfinished ? "只看未完成 ✓" : "只看未完成";
-            _achFilterLabel.color = _achOnlyUnfinished ? Color.white : GameConfig.TextMuted;
+            _achFilterLabel.color = _achOnlyUnfinished ? Color.white : GameConfig.BtnText;
 
             _achPageText.text = $"{_achPageIndex + 1} / {pages}";
             _achPrevButton.interactable = _achPageIndex > 0;
@@ -486,12 +482,12 @@ namespace AutoBattle
 
                 _achTitleButtons[i].interactable = unlocked;
                 _achTitleLabels[i].text = (equipped ? "✓ " : string.Empty) + def.title;
+                // 三种态都压在深皮革上：佩戴=浅金，已解锁未佩戴=暖米白，未解锁=压暗的暖米白。
+                // 旧代码让「已解锁未佩戴」用 TextNormal，深墨画在深底上，等于隐形。
                 _achTitleLabels[i].color = equipped
-                    ? GameConfig.TextGold
-                    : (unlocked ? GameConfig.TextNormal : GameConfig.BtnDisabledText);
-                _achTitleButtons[i].image.color = equipped
-                    ? Color.white
-                    : new Color(0.60f, 0.64f, 0.72f, 1f);
+                    ? GameConfig.BtnTextGold
+                    : (unlocked ? GameConfig.BtnText : GameConfig.BtnTextDim);
+                _achTitleButtons[i].image.color = equipped ? Color.white : GameConfig.FrameTintDim;
             }
         }
 
@@ -508,7 +504,7 @@ namespace AutoBattle
             // 称号放名称行，避免挤占描述；名称行只有名字+短称号，250 宽足够。
             _achRowName[row].text = string.IsNullOrEmpty(def.title)
                 ? def.name
-                : $"{def.name}  <size=10><color=#FFD966>「{def.title}」</color></size>";
+                : $"{def.name}  <size=10><color=#8A5A12>「{def.title}」</color></size>";
             _achRowName[row].color = done ? GameConfig.TextDisabled : GameConfig.TextNormal;
 
             _achRowDesc[row].text = TrimAchievementDesc(def.desc, 17);

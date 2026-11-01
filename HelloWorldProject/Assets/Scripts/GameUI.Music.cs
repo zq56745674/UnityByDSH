@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 namespace AutoBattle
@@ -265,10 +265,10 @@ namespace AutoBattle
                     : GameConfig.CardBg;
 
                 MusicTrack track = MusicCatalog.Tracks[i];
-                string missing = available ? "" : "  <color=#FF8A80>（缺少文件）</color>";
+                string missing = available ? "" : "  <color=#9B2C2C>（缺少文件）</color>";
                 _musicTrackLabels[i].text =
                     $"<b>{track.Title}</b>{missing}\n" +
-                    $"<size=11><color=#8C99B0>{track.Artist} · {track.DurationText}</color></size>";
+                    $"<size=11><color=#6F6252>{track.Artist} · {track.DurationText}</color></size>";
                 _musicTrackLabels[i].color = isCurrent ? GameConfig.TextGold : GameConfig.TextTitle;
 
                 SetIcon(_musicTrackIcons[i], available

@@ -141,17 +141,30 @@ namespace AutoBattle
                     src.kind = dst.kind;
                 }
 
+                // 流派决定技能属于哪套毕业 build / 哪个技能池，同样只校验不覆盖。
+                if (src.school != dst.school)
+                {
+                    Debug.LogWarning($"[SkillCatalog] skills.json 第 {i} 条（{dst.id}）的 school 是 {src.school}，"
+                        + $"代码定义是 {dst.school}——school 不可外改，沿用代码值。");
+                    src.school = dst.school;
+                }
+
                 // 技能数值也会手改 json：负冷却 / 负次数会让计时器和循环出错，统一夹住。
                 dst.value = SafeFloat(src.value, 0f, 1000f, dst, nameof(dst.value));
+                dst.value2 = SafeFloat(src.value2, -1000f, 1000f, dst, nameof(dst.value2));
+                dst.value3 = SafeFloat(src.value3, -1000f, 1000f, dst, nameof(dst.value3));
+                dst.value4 = SafeFloat(src.value4, -1000f, 1000f, dst, nameof(dst.value4));
                 dst.cooldown = SafeFloat(src.cooldown, 0f, 3600f, dst, nameof(dst.cooldown));
                 dst.critBonus = SafeFloat(src.critBonus, 0f, 10f, dst, nameof(dst.critBonus));
                 dst.hpThreshold = SafeFloat(src.hpThreshold, 0f, 1f, dst, nameof(dst.hpThreshold));
                 dst.triggerChance = SafeFloat(src.triggerChance, 0f, 1f, dst, nameof(dst.triggerChance));
                 dst.hits = Mathf.Clamp(src.hits, 0, 20);
                 dst.duration = SafeFloat(src.duration, 0f, 3600f, dst, nameof(dst.duration));
+                dst.duration2 = SafeFloat(src.duration2, 0f, 3600f, dst, nameof(dst.duration2));
 
                 if (!string.IsNullOrWhiteSpace(src.name)) dst.name = src.name;
                 if (!string.IsNullOrWhiteSpace(src.description)) dst.description = src.description;
+                if (!string.IsNullOrWhiteSpace(src.synergy)) dst.synergy = src.synergy;
 
                 // Color 没有「缺省」表示，JsonUtility 缺失时给 (0,0,0,0)：
                 // 全零视为没写，保留代码里的配色。
@@ -195,15 +208,21 @@ namespace AutoBattle
                 {
                     id = s.id,
                     kind = s.kind,
+                    school = s.school,
                     name = s.name,
                     description = s.description,
+                    synergy = s.synergy,
                     cooldown = s.cooldown,
                     value = s.value,
+                    value2 = s.value2,
+                    value3 = s.value3,
+                    value4 = s.value4,
                     critBonus = s.critBonus,
                     hpThreshold = s.hpThreshold,
                     triggerChance = s.triggerChance,
                     hits = s.hits,
                     duration = s.duration,
+                    duration2 = s.duration2,
                     color = s.color,
                 };
             }

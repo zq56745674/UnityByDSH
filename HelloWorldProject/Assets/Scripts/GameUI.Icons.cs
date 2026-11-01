@@ -143,21 +143,21 @@ namespace AutoBattle
         {
             switch ((SkillId)skillId)
             {
-                case SkillId.HeavyStrike: return "skill_heavy_strike";
-                case SkillId.Whirlwind: return "skill_whirlwind";
-                case SkillId.Berserk: return "skill_berserk";
-                case SkillId.Execute: return "skill_execute";
-                case SkillId.IronBody: return "skill_iron_body";
-                case SkillId.BerserkHeart: return "skill_berserk_heart";
-                case SkillId.LethalStrike: return "skill_lethal_strike";
+                case SkillId.ThunderRush: return "skill_heavy_strike";
+                case SkillId.ThunderGod: return "skill_giant_slayer";
+                case SkillId.MountainSlam: return "skill_execute";
+                case SkillId.Bulwark: return "skill_shield_gen";
+                case SkillId.WarCry: return "skill_berserk";
+                case SkillId.StaticResonance: return "skill_berserk_heart";
+                case SkillId.StormHaste: return "skill_swiftness";
+                case SkillId.MountainBody: return "skill_iron_body";
+                case SkillId.HeavyImpact: return "skill_lethal_strike";
                 case SkillId.Vampire: return "skill_vampire";
-                case SkillId.Swiftness: return "skill_swiftness";
-                case SkillId.GiantSlayer: return "skill_giant_slayer";
-                case SkillId.Undying: return "skill_undying";
-                case SkillId.Counter: return "skill_counter";
-                case SkillId.CritChain: return "skill_crit_chain";
-                case SkillId.NearDeathBurst: return "skill_near_death_burst";
-                case SkillId.ShieldGen: return "skill_shield_gen";
+                case SkillId.Arc: return "skill_crit_chain";
+                case SkillId.ThunderPunish: return "skill_giant_slayer";
+                case SkillId.Aftershock: return "skill_counter";
+                case SkillId.RockArmor: return "skill_shield_gen";
+                case SkillId.LastStand: return "skill_undying";
                 default: return null;
             }
         }

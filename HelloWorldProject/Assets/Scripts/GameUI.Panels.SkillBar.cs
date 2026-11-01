@@ -17,7 +17,6 @@ namespace AutoBattle
             _game.OpenSkillPanel();
             if (!wasOpen) GameAudio.PlayUiOpen();
             RefreshSkillPanel();
-            RefreshSkillChoice();
         }
 
         private void OnSkillPanelCloseClicked()
@@ -25,21 +24,40 @@ namespace AutoBattle
             _game.CloseSkillPanel();
             GameAudio.PlayUiClose();
             RefreshSkillPanel();
-            RefreshSkillChoice();
         }
 
-        /// <summary>点击技能池里的技能：装到当前槽位（类别不符则放进同类空槽）。</summary>
-        private void OnSkillPoolClicked(int skillIndex)
+        /// <summary>
+        /// 点击技能池卡片：未掌握 → 花 1 技能点学习并自动装空槽；
+        /// 已掌握 → 装到当前槽位（类别不符则放进同类空槽），再点一次卸下。
+        /// poolIndex 是本流派 9 张卡的下标，不是全局技能 id。
+        /// </summary>
+        private void OnSkillPoolClicked(int poolIndex)
         {
             PlayerData p = _game.Player;
-            SkillDef def = SkillCatalog.All[skillIndex];
+            if (p == null || _skillPoolIds == null || poolIndex < 0 || poolIndex >= _skillPoolIds.Length)
+                return;
+
+            int skillId = _skillPoolIds[poolIndex];
+            if (skillId < 0 || skillId >= SkillCatalog.All.Length) return;
+            SkillDef def = SkillCatalog.All[skillId];
+
+            if (!p.IsSkillOwned(def.id))
+            {
+                if (_game.LearnSkill(def.id))
+                {
+                    int learnedSlot = p.FindSkillSlot(skillId);
+                    if (learnedSlot >= 0) _selectedSkillSlot = learnedSlot;
+                }
+                RefreshSkillPanel();
+                RefreshSkillBar(p, true);
+                return;
+            }
 
             // 已经装在选中槽位上 → 再点一次就是卸下。
-            if (p.GetSkillSlot(_selectedSkillSlot) == skillIndex)
+            if (p.GetSkillSlot(_selectedSkillSlot) == skillId)
             {
                 _game.UnequipSkill(_selectedSkillSlot);
                 RefreshSkillPanel();
-            RefreshSkillChoice();
                 return;
             }
 
@@ -60,7 +78,6 @@ namespace AutoBattle
             _game.EquipSkill(slot, def.id);
             _selectedSkillSlot = slot;
             RefreshSkillPanel();
-            RefreshSkillChoice();
         }
 
         /// <summary>刷新技能栏：名称、冷却秒数、冷却进度条。</summary>
@@ -93,9 +110,9 @@ namespace AutoBattle
                     {
                         _skillSlotLabels[i].text = "＋";
                         _skillSlotLabels[i].fontSize = 16;
-                        _skillSlotLabels[i].color = GameConfig.TextDisabled;
+                        _skillSlotLabels[i].color = GameConfig.SlotEmptyText;
                         _skillSlotStates[i].text = "";
-                        _skillSlotButtons[i].image.color = GameConfig.CardBgDim;
+                        _skillSlotButtons[i].image.color = GameConfig.SlotBg;
                         _skillSlotAccents[i].color = new Color(1f, 1f, 1f, 0.04f);
                         if (_skillSlotIcons[i] != null) _skillSlotIcons[i].enabled = false;
                         _skillCdDraw[i] = 0f;
@@ -109,7 +126,7 @@ namespace AutoBattle
                     // 底色只给一点点技能色，主体还是深色卡；颜色靠强调条与名字承担。
                     // 注意工程是 Linear 色彩空间，脚本给的线性值上屏会被转成 sRGB 提亮，
                     // 12% 渲染出来接近 40% 的饱和度，所以这里压到 5%。
-                    _skillSlotButtons[i].image.color = Color.Lerp(GameConfig.CardBg, def.color, 0.05f);
+                    _skillSlotButtons[i].image.color = Color.Lerp(GameConfig.SlotBg, def.color, 0.12f);
                     _skillSlotAccents[i].color = def.color;
                     _skillSlotFills[i].color = def.color;
                     SetIcon(_skillSlotIcons[i], SkillIconKey(id));
@@ -142,11 +159,13 @@ namespace AutoBattle
                 string cdText = cd > 0f ? $"{cd:0.0}s" : "就绪";
                 if (_skillSlotStates[i].text == cdText) continue;
                 _skillSlotStates[i].text = cdText;
-                _skillSlotStates[i].color = cd > 0f ? GameConfig.FillSkillCooldown : GameConfig.TextDisabled;
+                _skillSlotStates[i].color = cd > 0f ? GameConfig.SlotCooldownText : GameConfig.SlotReadyText;
             }
+
+            RefreshResourceBar(p);
         }
 
-        /// <summary>刷新技能面板的可见性与技能池按钮状态。</summary>
+        /// <summary>刷新技能面板：只列本流派 6 专属 + 3 通用，标注技能点与另一流派。</summary>
         private void RefreshSkillPanel()
         {
             bool open = _game.SkillPanelOpen;
@@ -155,40 +174,87 @@ namespace AutoBattle
 
             PlayerData p = _game.Player;
             int sel = _selectedSkillSlot;
+            Color schoolColor = p.HasDoctrine ? SkillCatalog.SchoolColor(p.doctrine) : GameConfig.TextMuted;
+            string schoolHex = GameConfig.InkHex(schoolColor);
 
-            _skillPanelTitle.text =
-                $"技能面板 — 槽位 {sel + 1}（{KindShort(sel / PlayerData.SkillSlotsPerKind)}）" +
-                $"    巅峰 {p.paragonLevel}    已获得技能 {p.OwnedSkillCount}/{SkillCatalog.All.Length}";
+            _skillPanelTitle.text = $"技能面板 — 槽位 {sel + 1}（{KindShort(sel / PlayerData.SkillSlotsPerKind)}）";
 
-            for (int i = 0; i < SkillCatalog.All.Length; i++)
+            if (!p.HasDoctrine)
             {
-                SkillDef def = SkillCatalog.All[i];
-                bool equipped = p.FindSkillSlot((int)def.id) >= 0;
+                _skillPanelSchoolBar.color = GameConfig.RowBg;
+                _skillPanelSchoolText.text = "尚未选择流派";
+                _skillPanelOtherText.text = "先在流派面板选择本世流派，之后才能学习技能。";
+                for (int i = 0; i < _skillPoolButtons.Length; i++)
+                {
+                    _skillPoolButtons[i].interactable = false;
+                    _skillPoolButtons[i].image.color = GameConfig.CardBgDim;
+                    _skillPoolLabels[i].text = "";
+                    _skillPoolIds[i] = -1;
+                }
+                return;
+            }
+
+            string schoolName = SkillCatalog.SchoolName(p.doctrine);
+            int other = p.doctrine == 1 ? 2 : 1;
+            int points = p.SkillPoints;
+
+            _skillPanelSchoolBar.color = Color.Lerp(GameConfig.RowBg, schoolColor, 0.18f);
+            _skillPanelSchoolText.text =
+                $"<color=#{schoolHex}>{schoolName}</color> · 本流派专属 6 / 通用 3 · " +
+                $"已掌握 {p.OwnedSkillCount}/{SkillCatalog.TotalPerDoctrine} · " +
+                $"<color=#8A5A12>技能点 {points}</color>";
+            _skillPanelOtherText.text = $"另一流派：{SkillCatalog.SchoolName(other)}（本世锁定，不可选）";
+
+            SkillId[] kit = SkillCatalog.KitOf(p.doctrine);
+            for (int i = 0; i < _skillPoolButtons.Length && i < kit.Length; i++)
+            {
+                SkillDef def = SkillCatalog.Get(kit[i]);
+                int id = (int)def.id;
+                _skillPoolIds[i] = id;
+
                 bool unlocked = p.IsSkillOwned(def.id);
-                bool inSlot = p.GetSkillSlot(sel) == i;
+                bool equipped = p.FindSkillSlot(id) >= 0;
+                bool inSlot = p.GetSkillSlot(sel) == id;
+                bool learnable = !unlocked && points > 0;
+                bool usable = unlocked || learnable;
 
                 string mark = inSlot ? "▶ " : (equipped ? "● " : "");
-                string lockNote = unlocked ? "" : "（未获得）";
-                string adviseLine = "";
+                string state = unlocked
+                    ? (equipped ? "已装备" : "已掌握")
+                    : (learnable ? "可学习 · 1 技能点" : "技能点不足");
+                string advise = "";
                 if (GameSettings.ShowSkillAdvice)
                 {
                     int score = SkillAdvice.Score(p, def.id);
-                    adviseLine = $"<color=#{ColorUtility.ToHtmlStringRGB(SkillAdvice.TierColor(score))}>推荐 {score} {SkillAdvice.TierLabel(score)}</color><color=#8C99B0> │ </color>";
+                    advise = $" · <color=#{GameConfig.InkHex(SkillAdvice.TierColor(score))}>推荐 {score} {SkillAdvice.TierLabel(score)}</color>";
                 }
-                _skillPoolLabels[i].text = $"{mark}{def.name}{lockNote}\n{adviseLine}<size=12><color=#C6CEE0>{def.description}</color></size>";
 
-                if (!unlocked) _skillPoolLabels[i].color = GameConfig.TextDisabled;
-                else if (inSlot) _skillPoolLabels[i].color = GameConfig.LogGold;
-                else if (equipped) _skillPoolLabels[i].color = GameConfig.LogSuccess;
-                else _skillPoolLabels[i].color = Color.white;
+                string nameColor = usable ? GameConfig.InkHex(def.color) : "8A8272";
+                // 通用技能不能挂当前流派名：卡头写技能自己的流派（风暴/山崩/通用），配色也跟着它。
+                string cardSchool = SkillCatalog.SchoolName(def.school);
+                string cardSchoolHex = GameConfig.InkHex(SkillCatalog.SchoolColor(def.school));
+                _skillPoolLabels[i].text =
+                    $"<size=9><color=#{cardSchoolHex}>{cardSchool} · {KindShort((int)def.kind)} · {state}</color>{advise}</size>\n"
+                    + $"<size=15><b><color=#{nameColor}>{mark}{def.name}</color></b></size>\n"
+                    + $"<size=10><color=#5A5142>{def.description}</color></size>";
+                _skillPoolLabels[i].color = GameConfig.TextNormal;
 
-                SetIcon(_skillPoolIcons[i], SkillIconKey((int)def.id));
+                SetIcon(_skillPoolIcons[i], SkillIconKey(id));
                 if (_skillPoolIcons[i] != null)
-                    _skillPoolIcons[i].color = unlocked ? Color.white : new Color(1f, 1f, 1f, 0.35f);
+                    _skillPoolIcons[i].color = usable ? Color.white : new Color(1f, 1f, 1f, 0.28f);
 
+                _skillPoolButtons[i].interactable = usable;
                 _skillPoolButtons[i].image.color = unlocked
-                    ? GameConfig.RowBg
-                    : GameConfig.CardBgDim;
+                    ? Color.Lerp(GameConfig.RowBg, schoolColor, 0.05f)
+                    : (learnable ? Color.Lerp(GameConfig.RowBg, schoolColor, 0.12f) : GameConfig.CardBgDim);
+                _skillPoolAccents[i].color = inSlot ? GameConfig.LogGold : (usable ? schoolColor : GameConfig.Border);
+
+                string tip = $"{def.name}\n{KindShort((int)def.kind)} · {state}";
+                if (GameSettings.ShowSkillAdvice)
+                    tip += $"\n推荐 {SkillAdvice.Score(p, def.id)} {SkillAdvice.TierLabel(SkillAdvice.Score(p, def.id))}";
+                tip += $"\n{def.description}";
+                if (!string.IsNullOrEmpty(def.synergy)) tip += $"\n{def.synergy}";
+                SetTooltip(_skillPoolButtons[i], tip);
             }
         }
 

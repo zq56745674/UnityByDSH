@@ -20,12 +20,4 @@ Unity 工程 HelloWorldProject（E:\pytest\unitydsh1）：装备评分口径已�
 §
 HelloWorldProject 的 game_config.json 必须与 GameConfigData 的 97 个字段一一对应（当前 97 键）；GameConfig.Loader 加载后会用 ReportMissingKeys 对缺键打警告，缺字段不再静默回退默认值。历史备份、拆分前旧代码与一次性开发截图统一放工作区根的 _archive/（已 gitignore，内含 README 说明），不要留在仓库根或 Assets 里。
 §
-HelloWorldProject 的 BGM 是四首本地 MP3（let_me_go / big_fish_cat / embrace / sadness_water），放在 HelloWorldProject/Assets/Resources/Music/，源自 D:\QQMusic 的星落落oi；该目录已 .gitignore，换机/克隆需自备文件。GameMusic.cs 管自动播放、自选、列表/单曲循环与音量（主音量×MusicVolume），GameUI.Music.cs 是顶部音符面板，曲目表在 MusicCatalog；第四首是《我的悲伤是水做的（大肥鱼版）》，224.8s。
-§
-HelloWorldProject 战斗可复现性：BattleSystem.Tick 只用 UnityEngine.Random（无 Time/DateTime），同状态同种子逐帧完全一致（实测 262 帧 firstDiff=-1）。2026-10-22 已修掉「同一进程内第一次 Tick 多消耗一个随机数」：根因是命中音效 GameAudio.PlayHit 用 UnityEngine.Random 变调，现表现层（音频、UI 抖动）统一改用独立 System.Random（GameRandom.cs，种子 0x5EA17），玩法随机保持 UnityEngine.Random；修复后带音频冷启动也是 54/54/54 draws，写探针不再需要热身。存档 2026-10-22 起为 v11，新增 PlayerData.endlessTop（本档 Top-5 历史榜，只记阵亡/撤退结束的局）。
-§
-HelloWorldProject 战斗舞台美术约定（2026-10-22 定型）：怪物贴图 Sprites/Monsters/{族}_{melee,ranged,crit}.png（384×384），族顺序必须与 GameConfig.ChapterFamilyNames 一致——GameUI.Stage.cs 的 StageFamilyKeys = goblin/kobold/skeleton/ogre/orc/spider/undead/gargoyle/demon/abyss/dragon，第 4~11 章才不再复用前三族；Boss 用单独立绘 Sprites/Bosses/{族}_boss.png（512×512），不是小怪放大；光环 Sprites/Auras/{aura_elite 176,aura_boss 208,affix_drain|shield|poison 84} 宽、AuraSquash=0.42 压成地面椭圆、必须比角色 Image 先创建才在脚下；背景 Sprites/Backgrounds/bg_{cavern,wilds,crypt,citadel}.jpg（1616×664）按章映射 + BackdropTint 色温区分同图章节，缓存键带章号；15 个技能各有专属特效图（fx_iron_body / fx_berserk_heart / fx_lethal_strike / fx_swiftness / fx_giant_slayer / fx_undying / fx_crit_chain / fx_near_death 等）。
-§
-dsh-image-gen 的 generate_image 默认 provider 是 ComfyUI（本机没跑会报 Could not connect to ComfyUI at http://127.0.0.1:8188）；要出图必须显式传 provider:"seedream"，模型 doubao-seedream-5-0-pro-260628，落盘在工作区 dsh-image-gen/image-*.png。多角色同图只适合列间有真空白的怪物表，Boss 必须一张一只（对图硬切会把斧头/披风切断）。
-§
-本机 hosts（C:\Windows\System32\drivers\etc\hosts）把 github.com、api.github.com、raw.githubusercontent.com 等解析到 127.0.0.1，git fetch/push 直连会报 Failed to connect to github.com port 443。绕过（不改 hosts）：git -c http.curloptResolve=github.com:443:<当前解析IP> push origin main；2026-10-25 用 20.27.177.113 实测推送成功。IP 可用 Resolve-DnsName github.com -Server 1.1.1.1 取。
+HelloWorldProject 的 Editor 存档落在 HKCU\Software\Unity\UnityEditor\DefaultCompany\My project（Key 为 AutoBattleDemo.Save.v1[+_slotN]，Unity 会加 _h<hash> 后缀）—— ProjectSettings.asset 的 companyName/productName 自初始提交 334b345 起一直是默认值，从未改成 AutoBattle；UnityByDSH\AutoBattle 节点是早期改名后打包留下的旧档。GameConfig.cs:734 SaveKey、SaveSystem.cs:63 KeyOf、:51 SlotKeyPrefix、:54 CurrentSlotKey。

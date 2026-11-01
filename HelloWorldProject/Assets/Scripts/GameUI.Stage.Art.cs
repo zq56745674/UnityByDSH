@@ -66,7 +66,9 @@ namespace AutoBattle
 
             int ch = Mathf.Clamp(chapter, 1, 11);
             string key = BackdropFor(ch);
-            string cacheKey = key + ":" + ch;   // 同图不同章也要重设色温
+            // 珍藏的背景色调也进缓存键：换了外观要立刻重画，不能等换章。
+            int backdrop = ShopCatalog.EffectiveBackdrop(_game != null ? _game.Player : null);
+            string cacheKey = key + ":" + ch + ":" + backdrop;   // 同图不同章也要重设色温
             if (cacheKey == _battleBackdropKey) return;
             _battleBackdropKey = cacheKey;
 
@@ -87,6 +89,8 @@ namespace AutoBattle
 
             _battleBackdropArt.sprite = sprite;
             Color tint = BackdropTint(ch);
+            Color cosmetic = ShopCatalog.BackdropMultiplier(_game != null ? _game.Player : null);
+            tint = new Color(tint.r * cosmetic.r, tint.g * cosmetic.g, tint.b * cosmetic.b);
             _battleBackdropArt.color = new Color(tint.r, tint.g, tint.b, 0.68f);   // 压暗一档，角色仍是主体
             _battleBackdropArt.enabled = true;
         }
@@ -178,13 +182,13 @@ namespace AutoBattle
             if (added == 0) return;
 
             float cy = StageGroundY - StageHeroH * 0.55f;
-            if ((added & (1 << (int)SkillId.IronBody)) != 0)
+            if ((added & (1 << (int)SkillId.MountainBody)) != 0)
                 PlayBattleFxSprite("fx_iron_body", StageHeroCx, cy, 176f, 0.7f, 1.25f, 0f);
-            if ((added & (1 << (int)SkillId.BerserkHeart)) != 0)
+            if ((added & (1 << (int)SkillId.StaticResonance)) != 0)
                 PlayBattleFxSprite("fx_berserk_heart", StageHeroCx, cy, 176f, 0.7f, 1.25f, 0f);
-            if ((added & (1 << (int)SkillId.LethalStrike)) != 0)
+            if ((added & (1 << (int)SkillId.HeavyImpact)) != 0)
                 PlayBattleFxSprite("fx_lethal_strike", StageHeroCx, cy, 176f, 0.7f, 1.25f, 0f);
-            if ((added & (1 << (int)SkillId.Swiftness)) != 0)
+            if ((added & (1 << (int)SkillId.StormHaste)) != 0)
                 PlayBattleFxSprite("fx_swiftness", StageHeroCx, cy, 176f, 0.7f, 1.25f, 0f);
         }
 

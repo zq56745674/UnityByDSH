@@ -20,18 +20,18 @@ namespace AutoBattle
         private Text _rebirthIntro;
         private Text _rebirthLeftText;
         private Text _rebirthRightText;
-        private readonly Text[] _rebirthNameTexts = new Text[RebirthCatalog.TrackCount];
-        private readonly Text[] _rebirthEffectTexts = new Text[RebirthCatalog.TrackCount];
-        private readonly Text[] _rebirthRankTexts = new Text[RebirthCatalog.TrackCount];
-        private readonly Button[] _rebirthBuyButtons = new Button[RebirthCatalog.TrackCount];
-        private readonly Text[] _rebirthBuyLabels = new Text[RebirthCatalog.TrackCount];
+        private Text[] _rebirthNameTexts = new Text[RebirthCatalog.TrackCount];
+        private Text[] _rebirthEffectTexts = new Text[RebirthCatalog.TrackCount];
+        private Text[] _rebirthRankTexts = new Text[RebirthCatalog.TrackCount];
+        private Button[] _rebirthBuyButtons = new Button[RebirthCatalog.TrackCount];
+        private Text[] _rebirthBuyLabels = new Text[RebirthCatalog.TrackCount];
         private Text _rebirthGainText;
         private Text _rebirthKeepText;
         private Text _rebirthResetText;
         private Text _rebirthReasonText;
         private Button _rebirthConfirmButton;
         private Text _rebirthConfirmLabel;
-        private readonly Text[] _rebirthRecordTexts = new Text[RebirthHistory.Capacity];
+        private Text[] _rebirthRecordTexts = new Text[RebirthHistory.Capacity];
 
         /// <summary>二次确认的截止时间（Time.unscaledTime）；0 表示未上膛。</summary>
         private float _rebirthConfirmUntil;
@@ -44,6 +44,12 @@ namespace AutoBattle
         /// </summary>
         private void BuildRebirthPanel(Transform root)
         {
+            _rebirthNameTexts = new Text[RebirthCatalog.TrackCount];
+            _rebirthEffectTexts = new Text[RebirthCatalog.TrackCount];
+            _rebirthRankTexts = new Text[RebirthCatalog.TrackCount];
+            _rebirthBuyButtons = new Button[RebirthCatalog.TrackCount];
+            _rebirthBuyLabels = new Text[RebirthCatalog.TrackCount];
+            _rebirthRecordTexts = new Text[RebirthHistory.Capacity];
             _rebirthPanel = CreatePanel(root, "RebirthPanel", 300, 20, 680, 680,
                 GameConfig.OverlayBg, true);
 
@@ -160,7 +166,7 @@ namespace AutoBattle
                 $"本世用时 {RebirthHistory.FormatSeconds(Mathf.RoundToInt(p.lifeSeconds))} · 保留最低分 1 件";
             _rebirthRightText.text =
                 $"预计 +{marks} 印记\n" +
-                $"<color=#8C99B0>巅峰 {paragonMarks} + 无尽 {floorMarks} + 金币 {goldMarks} + 基础 1</color>";
+                $"<color=#6F6252>巅峰 {paragonMarks} + 无尽 {floorMarks} + 金币 {goldMarks} + 基础 1</color>";
 
             for (int i = 0; i < RebirthCatalog.TrackCount; i++)
             {
@@ -193,7 +199,7 @@ namespace AutoBattle
 
             _rebirthGainText.text =
                 $"本次可得 <b>{marks}</b> 印记" +
-                $"<color=#8C99B0>（巅峰 {paragonMarks} + 无尽 {floorMarks} + 金币 {goldMarks} + 基础 {RebirthCatalog.BaseMarks}）</color>";
+                $"<color=#6F6252>（巅峰 {paragonMarks} + 无尽 {floorMarks} + 金币 {goldMarks} + 基础 {RebirthCatalog.BaseMarks}）</color>";
             _rebirthKeepText.text =
                 $"保留：印记 {p.rebirthMarks} → {p.rebirthMarks + marks} · 无尽最高 {bestFloorText} · 成就 / 纪录 / 1 件装备";
             _rebirthResetText.text =

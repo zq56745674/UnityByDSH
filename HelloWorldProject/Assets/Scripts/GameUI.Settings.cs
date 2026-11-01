@@ -12,12 +12,12 @@ namespace AutoBattle
     {
         // ---- 设置面板 ----
         private RectTransform _settingsPanel;
-        private readonly Button[] _settingsButtons = new Button[5];
-        private readonly Text[] _settingsValueLabels = new Text[5];
-        private readonly Image[] _settingsIcons = new Image[5];
-        private readonly Image[] _masterVolumeCells = new Image[10];
-        private readonly Image[] _sfxVolumeCells = new Image[10];
-        private readonly Image[] _settingsMusicCells = new Image[10];
+        private Button[] _settingsButtons = new Button[5];
+        private Text[] _settingsValueLabels = new Text[5];
+        private Image[] _settingsIcons = new Image[5];
+        private Image[] _masterVolumeCells = new Image[10];
+        private Image[] _sfxVolumeCells = new Image[10];
+        private Image[] _settingsMusicCells = new Image[10];
         private Text _masterVolumeValue;
         private Text _sfxVolumeValue;
         private Text _settingsMusicValue;
@@ -47,8 +47,8 @@ namespace AutoBattle
         }
 
         private RectTransform _guideRoot;
-        private readonly Image[] _guideDims = new Image[4];
-        private readonly Image[] _guideBorders = new Image[4];
+        private Image[] _guideDims = new Image[4];
+        private Image[] _guideBorders = new Image[4];
         // 透明全屏拦截层：漏出的洞不挡住点击的话，引导时能顺手点开选关/技能/设置面板。
         private Image _guideBlocker;
         private RectTransform _guideCard;
@@ -67,6 +67,15 @@ namespace AutoBattle
 
         private void BuildSettingsPanel(Transform root)
         {
+            // 这些数组装的是运行时 UnityEngine.Object。每次重建都显式分配，
+            // 避免脚本热重载后只保留数组外壳、里面的组件引用全部变成 null。
+            _settingsButtons = new Button[5];
+            _settingsValueLabels = new Text[5];
+            _settingsIcons = new Image[5];
+            _masterVolumeCells = new Image[10];
+            _sfxVolumeCells = new Image[10];
+            _settingsMusicCells = new Image[10];
+
             // 高度 560 → 620：多出一行「音乐」音量，底部再加一行快捷键提示（2026-10-23）。
             _settingsPanel = CreatePanel(root, "SettingsPanel", 300, 90, 680, 620, GameConfig.OverlayBg, true);
 
@@ -607,6 +616,8 @@ namespace AutoBattle
 
         private void BuildGuide(Transform root)
         {
+            _guideDims = new Image[4];
+            _guideBorders = new Image[4];
             _guideRoot = CreateRect(root, "GuideRoot", 0, 0, 1280, 720);
 
             for (int i = 0; i < _guideDims.Length; i++)
@@ -671,7 +682,7 @@ namespace AutoBattle
                 new GuideStep
                 {
                     title = "技能栏（6 槽）",
-                    body = "下方六个槽位：主动 / 被动 / 触发各两格。满级后的巅峰等级会给你技能三选一。"
+                    body = "下方六个槽位：主动 / 被动 / 触发各两格。满级后每 10 级巅峰给 1 个技能点，可在技能面板自选本流派技能。"
                          + "\n技能卡片上的「推荐分」按你当前面板估算，只用来排序，不影响战斗结算。",
                     target = _skillBarRoot,
                 },

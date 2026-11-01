@@ -47,6 +47,17 @@ HelloWorldProject/Assets/Resources/Music.meta
 HelloWorldProject/Assets/Screenshots/
 HelloWorldProject/Assets/Screenshots.meta
 
+# 同理：_shots/ 是 UI 验收截图与探针脚本产物（2026-10-29 实测 78.5MB），不进仓库
+HelloWorldProject/Assets/_shots/
+HelloWorldProject/Assets/_shots.meta
+
+# 工作区根下的 HelloWorldProject/_shots/ 是 eval 探针脚本与驱动/裁剪脚本（放 Assets 下会被当脚本编译，
+# 实测 9.5MB），同样不进仓库
+HelloWorldProject/_shots/
+
+# _art/fonts/ 是字体的原始下载件（25MB），正式字体在 Assets/Resources/Fonts/
+_art/fonts/
+
 # DSH 插件的工作目录：里面是生成结果，不是项目资产
 dsh-image-gen/
 

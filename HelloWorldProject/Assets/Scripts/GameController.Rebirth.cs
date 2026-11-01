@@ -55,7 +55,7 @@ namespace AutoBattle
 
             if (ChoicePending)
             {
-                reason = "先把技能三选一选完";
+                reason = "先完成流派选择";
                 return false;
             }
 

@@ -1,7 +1,7 @@
 # 转生设计
 
-状态：2026-10-18 设计稿，**2026-10-20 v1 已实现**（存档实际 v9；成就顺延 v10），**2026-10-25 v2 已实现**（保留最低分一件 + 本档最快轮回 Top-5，存档 v12）。实现记录见文末 §14，v2 见 §14.6；B4c（P100 门槛）与 D3（财运掉落）复评见 §14.7 / §14.8。当前存档 **v13**（B2 成就点兑换，不改转生字段）。
-涉及存档：原计划 **v10**（当时 v8；成就设计稿计划 v9）。实际先落转生 v9、成就 v10、无尽榜 v11、v2 纪录 v12、成就点兑换 v13；迁移按版本分支，不绑定绝对数字。
+状态：2026-10-18 设计稿，**2026-10-20 v1 已实现**（存档实际 v9；成就顺延 v10），**2026-10-25 v2 已实现**（保留最低分一件 + 本档最快轮回 Top-5，存档 v12）。实现记录见文末 §14，v2 见 §14.6；B4c（P100 门槛）与 D3（财运掉落）复评见 §14.7 / §14.8。当前存档 **v15**（B2 成就点兑换 v13、B1 商店 2.0 v14、技能 2.0 v15；三者都不改转生字段；v15 会在转生时重置流派、已学技能与技能点）。
+涉及存档：原计划 **v10**（当时 v8；成就设计稿计划 v9）。实际先落转生 v9、成就 v10、无尽榜 v11、v2 纪录 v12、成就点兑换 v13、商店 2.0 v14、技能 2.0 v15；迁移按版本分支，不绑定绝对数字。
 相关文件（已落地）：`Models.PlayerData.cs` / `RebirthCatalog.cs` / `GameController.Rebirth.cs` / `GameUI.Rebirth.cs` / `GameUI.Panels.cs` / `SaveSystem.cs` / `GameConfig.cs` / `GameConfigData.cs` / `Assets/Resources/game_config.json`
 参考：`docs/achievements.md`（成就与累计统计的保留约定）、`docs/endless-mode.md`（最高层与检查点口径）、`_balance/balance-analysis.md`（终局金币与节奏）
 
@@ -135,7 +135,7 @@ README 已知问题第 4 条：P200 满级兜里约 560 万、P1000 约 8.593 �
 | 当前巅峰 100 | `paragonLevel >= GameConfig.RebirthUnlockParagon`（默认 100） |
 | 本世 11-10 已首通 | 转生会清空 `clearedStages`，所以每次都要重新打回 11-10 |
 | 不在无尽进行中 | `!EndlessActive`，且无尽结果面板已关闭 |
-| 没有待选技能 | `!ChoicePending`（技能三选一 / 待选次数 > 0） |
+| 没有阻塞选择 | `!ChoicePending`（流派选择面板 / 无尽结果面板） |
 | 没有其他阻塞流程 | 引导、强化、洗练、对比等面板不阻塞入口；打开轮回面板时先关闭它们 |
 
 `CanRebirth` 要返回**具体原因**，面板直接显示第一条未满足项，例如：
@@ -145,7 +145,7 @@ README 已知问题第 4 条：P200 满级兜里约 560 万、P1000 约 8.593 �
 - `未满足：巅峰 64/100`
 - `未满足：本世尚未通关 11-10`
 - `未满足：请先结束无尽模式`
-- `未满足：请先选完待选技能`
+- `未满足：请先完成流派选择`
 
 ### 4.2 轮回印记
 
@@ -220,7 +220,7 @@ M = 1 + pMarks + fMarks + gMarks
 | 打开面板时正在战斗 | 打开即冻结；关闭后继续。转生成功后不自动继续 |
 | 无尽进行中 | 禁止转生；必须先撤退或死亡结束本局 |
 | 无尽结果面板开着 | 禁止转生；先关闭结果面板 |
-| 技能三选一 / 待选次数 > 0 | 禁止转生；先选完。避免重置后 `ChoicePending` 残留 |
+| 流派选择面板开着 | 禁止转生；先确认流派。避免重置后 `ChoicePending` 残留 |
 | 有未领取的横幅 | 允许；转生时清空并显示新横幅 |
 | 引导未完成 | 允许；保留 GuideDone 状态，不重新弹 6 步引导 |
 | 自动购买药剂开着 | 保留设置；起始药剂按行囊，商店开放后自动买 |
@@ -448,7 +448,7 @@ public partial class PlayerData
 7. 重置本世字段（§4.4）
 8. level = RebirthStartLevel；gold = RebirthStartGold；potionCount = RebirthStartPotions
 9. FillHp()；shield = 0
-10. ResetSessionState()（清怪、浮层、待选、计时器、统计、日志）
+10. ResetSessionState()（清怪、浮层、计时器、统计、日志）
 11. Mode = Campaign；CurrentState = WaitingRespawn；IsRunning = false
 12. SaveSystem.Save(Player)
 13. 显示横幅/日志
@@ -622,7 +622,7 @@ int floor = Mathf.Clamp(startFloor, 1, maxStart);
   - `无尽最高  {endlessBestFloor} 层`
   - `转生后  Lv.{startLevel}`
 - 保留行：`保留：印记与升级、成就与累计统计、设置、无尽最高纪录`
-- 重置行：`重置：等级/巅峰/金币/药剂/关卡/首通/五件装备/技能/待选`
+- 重置行：`重置：等级/巅峰/金币/药剂/关卡/首通/五件装备/技能`
 - 主按钮可用：`转生 · 获得 {M} 印记`
 - 主按钮不可用：`转生`
 - 原因示例：`未满足：巅峰 64/100`
@@ -648,7 +648,7 @@ int floor = Mathf.Clamp(startFloor, 1, maxStart);
 5. 转生后：等级=起始等级、金币=起始金币、关卡 1-1、五装备空、技能空、满血、`IsRunning=false`；成就/累计统计/设置/无尽纪录保留。
 6. 无尽：转生后入口仍可见但 `开始挑战` 置灰（Lv<100）；到 Lv100 后只能从第 1 层开始；重通 11-10 后恢复检查点。
 7. 加成：经验/金币/掉落按倍率；战斗属性 +5%；装备评分随属性略升但同槽排序不变。
-8. 边界：无尽进行中/结果面板/技能三选一/待选次数 >0 时禁止转生，原因正确；关闭面板/倒计时取消不执行。
+8. 边界：无尽进行中/结果面板/流派选择面板开着时禁止转生，原因正确；关闭面板/倒计时取消不执行。
 9. UI：1280×720 下不越界、不压页脚；面板打开冻结战斗；横幅在轮回面板之上；日志有转生记录。
 10. 控制台：`compilationFailed=false`、`consoleErrors=0`、`consoleWarnings=0`。
 
@@ -766,14 +766,14 @@ endlessBestFloor = 45（保留）
 - 倍率：`gold=0` 时 `AddGold(100)` 到账 120；Lv3 `AddExp(10)` 得 exp=12。
 - 夹取：`SetRebirthRank(Battle,99)→5`、`Fortune,-5→0`；五条 `TotalCost` 合计 110；`MarksFor` 样例 2/4/8/29/30 全对。
 - 迁移：v8 旧档带伪造转生字段读入全 0；v9 且 `count=0` 但 rank/marks 非 0 时整组清零；`bestParagon=9999`→1000，ranks 99/-5/99/-1/99→5/0/5/0/5。
-- 阻挡：`CanRebirth` 依次给出「需要等级 100（当前 Lv.X）」「需要巅峰 100」「本世通关 11-10 后才能轮回」「先把技能三选一选完」「无尽模式进行中，先撤退或结束本局」。
+- 阻挡：`CanRebirth` 依次给出「需要等级 100（当前 Lv.X）」「需要巅峰 100」「本世通关 11-10 后才能轮回」「先完成流派选择」「无尽模式进行中，先撤退或结束本局」。
 - 无尽：转生后 Lv1 时 `CanEnterEndless=False`，面板开始按钮禁用并提示「需要等级 100 才能进入无尽模式（当前 Lv.1）」，直接调 `StartEndlessRun` 被守卫拦下；Lv100 且本世首通 11-10 后 `EndlessSuggestedStartFloor` 恢复检查点 7。
 - 编译：`compilationFailed=false`、`consoleErrors=0`；Play 打开轮回面板无 NRE。
 - 探针冒烟：默认参数 `NewGameProgression.Run(12345, 30, false, 0.80f)` 全程通关，13.7min / 2 阵亡 / 结束时 P41 / 金币 8,755；`BalanceRegression.RunStaticOnly()` 返回 `PASS — 静态哨兵与基线一致`。五条 rank 全 5 的单种子冒烟：起始 Lv.11 / 金币 2,500 / 药剂 5，7.7min / 0 阵亡 / 结束时 P63 / 金币 24,348（当时传承每级 +2；2026-10-22 改为 +3，满轮回起始 Lv.16；后来的 50 种子复跑见 §14.4 末）。单种子只验证接线，不代表成功率分布。
 
 ### 14.4 平衡分布（2026-10-20）
 
-三组分布都用 NewGameProgression / EndlessPacing / LateGameProbe 的五条 rank 入口；默认全 0 保持旧基线。**先套 rank 再选技能会改变三选一评分**，所以两个满装探针都在技能挑选之后才套 rank。
+三组分布都用 NewGameProgression / EndlessPacing / LateGameProbe 的五条 rank 入口；默认全 0 保持旧基线。**先套 rank 再学技能会改变技能点评分**，所以两个满装探针都在技能挑选之后才套 rank。
 
 #### 新档（50 种子）
 
@@ -811,7 +811,7 @@ endlessBestFloor = 45（保留）
 | 全 0 | 80.83% | 180（15） |
 | 全 5 | 90.54% | 180（15） |
 
-目标 80~90%；baseline 在区间内，满轮回 90.54% 在上沿略超。这里同样是在技能挑选之后套 rank；如果先套，三选一会偏向被加成的属性，构筑与正常玩家不可比。
+目标 80~90%；baseline 在区间内，满轮回 90.54% 在上沿略超。这里同样是在技能挑选之后套 rank；如果先套，技能点选择会偏向被加成的属性，构筑与正常玩家不可比。
 
 #### 结论
 
@@ -870,7 +870,7 @@ EndlessPacing.BuildFullPlayer 与 LateGameProbe.Build 都已在技能挑选后�
 
 ### 14.6 v2 实现记录（2026-10-25：保留一件 + 最快轮回 Top-5）
 
-状态：**已实现、已编译、Play 验收通过**；v2 落在存档 v12，当前存档为 v13（B2 成就兑换），v13 不碰转生字段。改动范围覆盖 roadmap B4 的 (a)(b)；(c) P100→P50 不塞进 v2，已单独作为 B4c 复评，见 §14.7。
+状态：**已实现、已编译、Play 验收通过**；v2 落在存档 v12，当前存档为 v15（B2 成就兑换 v13 + B1 商店 2.0 v14 + 技能 2.0 v15），三者都不碰转生字段。技能 2.0 的转生行为是重置 `doctrine` / 技能槽并保留 `skillEverMask`，见 `docs/skill-system-v2-design.md` §11。改动范围覆盖 roadmap B4 的 (a)(b)；(c) P100→P50 不塞进 v2，已单独作为 B4c 复评，见 §14.7。
 
 #### 14.6.1 保留规则
 
@@ -894,7 +894,7 @@ EndlessPacing.BuildFullPlayer 与 LateGameProbe.Build 都已在技能挑选后�
 #### 14.6.3 本世计时口径
 
 - `PlayerData.lifeSeconds` 是「本世真实秒数」，不是游戏内加速后的秒数。
-- 累加点在 `GameController.Update`：`if (!IsRunning) return;` 与整串浮层冻结 return **之后**，按 `Time.unscaledDeltaTime` 累加；因此暂停、设置/成就/存档/强化/洗练/关卡/无尽/轮回/关于/显示等任何浮层打开时都不计时，战斗、等待、商店、三选一等待都计时；2×/4× 速度不改变计时。
+- 累加点在 `GameController.Update`：`if (!IsRunning) return;` 与整串浮层冻结 return **之后**，按 `Time.unscaledDeltaTime` 累加；因此暂停、设置/成就/存档/强化/洗练/关卡/无尽/轮回/关于/显示等任何浮层打开时都不计时，战斗、等待、商店都计时；2×/4× 速度不改变计时。
 - 上限 `RebirthHistory.MaxSeconds`（30 天），防挂机溢出；转生时 `Mathf.RoundToInt` 后夹取，再清零。
 - 计时只用于本档最快轮回榜，不参与战斗、评分、成就指标或经济。
 

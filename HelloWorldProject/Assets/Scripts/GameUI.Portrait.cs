@@ -18,6 +18,7 @@ namespace AutoBattle
         private RectTransform _portraitRect;
         private Image _portraitGlow;
         private Image _portraitFloor;
+        private Image _portraitFrameBorder;
         private Color _portraitGlowBase;
         private Color _portraitFloorBase;
         private Vector2 _portraitHome;
@@ -64,6 +65,19 @@ namespace AutoBattle
             // 从随机相位开始，避免每次启动都像机械表一样同时吸气。
             _portraitTime = GameRandom.Range(0f, 8f);
             _portraitBlinkTimer = GameRandom.Range(2.6f, 4.4f);
+        }
+
+        /// <summary>
+        /// 收藏家/珍藏头像框：直接给立绘卡的描边染色，不额外叠一层 sprite。
+        /// 这样不会挡住立绘，也不用为 1280×720 之外的缩放手写第二套坐标。
+        /// </summary>
+        private void RefreshPortraitCosmetic(PlayerData p)
+        {
+            if (_portraitFrameBorder == null) return;
+            int id = ShopCatalog.EffectiveFrame(p);
+            Color c = id >= 0 ? ShopCatalog.CosmeticColor(id) : GameConfig.Border;
+            c.a = id >= 0 ? 0.95f : GameConfig.Border.a;
+            _portraitFrameBorder.color = c;
         }
 
         /// <summary>每帧推进立绘动画。由 GameUI.Update 调用。</summary>

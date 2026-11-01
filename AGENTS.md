@@ -4,6 +4,8 @@
 
 本工作区用于 Unity × DSH 集成。
 
+换会话或接手项目时，先读 `README.md`、`docs/roadmap.md` 与 `docs/handoff.md`（当前 HEAD、未提交改动、验证结果与下一步）。
+
 - 工程 `HelloWorldProject/`（Universal 2D 模板，仅 `Assets/Scenes/SampleScene.unity`）；Editor `6000.6.5f1`；`com.unity.pipeline` 已随工程装好。
 - 官方 `unity-cli` skill 在 `.dsh/skills/unity-cli/`（SKILL.md + 11 个 references）。驱动 Unity 前先读它。
 - 核心纪律：改场景/预制体/资源前先跑 `unity status`；绝不手改 `.unity`/`.prefab`/`.asset` 的 YAML。

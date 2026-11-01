@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -173,9 +173,9 @@ namespace AutoBattle
             if (_stageSummaryText != null)
             {
                 _stageSummaryText.text =
-                    $"<color=#AAB4C6>总进度：</color>首通 <color=#9FD8A0>{clearedStages}</color>/{totalStages} 关 · " +
-                    $"解锁 <color=#FFE08A>{maxCh}</color>/{StageCatalog.ChapterCount} 章 · " +
-                    $"首通金币 <color=#FFD98A>{claimedGold:N0}</color> / {allGold:N0}";
+                    $"<color=#6F6252>总进度：</color>首通 <color=#2F6B3B>{clearedStages}</color>/{totalStages} 关 · " +
+                    $"解锁 <color=#8A5A12>{maxCh}</color>/{StageCatalog.ChapterCount} 章 · " +
+                    $"首通金币 <color=#8A5A12>{claimedGold:N0}</color> / {allGold:N0}";
             }
 
             for (int i = 0; i < _stageChapterButtons.Length; i++)
@@ -188,7 +188,7 @@ namespace AutoBattle
                 // 已解锁的章带上该章首通进度：关卡能回头重刷，光看「已过」分不清哪章还没打满。
                 int clearedInThis = unlocked ? _game.Player.ClearedCountInChapter(chapter) : 0;
                 _stageChapterLabels[i].text = unlocked
-                    ? $"第 {chapter} 章<size=11><color=#9FD8A0> {clearedInThis}/{StageCatalog.StagesPerChapter}</color></size>"
+                    ? $"第 {chapter} 章<size=11><color=#2F6B3B> {clearedInThis}/{StageCatalog.StagesPerChapter}</color></size>"
                     : $"× 第 {chapter} 章";
                 _stageChapterLabels[i].color = unlocked
                     ? (viewing ? GameConfig.AccentBannerTitle : GameConfig.TextInfo)
@@ -223,9 +223,9 @@ namespace AutoBattle
                     : def.Code;
 
                 _stageSlotLabels[i].text = unlocked
-                    ? $"{title}\n<size=11><color=#AAB0BD>Lv.{def.monsterLevel}</color></size>\n" +
-                      (isCurrent ? "<color=#FFE08A>▶ 当前</color>" : (passed ? "<color=#9FD8A0>✔ 已过</color>" : " "))
-                    : $"{def.Code}\n<size=11><color=#6E7280>Lv.{def.monsterLevel} 锁定</color></size>\n ";
+                    ? $"{title}\n<size=11><color=#6F6252>Lv.{def.monsterLevel}</color></size>\n" +
+                      (isCurrent ? "<color=#8A5A12>▶ 当前</color>" : (passed ? "<color=#2F6B3B>✔ 已过</color>" : " "))
+                    : $"{def.Code}\n<size=11><color=#8A8272>Lv.{def.monsterLevel} 锁定</color></size>\n ";
 
                 _stageSlotLabels[i].color = unlocked
                     ? (isCurrent ? Color.white : (passed ? GameConfig.TextPassed : GameConfig.TextNormal))
@@ -244,16 +244,16 @@ namespace AutoBattle
 
             _stageInfoText.text =
                 $"<size=17><b>第 {_stageViewChapter} 章</b></size>\n\n" +
-                $"怪物等级：<color=#FFD98A>Lv.{sample.monsterLevel}</color>\n" +
+                $"怪物等级：<color=#8A5A12>Lv.{sample.monsterLevel}</color>\n" +
                 $"每关击杀：{sample.killTarget} 只（关底放 {tierName}）\n" +
                 $"关卡数：{StageCatalog.StagesPerChapter} 关\n" +
-                $"已首通：<color=#9FD8A0>{clearedInChapter}/{StageCatalog.StagesPerChapter}</color>\n" +
-                $"首通奖励：<color=#FFD98A>{firstClearGold}</color> 金币" +
+                $"已首通：<color=#2F6B3B>{clearedInChapter}/{StageCatalog.StagesPerChapter}</color>\n" +
+                $"首通奖励：<color=#8A5A12>{firstClearGold}</color> 金币" +
                 (_stageViewChapter > 1 ? $"（关末再 +{GameConfig.ChapterClearGoldBonus}）" : "\n") +
                 "\n" +
                 (viewUnlocked
-                    ? "<color=#9FD8A0>该章已解锁：点上方任意关卡开打；已通关的可以反复刷。</color>"
-                    : $"<color=#E0A080>尚未解锁：先把第 {maxCh} 章打完。</color>");
+                    ? "<color=#2F6B3B>该章已解锁：点上方任意关卡开打；已通关的可以反复刷。</color>"
+                    : $"<color=#9A4E1E>尚未解锁：先把第 {maxCh} 章打完。</color>");
         }
 
     }

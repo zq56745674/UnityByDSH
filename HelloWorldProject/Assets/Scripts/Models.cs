@@ -713,8 +713,8 @@ namespace AutoBattle
                 speedFactor *= GameConfig.MaxTierSpeedFactor;
 
                 // 终局 BOSS 再叠一层：让 11-10 成为明确的关卡门，而不是「七次挑战的运气」。
-                // 实测首通落在巅峰 P15~P58（中位 P31），不是 P100；再往上抬会把新档通关率砍半
-                // （30 种子 25/30 → 1.8 的 17/30），所以定格 1.6。只作用于关底 Boss。
+                // 技能 2.0 后新档 P48 的技能数减少，倍率由 1.6 下调到 1.25；30 种子两流派各 27/30 通关。
+                // 只作用于关底 Boss，不碰无尽（无尽走 applyMaxTierAndFinalBoss:false）。
                 if (tier == MonsterTier.Boss)
                 {
                     hpFactor *= GameConfig.FinalBossStatFactor;

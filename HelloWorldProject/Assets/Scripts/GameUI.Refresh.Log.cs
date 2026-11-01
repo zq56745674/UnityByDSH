@@ -15,7 +15,7 @@ namespace AutoBattle
             RefreshShop(p, textTick);
             RefreshSkillBar(p, textTick);
             RefreshSkillPanel();
-            RefreshSkillChoice();
+            RefreshDoctrinePanel();
             RefreshStagePanel();
             RefreshSavePanel();
             RefreshEnhancePanel();
@@ -26,6 +26,7 @@ namespace AutoBattle
             RefreshEndlessPanel();
             RefreshRebirthPanel();
             RefreshAchievementPanel();
+            RefreshShop2();
             RefreshAbout();
             RefreshDisplayPanel();
             RefreshGuide();
@@ -59,8 +60,12 @@ namespace AutoBattle
 
         private string BuildGoalMain(PlayerData p)
         {
-            if (_game.PendingSkillPicks > 0)
-                return $"目标  三选一：选择本局技能（剩 {_game.PendingSkillPicks} 次）";
+            // 技能 2.1：先看流派是否已选，再看有没有没花掉的技能点，最后才推图。
+            if (!p.HasDoctrine && p.paragonLevel >= 10)
+                return "目标  流派：选择本世流派（风暴 / 山崩）";
+
+            if (p.HasDoctrine && p.SkillPoints > 0)
+                return $"目标  技能点：打开技能面板自选本流派技能（剩 {p.SkillPoints} 点）";
 
             // 从已解锁章里找第一个没首通的关；整章清完就顺延到下一章。
             int stages = StageCatalog.StagesPerChapter;
@@ -183,7 +188,7 @@ namespace AutoBattle
         {
             const int MaxChars = 78;
             sb.Append("<color=#");
-            sb.Append(ColorUtility.ToHtmlStringRGB(entry.color));
+            sb.Append(ColorUtility.ToHtmlStringRGB(DarkLogColor(entry.color)));
             sb.Append('>');
 
             string msg = entry.message;
@@ -209,11 +214,25 @@ namespace AutoBattle
             sb.Append("</color>");
         }
 
+        /// <summary>
+        /// ticker 和展开日志都压在深底上，而日志源色是给羊皮纸配的墨色——
+        /// 直接输出会糊进背景（实测治愈绿只有 3.1 的对比度）。这里保持色相、把亮度抬到 0.72 起。
+        /// </summary>
+        private static Color DarkLogColor(Color c)
+        {
+            float max = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+            if (max <= 0.001f) return c;
+            const float MinBright = 0.72f;
+            if (max >= MinBright) return c;
+            float k = MinBright / max;
+            return new Color(c.r * k, c.g * k, c.b * k, 1f);
+        }
+
         /// <summary>日志一行（按条目的颜色包裹）。ticker 与展开面板共用，颜色口径不会走岔。</summary>
         private static void AppendLogLine(System.Text.StringBuilder sb, LogEntry entry)
         {
             sb.Append("<color=#");
-            sb.Append(ColorUtility.ToHtmlStringRGB(entry.color));
+            sb.Append(ColorUtility.ToHtmlStringRGB(DarkLogColor(entry.color)));
             sb.Append('>');
             sb.Append(entry.message);
             sb.Append("</color>");
@@ -266,7 +285,7 @@ namespace AutoBattle
                     continue;
                 }
 
-                string hex = ColorUtility.ToHtmlStringRGB(e.QualityColor);
+                string hex = GameConfig.InkHex(e.QualityColor);
                 // 卡面只有 190 宽：标题只放「槽位 + 等级」，品质靠颜色，锁定用图标补一位。
                 // 强化等级直接接在等级后面（用模型里的 EnhanceText，自带前导空格）：
                 // 原来这里漏了 +N，同一件装备在对比/强化面板写 +5、在主界面却看不出来。
@@ -318,7 +337,7 @@ namespace AutoBattle
             if (!GameSettings.ShowScore) return $"×{e.qualityMultiplier:0.00}";
 
             float score = _game != null && _game.Player != null ? EquipmentScore.Of(_game.Player, e, e.slot) : 0f;
-            return $"<color=#8C99B0>×{e.qualityMultiplier:0.00}</color> <b>{score:0}</b>";
+            return $"<color=#6F6252>×{e.qualityMultiplier:0.00}</color> <b>{score:0}</b>";
         }
 
 
@@ -346,7 +365,6 @@ namespace AutoBattle
                 case GameController.State.WaitingRespawn: return "等待重生";
                 case GameController.State.Reviving: return "复活中";
                 case GameController.State.Shopping: return "商店中";
-                case GameController.State.SkillChoice: return "选技能";
                 case GameController.State.Ended: return "本局结束";
                 default: return s.ToString();
             }

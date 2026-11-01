@@ -59,6 +59,17 @@ namespace AutoBattle
             StyleTab(_enhanceBulkMaxButton, _enhanceBulkMaxLabel, "frame_bar_round", 13);
             _enhanceBulkMaxButton.onClick.AddListener(() => OnEnhanceBulkClicked(GameConfig.EnhanceMaxLevel));
 
+            // 营地行商服务（全套强化 / 批量锁定）。按钮一直建好，未购买服务时由刷新隐藏。
+            _enhanceAllButton = CreateButton(_enhancePanel, "EnhanceAllSlots", "全槽 +5", 400, 320, 96, 36,
+                GameConfig.BtnNeutral, out _enhanceAllLabel);
+            StyleTab(_enhanceAllButton, _enhanceAllLabel, "frame_bar_round", 13);
+            _enhanceAllButton.onClick.AddListener(OnEnhanceAllClicked);
+
+            _enhanceLockAllButton = CreateButton(_enhancePanel, "EnhanceLockAll", "全锁", 502, 320, 80, 36,
+                GameConfig.BtnNeutral, out _enhanceLockAllLabel);
+            StyleTab(_enhanceLockAllButton, _enhanceLockAllLabel, "frame_bar_round", 13);
+            _enhanceLockAllButton.onClick.AddListener(OnEnhanceLockAllClicked);
+
             Button close = CreateButton(_enhancePanel, "EnhancePanelClose", "关闭", 586, 320, 74, 36,
                 GameConfig.CardBtn, out Text enhanceCloseLabel);
             StyleBar(close, enhanceCloseLabel, "frame_pill", "glyph_close", 14f, "关闭强化");
@@ -98,11 +109,9 @@ namespace AutoBattle
                 EquipmentSlot s = EquipmentSlots.All[i];
                 bool selected = i == _enhanceSlotIndex;
                 bool unlocked = p.IsEquipmentSlotUnlocked(s);
-                _enhanceSlotButtons[i].image.color = selected
-                    ? Color.white
-                    : new Color(0.60f, 0.64f, 0.72f, 1f);
+                _enhanceSlotButtons[i].image.color = selected ? Color.white : GameConfig.FrameTintDim;
                 _enhanceSlotLabels[i].color = selected ? Color.white
-                    : unlocked ? GameConfig.TextMuted : GameConfig.BtnDisabledText;
+                    : unlocked ? GameConfig.BtnText : GameConfig.BtnTextDim;
                 // 保留件可能落在尚未解锁的槽位（转生 v2），不要误写成「未解锁」。
                 string lockText = unlocked ? string.Empty
                     : p.GetEquipment(s) != null ? " · 保留件" : " · 未解锁";
@@ -140,6 +149,45 @@ namespace AutoBattle
             _enhanceBulk5Label.color = canBulk ? Color.white : GameConfig.BtnDisabledText;
             _enhanceBulkMaxLabel.color = canBulk ? Color.white : GameConfig.BtnDisabledText;
 
+            // 行商服务按钮：没买服务就不占位；买了之后按「五槽里还有几件能升」点亮。
+            bool hasEnhanceAll = ShopCatalog.HasService(p, 0);
+            bool hasLockAll = ShopCatalog.HasService(p, 2);
+            _enhanceAllButton.gameObject.SetActive(hasEnhanceAll);
+            _enhanceLockAllButton.gameObject.SetActive(hasLockAll);
+
+            if (hasEnhanceAll)
+            {
+                int upgradable = 0;
+                for (int i = 0; i < EquipmentSlots.Count; i++)
+                {
+                    Equipment slotEq = p.GetEquipment(EquipmentSlots.All[i]);
+                    if (slotEq != null && slotEq.CanEnhance) upgradable++;
+                }
+
+                bool canAll = upgradable > 0 && p.gold > 0;
+                _enhanceAllButton.interactable = canAll;
+                _enhanceAllButton.image.color = canAll ? Color.white : new Color(0.62f, 0.66f, 0.74f, 1f);
+                _enhanceAllLabel.color = canAll ? Color.white : GameConfig.BtnDisabledText;
+                SetTooltip(_enhanceAllButton, upgradable > 0
+                    ? $"五个槽位各连升最多 5 级（{upgradable} 件可强化），逐级扣费，钱不够会停在买得起的那一级"
+                    : "五个槽位都已经满级，没有可强化的");
+            }
+
+            if (hasLockAll)
+            {
+                bool anyUnlocked = false;
+                for (int i = 0; i < EquipmentSlots.Count; i++)
+                {
+                    Equipment slotEq = p.GetEquipment(EquipmentSlots.All[i]);
+                    if (slotEq != null && !slotEq.locked) { anyUnlocked = true; break; }
+                }
+
+                _enhanceLockAllLabel.text = anyUnlocked ? "全锁" : "全解";
+                SetTooltip(_enhanceLockAllButton, anyUnlocked
+                    ? "锁定当前五件装备：掉落更强的也不会自动替换（对比面板仍可手动换）"
+                    : "解锁全部装备，恢复掉落自动换装");
+            }
+
             SetTooltip(_enhanceBulk5Button, remaining > 0
                 ? $"连升最多 {bulk5} 级，共需 {bulk5Cost:N0} 金币；金币不足会自动停在买得起的那一级"
                 : "已经强化到上限");
@@ -166,7 +214,7 @@ namespace AutoBattle
         {
             string slotName = EquipmentSlots.Name(slot);
             if (e == null)
-                return $"{slotName}\n\n<color=#8C99B0>（空槽位 — 掉落会自动穿上，穿上后才能强化）</color>";
+                return $"{slotName}\n\n<color=#6F6252>（空槽位 — 掉落会自动穿上，穿上后才能强化）</color>";
 
             int best = p.stats != null ? p.stats.bestEnhanceLevel : 0;
             float bonusPct = GameConfig.EnhanceBonusPerLevel * 100f;
@@ -183,7 +231,7 @@ namespace AutoBattle
             int cost = e.EnhanceCost;
             int next = e.enhanceLevel + 1;
             float factor = GameConfig.EnhanceQualityFactors[(int)GameConfig.ClampQuality(e.quality)];
-            string goldTag = p.gold >= cost ? "" : "  <color=#FF8A80>（金币不足）</color>";
+            string goldTag = p.gold >= cost ? "" : "  <color=#9B2C2C>（金币不足）</color>";
             return $"{e.Title}\n" +
                    $"当前   {e.EnhanceGainText}\n" +
                    $"下一级 {e.EnhanceGainTextAt(next)}\n" +
@@ -215,6 +263,27 @@ namespace AutoBattle
                 _game.AddLog("金币不足，无法强化。", GameConfig.LogWarn);
             else if (result == EnhanceResult.NoEquipment)
                 _game.AddLog("该槽位还没有装备。", GameConfig.LogWarn);
+        }
+
+        /// <summary>营地行商服务：五槽各 +5，逐级扣费；日志与差额提示由控制器统一写。</summary>
+        private void OnEnhanceAllClicked()
+        {
+            _game.EnhanceAllSlots(5);
+            _enhancePanelDirty = true;
+        }
+
+        /// <summary>营地行商服务：一键上锁/解锁。只要还有一件没锁就按「全锁」处理。</summary>
+        private void OnEnhanceLockAllClicked()
+        {
+            bool anyUnlocked = false;
+            for (int i = 0; i < EquipmentSlots.Count; i++)
+            {
+                Equipment e = _game.Player.GetEquipment(EquipmentSlots.All[i]);
+                if (e != null && !e.locked) { anyUnlocked = true; break; }
+            }
+
+            _game.LockAllEquipment(anyUnlocked);
+            _enhancePanelDirty = true;
         }
 
         /// <summary>批量强化：+5 或一直升到满级；金币不足时控制器会停在当前级，这里只补一句差额提示。</summary>
@@ -326,6 +395,12 @@ namespace AutoBattle
                 GameConfig.BtnGold, out _reforgeActionLabel);
             _reforgeActionIcon = StyleBar(_reforgeActionButton, _reforgeActionLabel, "frame_bar_round", "glyph_flame", 17f, "洗练选中装备", 13);
             _reforgeActionButton.onClick.AddListener(() => OnReforgeSlotClicked(EquipmentSlots.All[_reforgeSlotIndex]));
+
+            // 营地行商服务：连续洗练 10 次（锁定词条照旧不抽）。未购买服务时由刷新隐藏。
+            _reforgeTenButton = CreateButton(_reforgePanel, "ReforgeTen", "10 连", 244, 350, 96, 30,
+                GameConfig.BtnNeutral, out _reforgeTenLabel);
+            StyleTab(_reforgeTenButton, _reforgeTenLabel, "frame_bar_round", 13);
+            _reforgeTenButton.onClick.AddListener(OnReforgeTenClicked);
 
             Button close = CreateButton(_reforgePanel, "ReforgePanelClose", "关闭", 586, 392, 74, 34,
                 GameConfig.CardBtn, out Text reforgeCloseLabel);

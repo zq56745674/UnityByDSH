@@ -24,6 +24,7 @@ namespace AutoBattle.EditorTools
         [MenuItem("Tools/测试/无尽节奏探针（首死层数与耗时）")]
         static void MenuRun() => Debug.Log("[EndlessPacing]\n" + Run(20, 100));
 
+
         class RunResult
         {
             public int seed;
@@ -53,7 +54,8 @@ namespace AutoBattle.EditorTools
         public static string Run(int seedCount = 20, int maxFloor = 100, int baseSeed = 20261019,
             int paragonLevel = 200, int gearLevel = 110, float affixQuality = 0.8f, bool maxGear = false,
             int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
-            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0, bool fixedSkills = false)
+            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0, bool fixedSkills = false,
+            int fixedDoctrine = 0)
         {
             seedCount = Mathf.Max(1, seedCount);
             maxFloor = Mathf.Clamp(maxFloor, 1, EndlessCatalog.MaxFloor);
@@ -66,7 +68,7 @@ namespace AutoBattle.EditorTools
             Random.InitState(baseSeed);
             PlayerData template = BuildFullPlayer(paragonLevel, gearLevel, affixQuality, maxGear,
                 rebirthBattleRank, rebirthGrowthRank, rebirthFortuneRank, rebirthLegacyRank, rebirthAlchemyRank,
-                fixedSkills);
+                fixedSkills, fixedDoctrine);
             var results = new List<RunResult>(seedCount);
             var floorSamples = new Dictionary<int, List<FloorSample>>();
 
@@ -351,7 +353,8 @@ namespace AutoBattle.EditorTools
         /// <summary>模板：Lv.100 / 可配巅峰 / 传说装备 +15 / 可配词条质量。</summary>
         static PlayerData BuildFullPlayer(int paragonLevel, int gearLevel, float affixQuality, bool maxGear = false,
             int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
-            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0, bool fixedSkills = false)
+            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0, bool fixedSkills = false,
+            int fixedDoctrine = 0)
         {
             var p = new PlayerData
             {
@@ -368,9 +371,10 @@ namespace AutoBattle.EditorTools
                 p.SetEquipment(gear);
             }
 
-            // 巅峰 200 应得 15 张技能卡；让 ProbePolicy 逐次实打挑选并装槽。
+            // 先固定本世流派（0 表示默认风暴），再让 ProbePolicy 逐次实打挑选并装槽。
+            ProbePolicy.ProbeDoctrine = fixedDoctrine > 0 ? fixedDoctrine : 1;
             ProbePolicy.ResolvePendingSkills(p);
-            if (fixedSkills) ApplyFixedSkills(p);
+            if (fixedSkills) ApplyFixedSkills(p, fixedDoctrine > 0 ? fixedDoctrine : 1);
 
             // 转生加成必须在选完技能之后再套：技能推荐分按当前属性算，先套加成会让
             // max 档选出一套不同的技能槽（实测会丢钢铁之躯），和正常玩家的构筑不可比。
@@ -393,15 +397,16 @@ namespace AutoBattle.EditorTools
         /// 不固定时技能由 ProbePolicy 按当前属性实打挑选，改词条/暴击上限会连技能一起换掉，
         /// 测出来的层数差就不能归因到词条本身。只在 A/B 探针里传 true。
         /// </summary>
-        static void ApplyFixedSkills(PlayerData p)
+        static void ApplyFixedSkills(PlayerData p, int doctrine)
         {
-            p.ownedSkillMask = (1 << SkillCatalog.All.Length) - 1;
-            p.SetSkillSlot(0, (int)SkillId.Whirlwind);
-            p.SetSkillSlot(1, (int)SkillId.Berserk);
-            p.SetSkillSlot(2, (int)SkillId.IronBody);
-            p.SetSkillSlot(3, (int)SkillId.GiantSlayer);
-            p.SetSkillSlot(4, (int)SkillId.ShieldGen);
-            p.SetSkillSlot(5, (int)SkillId.NearDeathBurst);
+            p.doctrine = Mathf.Clamp(doctrine, 1, SkillCatalog.DoctrineCount);
+            p.ownedSkillMask = 0;
+            foreach (SkillId id in SkillCatalog.KitOf(p.doctrine))
+                p.ownedSkillMask |= 1 << (int)id;
+            p.skillEverMask |= p.ownedSkillMask;
+            SkillId[] build = SkillCatalog.BuildOf(p.doctrine);
+            for (int i = 0; i < build.Length && i < PlayerData.SkillSlotsPerKind * 3; i++)
+                p.SetSkillSlot(i, (int)build[i]);
         }
 
         static Equipment BuildGear(EquipmentSlot slot, int level, float affixQuality)

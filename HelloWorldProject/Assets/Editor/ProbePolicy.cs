@@ -4,11 +4,12 @@ using UnityEngine;
 namespace AutoBattle.EditorTools
 {
     /// <summary>
-    /// 探针的「玩家决策层」：三选一挑哪张、拿到技能装哪格、金币什么时候拿去强化 / 洗练。
+    /// 探针的「玩家决策层」：技能点花在哪张、装哪格、金币什么时候拿去强化 / 洗练。
     ///
     /// 为什么单独抽一层：改动前的探针只会拿「候选里的第一张」（等于随机抽卡），
     /// 而且从没有一步走过 GameController.EnhanceEquipment —— 于是模拟出来的是一个
     /// 「技能乱给、金币只买药」的玩家，和真人差得很远，终局节奏与逐章胜率都被低估。
+    /// 技能 2.1 起没有随机候选：探针按 SkillAdvice 取前 3 名，再实打选出最好的一张。
     ///
     /// 口径：
     /// - 技能一律用「实际打一场 Lv.110 BOSS」来评，而不是手写一张强弱表。手写表会随
@@ -23,6 +24,9 @@ namespace AutoBattle.EditorTools
     /// </summary>
     public static class ProbePolicy
     {
+        /// <summary>探针默认流派（1=风暴，2=山崩）。BuildFullPlayer 会在选技能前把它写进模板。</summary>
+        public static int ProbeDoctrine = 1;
+
         // ==================== 评分口径 ====================
 
         /// <summary>当前配装的战力：期望 DPS + 有效生命 ÷ SurvivabilityDivisor（与评分面板同式）。</summary>
@@ -30,10 +34,10 @@ namespace AutoBattle.EditorTools
             EquipmentScore.Dps(p, EquipmentScore.Standard)
             + EquipmentScore.EffectiveHp(p, EquipmentScore.Standard) / EquipmentScore.SurvivabilityDivisor;
 
-        // ==================== 技能：三选一 ====================
+        // ==================== 技能：技能点自选 ====================
 
         /// <summary>
-        /// 模拟真人玩三选一：对每个候选实打一轮三种 BOSS，取总分最高者。
+        /// 模拟真人花技能点：对每个候选实打一轮三种 BOSS，取总分最高者。
         /// slot 返回「装到哪格」（-1 表示一个都不装，技能只进背包）。
         ///
         /// 有空槽时只填空槽：这时不需要跟已有技能比，一场就够，决策也便宜。
@@ -93,13 +97,30 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>
-        /// 把一次「三选一」走完：挑一张、授予、装进槽位。返回实际拿到的技能（没有候选时返回 -1）。
-        /// 调用方负责决定「什么时候该给一次三选一」（巅峰每 10 级一次）。
+        /// 花掉 1 点技能点：从「本流派未掌握」里按 SkillAdvice 取前 3 名做候选，
+        /// 实打选出最好的一张，授予并装进槽位。返回实际学到的技能（没点 / 没候选返回 -1）。
+        /// 调用方负责决定「什么时候该花点」（现在只有技能点数这一条）。
         /// </summary>
         public static SkillId ResolveSkillChoice(PlayerData p)
         {
-            List<SkillId> candidates = p.RollSkillCandidates(GameConfig.SkillChoiceCount);
+            if (p == null || p.SkillPoints <= 0) return (SkillId)(-1);
+
+            List<SkillId> candidates = p.AvailableSkillIds();
             if (candidates.Count == 0) return (SkillId)(-1);
+
+            // 先按毕业 build 的顺序取候选，再拿推荐分补齐：P10 的第一点必须落在签名主动上。
+            // 只按推荐分筛会让「保命」这类单场最抗揍的触发技拿走第一点，真实推进的
+            // 前几章反而没有输出技能，静态过渡轨迹会被拖慢（2026-10-26 实测 ch3 47s→67s）。
+            var ordered = new List<SkillId>();
+            foreach (SkillId id in SkillCatalog.BuildOf(p.doctrine))
+                if (candidates.Contains(id)) ordered.Add(id);
+            candidates.RemoveAll(id => ordered.Contains(id));
+
+            // 只实打前三名，控制探针耗时；分数只用于筛候选，不直接决定选谁。
+            candidates.Sort((a, b) => SkillAdvice.Score(p, b).CompareTo(SkillAdvice.Score(p, a)));
+            ordered.AddRange(candidates);
+            if (ordered.Count > 3) ordered.RemoveRange(3, ordered.Count - 3);
+            candidates = ordered;
 
             SkillId picked = ChooseSkill(p, candidates, out int slot);
             if (!p.GrantSkill(picked)) return (SkillId)(-1);
@@ -122,18 +143,25 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>
-        /// 补上「欠玩家的三选一」。规则与 GameController.ResolveLevelUp 一致：
-        /// 每 ParagonPassiveEvery 级巅峰给一次，最多给到技能总数。
-        /// 探针里玩家会立刻选（真机是暂停面板，属游戏外时间），所以这里直接结算。
-        /// 返回本次结算了几次。
+        /// 把「该花但没花」的技能点花完。技能点由巅峰派生（P10=1 … P90=9），
+        /// 探针里玩家会立刻在技能面板花掉（真机也是暂停面板，属游戏外时间），所以这里直接结算。
+        /// 返回本次学到的技能数。
         /// </summary>
         public static int ResolvePendingSkills(PlayerData p)
         {
-            int want = Mathf.Min(p.paragonLevel / GameConfig.ParagonPassiveEvery, SkillCatalog.All.Length);
-            int owed = want - p.OwnedSkillCount - p.pendingSkillPicks;
-            int done = 0;
-            for (int i = 0; i < owed; i++)
+            if (p == null) return 0;
+
+            if (!p.HasDoctrine)
             {
+                int doctrine = Mathf.Clamp(ProbeDoctrine, 1, SkillCatalog.DoctrineCount);
+                p.BeginDoctrine(doctrine);
+            }
+
+            int done = 0;
+            // 上限就是本流派技能总数，防止任何派生公式出错时死循环。
+            for (int guard = 0; guard < SkillCatalog.TotalPerDoctrine; guard++)
+            {
+                if (p.SkillPoints <= 0) break;
                 if (ResolveSkillChoice(p) == (SkillId)(-1)) break;
                 done++;
             }

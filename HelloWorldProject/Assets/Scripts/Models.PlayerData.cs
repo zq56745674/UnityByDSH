@@ -37,12 +37,12 @@ namespace AutoBattle
 
         /// <summary>
         /// 已获得的技能位掩码（第 N 位对应 SkillId N）。
-        /// 100 级前恒为 0（完全没有技能）；满级后每升 10 级巅峰获得一次「三选一」。
+        /// 100 级前恒为 0（完全没有技能）；满级后每升 10 级巅峰获得 1 个技能点。
         /// </summary>
         public int ownedSkillMask;
 
         /// <summary>
-        /// 还没兑现的技能三选一次数。巅峰升级时按里程碑差值补上，玩家每选一个减一。
+        /// 旧版待选计数，技能点自选后恒为 0（技能点由 ExpectedSkillCount - OwnedSkillCount 派生）。
         /// 存进存档：中途退出不会丢应得的技能。
         /// </summary>
         public int pendingSkillPicks;
@@ -117,6 +117,43 @@ namespace AutoBattle
         /// 新增字段没有提升存档版本：旧档读出来是空串，新字段被旧版本忽略也不影响读档。
         /// </summary>
         public string equippedTitle = string.Empty;
+
+        // ==================== 营地行商（存档 v14） ====================
+
+        /// <summary>收藏家等级 0~20（B1）。纯声望，不加战斗属性。</summary>
+        public int collectorRank;
+
+        /// <summary>6 项服务的购买位掩码（bit = ShopCatalog.ServiceNames 下标）。</summary>
+        public int shopServiceMask;
+
+        /// <summary>15 件珍藏的购买位掩码（bit = ShopCatalog.CosmeticNames 下标）。</summary>
+        public int shopCosmeticMask;
+
+        /// <summary>当前装备的头像框（0~5，-1 = 未装备）。</summary>
+        public int equippedFrame = -1;
+
+        /// <summary>当前装备的背景色调（0~3，-1 = 未装备）。</summary>
+        public int equippedBackdrop = -1;
+
+        /// <summary>当前装备的伤害数字样式（0~2，-1 = 未装备）。</summary>
+        public int equippedDamage = -1;
+
+        /// <summary>当前装备的 UI 强调色（0~1，-1 = 未装备）。</summary>
+        public int equippedAccent = -1;
+
+        /// <summary>自动出售规则阈值：-1 = 关，0 普通、1 优秀、2 稀有（只卖「普通及以下」等）。</summary>
+        public int autoSellQuality = -1;
+
+        // ==================== 技能 2.0 流派（存档 v15） ====================
+
+        /// <summary>本世流派：0 = 尚未选择，1 = 风暴，2 = 山崩。转生重置为 0。</summary>
+        public int doctrine;
+
+        /// <summary>跨世见过（拥有过）的技能位掩码，只增不减；成就用，转生不清。</summary>
+        public int skillEverMask;
+
+        /// <summary>本次读档来自 v14 及更早：确认流派后要补发整套九个技能。运行时不存档。</summary>
+        [System.NonSerialized] public bool pendingLegacyDoctrineGrant;
 
         // ==================== 转生（存档 v9） ====================
 
@@ -287,6 +324,10 @@ namespace AutoBattle
         public float EquipAttackSpeedBonus => SumEquipment(e => e.affixAttackSpeed)
                                             + (boots != null ? boots.EnhancedHaste : 0f);
 
+        /// <summary>装备提供的防御（衣服 + 头盔，强化后），山岳之躯按它转攻击。</summary>
+        public float EquipmentDefense => (armor != null ? armor.EnhancedDefense : 0f)
+                                       + (helmet != null ? helmet.EnhancedDefense : 0f);
+
         /// <summary>副词条汇总：全属性加成，按比例同时放大攻击、防御、生命。</summary>
         public float AllStatsBonus => SumEquipment(e => e.affixAllStats);
 
@@ -332,33 +373,68 @@ namespace AutoBattle
             return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value, SkillLevel);
         }
 
-        // ---- 被动技能带来的属性 ----
+        /// <summary>取某个被动的第二数值（未装返回 0）。</summary>
+        public float PassiveValue2(SkillId id)
+        {
+            if (!HasSkill(id)) return 0f;
+            return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value2, SkillLevel);
+        }
 
-        /// <summary>钢铁之躯：防御 +50%。</summary>
-        public float SkillDefenseBonus => PassiveValue(SkillId.IronBody);
+        /// <summary>取某个被动的第三数值（未装返回 0）。</summary>
+        public float PassiveValue3(SkillId id)
+        {
+            if (!HasSkill(id)) return 0f;
+            return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value3, SkillLevel);
+        }
 
-        /// <summary>狂暴之心：暴击率 +8%。</summary>
-        public float SkillCritChanceBonus => PassiveValue(SkillId.BerserkHeart);
+        /// <summary>取某个技能的第四数值（未装返回 0）。</summary>
+        public float PassiveValue4(SkillId id)
+        {
+            if (!HasSkill(id)) return 0f;
+            return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value4, SkillLevel);
+        }
 
-        /// <summary>致命打击：暴击伤害乘区（基础 +20%，随技能等级放大）。</summary>
-        public float SkillCritDamageBonus => PassiveValue(SkillId.LethalStrike);
+        // ---- 被动技能带来的属性（技能 2.0）----
 
-        /// <summary>吸血鬼：吸血 +5%。</summary>
+        /// <summary>山岳之躯：防御 +30%（50 种子对齐风暴后由 40% 下调）；雷霆突袭的「雷印护体」给风暴流 +40%。</summary>
+        public float SkillDefenseBonus => PassiveValue(SkillId.MountainBody) + PassiveValue4(SkillId.ThunderGod);
+
+        /// <summary>静电共鸣：暴击率 +12%。</summary>
+        public float SkillCritChanceBonus => HasSkill(SkillId.StaticResonance)
+            ? SkillCatalog.Get(SkillId.StaticResonance).critBonus : 0f;
+
+        /// <summary>暴击伤害乘区：静电共鸣 +25%、沉重打击 +40%。</summary>
+        public float SkillCritDamageBonus => PassiveValue(SkillId.StaticResonance)
+                                           + PassiveValue(SkillId.HeavyImpact);
+
+        /// <summary>吸血鬼：吸血 +20%。</summary>
         public float Lifesteal => PassiveValue(SkillId.Vampire);
 
-        /// <summary>迅捷：攻击速度 +8%。</summary>
-        public float SkillAttackSpeedBonus => PassiveValue(SkillId.Swiftness);
+        /// <summary>攻速被动：风暴加速 +12%，沉重打击 -10%。</summary>
+        public float SkillAttackSpeedBonus => PassiveValue(SkillId.StormHaste)
+                                            + PassiveValue2(SkillId.HeavyImpact);
 
-        /// <summary>巨人杀手：对精英 / Boss 的伤害加成。</summary>
-        public float GiantSlayerBonus => PassiveValue(SkillId.GiantSlayer);
+        /// <summary>沉重打击：崩山与崩山击的伤害加成。</summary>
+        public float MountainSkillDamageBonus => PassiveValue3(SkillId.HeavyImpact);
 
-        /// <summary>不死之身：低血时的减伤比例。</summary>
-        public float UndyingReduction => PassiveValue(SkillId.Undying);
+        /// <summary>山岳之躯：装备防御转攻击的比例。</summary>
+        public float MountainDefenseToAttack => PassiveValue2(SkillId.MountainBody);
 
-        /// <summary>不死之身的触发血线（未装备返回 0）。</summary>
-        public float UndyingThreshold => HasSkill(SkillId.Undying) ? SkillCatalog.Get(SkillId.Undying).hpThreshold : 0f;
+        /// <summary>山岳之躯：转攻占面板攻击的上限。</summary>
+        public float MountainConvertCap => PassiveValue3(SkillId.MountainBody);
 
-        /// <summary>攻击速度总加成 = 装备副词条 + 迅捷被动。</summary>
+        /// <summary>静电共鸣：暴击率超过上限后的溢出转换（每 1% 转 2% 暴伤，最多 +30%）。</summary>
+        public float OverflowCritDamage
+        {
+            get
+            {
+                if (!HasSkill(SkillId.StaticResonance)) return 0f;
+                float over = Mathf.Max(0f, RawCritChance - GameConfig.MaxCritChance);
+                return Mathf.Min(over * 2f, PassiveValue2(SkillId.StaticResonance));
+            }
+        }
+
+        /// <summary>攻击速度总加成 = 装备副词条 + 攻速被动。</summary>
         public float AttackSpeedBonus => EquipAttackSpeedBonus + SkillAttackSpeedBonus;
 
         // ==================== 转生永久加成 ====================
@@ -421,8 +497,24 @@ namespace AutoBattle
                               + (helmet != null ? helmet.EnhancedHp : 0)) * (1f + AllStatsBonus))
                           + ParagonHpBonus) * RebirthBattleMultiplier);
 
-        public int Attack => Mathf.RoundToInt((Mathf.RoundToInt((BaseAttack + (weapon != null ? weapon.EnhancedAttack : 0)) * (1f + AllStatsBonus))
-                           + ParagonAttackBonus) * RebirthBattleMultiplier);
+        /// <summary>不含山岳之躯转攻的攻击（也是转攻上限的分母）。</summary>
+        /// <summary>不含「山岳之躯」防御转攻的原始攻击面板（技能评分/探针需要分项）。</summary>
+        public int AttackBeforeMountain => Mathf.RoundToInt(
+            (Mathf.RoundToInt((BaseAttack + (weapon != null ? weapon.EnhancedAttack : 0)) * (1f + AllStatsBonus))
+             + ParagonAttackBonus) * RebirthBattleMultiplier);
+
+        /// <summary>山岳之躯：装备防御的 10% 转成攻击，最多 +25% 面板攻击。</summary>
+        public int MountainConvertedAttack
+        {
+            get
+            {
+                if (!HasSkill(SkillId.MountainBody)) return 0;
+                float cap = AttackBeforeMountain * MountainConvertCap;
+                return Mathf.RoundToInt(Mathf.Min(EquipmentDefense * MountainDefenseToAttack, cap));
+            }
+        }
+
+        public int Attack => AttackBeforeMountain + MountainConvertedAttack;
 
         public int Defense => Mathf.RoundToInt((Mathf.RoundToInt(
                                 Mathf.RoundToInt((BaseDefense
@@ -434,18 +526,21 @@ namespace AutoBattle
         /// <summary>速度本身不受全属性影响；鞋的主属性直接加算，攻速词条走独立的「攻击间隔乘区」。</summary>
         public int Speed => BaseSpeed + (boots != null ? boots.EnhancedSpeed : 0);
 
-        /// <summary>暴击率 = 初始 5% + 武器主属性 + 副词条 + 狂暴之心，并夹在 MaxCritChance 以内。</summary>
-        public float CritChance => Mathf.Min(
-            GameConfig.MaxCritChance,
-            GameConfig.PlayerBaseCritChance + (weapon != null ? weapon.critChance : 0f)
-            + AffixCritChance + SkillCritChanceBonus);
+        /// <summary>未夹上限的暴击率；静电共鸣用它计算溢出。</summary>
+        public float RawCritChance => GameConfig.PlayerBaseCritChance
+                                    + (weapon != null ? weapon.critChance : 0f)
+                                    + AffixCritChance + SkillCritChanceBonus;
 
-        /// <summary>暴击伤害倍率 =（初始 150% + 武器主属性 + 饰品主属性 + 副词条）× 致命打击乘区。</summary>
+        /// <summary>暴击率 = 初始 5% + 武器主属性 + 副词条 + 静电共鸣，并夹在 MaxCritChance 以内。</summary>
+        public float CritChance => Mathf.Min(GameConfig.MaxCritChance, RawCritChance);
+
+        /// <summary>暴击伤害倍率 =（初始 150% + 武器主属性 + 饰品主属性 + 副词条）× 暴伤乘区 + 静电共鸣溢出。</summary>
         public float CritDamage => (GameConfig.PlayerBaseCritDamage
                                  + (weapon != null ? weapon.critDamage : 0f)
                                  + (accessory != null ? accessory.EnhancedCritDamage : 0f)
                                  + AffixCritDamage)
-                                 * (1f + SkillCritDamageBonus);
+                                 * (1f + SkillCritDamageBonus)
+                                 + OverflowCritDamage;
 
         /// <summary>当前等级升到下一级所需经验；满级返回 0（要求 3）。</summary>
         public int ExpToNextLevel => level >= GameConfig.MaxLevel ? 0 : GameConfig.ExpToNextLevel(level);
@@ -644,6 +739,63 @@ namespace AutoBattle
         /// <summary>该技能是否已获得（100 级前一个都没有）。</summary>
         public bool IsSkillOwned(SkillId id) => (ownedSkillMask & (1 << (int)id)) != 0;
 
+        /// <summary>该技能是否在本世/过去世见过（成就口径）。</summary>
+        public bool HasEverOwnedSkill(SkillId id) => (skillEverMask & (1 << (int)id)) != 0;
+
+        /// <summary>本世是否已选流派。</summary>
+        public bool HasDoctrine => doctrine == 1 || doctrine == 2;
+
+        /// <summary>
+        /// 本世应获得的技能点总数：P10 = 1，P20 = 2……P90 = 9，P100 不再新增。
+        /// 技能点不单独存档，由巅峰等级与已掌握数量派生，读档/转生天然一致。
+        /// </summary>
+        public int ExpectedSkillCount => Mathf.Clamp(paragonLevel / 10, 0, SkillCatalog.TotalPerDoctrine);
+
+        /// <summary>当前可用技能点：应得点数减去已经掌握的技能数；未选流派时为 0。</summary>
+        public int SkillPoints => HasDoctrine ? Mathf.Max(0, ExpectedSkillCount - OwnedSkillCount) : 0;
+
+        /// <summary>本流派尚未掌握、可以花 1 点学习的技能（6 专属在前，3 通用在后）。</summary>
+        public List<SkillId> AvailableSkillIds()
+        {
+            var result = new List<SkillId>();
+            if (!HasDoctrine) return result;
+            SkillId[] kit = SkillCatalog.KitOf(doctrine);
+            for (int i = 0; i < kit.Length; i++)
+                if (!IsSkillOwned(kit[i])) result.Add(kit[i]);
+            return result;
+        }
+
+        /// <summary>是否能用 1 技能点学习该技能。未选流派、已拥有、点数不足或跨流派都返回 false。</summary>
+        public bool CanLearnSkill(SkillId id)
+        {
+            return SkillPoints > 0 && !IsSkillOwned(id) && SkillCatalog.IsAvailableTo(doctrine, id);
+        }
+
+        /// <summary>已经拥有的本流派专属技能数。</summary>
+        public int OwnedExclusiveCount
+        {
+            get
+            {
+                if (!HasDoctrine) return 0;
+                int n = 0;
+                SkillId[] list = SkillCatalog.ExclusiveOf(doctrine);
+                for (int i = 0; i < list.Length; i++) if (IsSkillOwned(list[i])) n++;
+                return n;
+            }
+        }
+
+        /// <summary>已经拥有的通用技能数。</summary>
+        public int OwnedGeneralCount
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < SkillCatalog.GeneralSkills.Length; i++)
+                    if (IsSkillOwned(SkillCatalog.GeneralSkills[i])) n++;
+                return n;
+            }
+        }
+
         /// <summary>已获得的技能数量。</summary>
         public int OwnedSkillCount
         {
@@ -656,52 +808,91 @@ namespace AutoBattle
             }
         }
 
-        /// <summary>
-        /// 随机获得一个尚未拥有的技能（巅峰每 10 级触发一次）。
-        /// 返回获得的技能编号；十五个技能全部拥有时返回 (SkillId)(-1)。
-        /// </summary>
-        public SkillId GrantRandomSkill()
+        /// <summary>跨世累计获得过的技能数量（成就口径，转生不清）。</summary>
+        public int EverOwnedSkillCount
         {
-            var pool = new List<SkillId>();
-            for (int i = 0; i < SkillCatalog.All.Length; i++)
-                if ((ownedSkillMask & (1 << i)) == 0) pool.Add((SkillId)i);
-
-            if (pool.Count == 0) return (SkillId)(-1);
-
-            SkillId pick = pool[UnityEngine.Random.Range(0, pool.Count)];
-            ownedSkillMask |= 1 << (int)pick;
-            return pick;
-        }
-
-        /// <summary>
-        /// 从「尚未拥有」的技能里随机抽 count 个作为候选（互不重复）。
-        /// 剩余不足 count 个时返回全部剩余，全拥有时返回空表。
-        /// </summary>
-        public List<SkillId> RollSkillCandidates(int count)
-        {
-            var pool = new List<SkillId>();
-            for (int i = 0; i < SkillCatalog.All.Length; i++)
-                if ((ownedSkillMask & (1 << i)) == 0) pool.Add((SkillId)i);
-
-            var result = new List<SkillId>();
-            for (int i = 0; i < count && pool.Count > 0; i++)
+            get
             {
-                int k = UnityEngine.Random.Range(0, pool.Count);
-                result.Add(pool[k]);
-                pool.RemoveAt(k);   // 抽走就移出池子，保证候选不重复
+                int count = 0;
+                for (int i = 0; i < SkillCatalog.All.Length; i++)
+                    if ((skillEverMask & (1 << i)) != 0) count++;
+                return count;
             }
-            return result;
         }
 
-        /// <summary>授予指定技能（三选一的落点）。已拥有或编号非法时返回 false。</summary>
+        /// <summary>跨世累计获得过的某一类技能数量（成就口径）。</summary>
+        public int EverOwnedSkillCountByKind(SkillKind kind)
+        {
+            int count = 0;
+            for (int i = 0; i < SkillCatalog.All.Length; i++)
+            {
+                if ((skillEverMask & (1 << i)) == 0) continue;
+                if (SkillCatalog.All[i].kind == kind) count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 花 1 技能点学习指定技能。已拥有、编号非法、不属于本流派或点数不足时返回 false。
+        /// 技能点由 ExpectedSkillCount - OwnedSkillCount 派生，所以这里不需要单独扣点。
+        /// </summary>
         public bool GrantSkill(SkillId id)
         {
             int index = (int)id;
             if (index < 0 || index >= SkillCatalog.All.Length) return false;
             if ((ownedSkillMask & (1 << index)) != 0) return false;
+            if (!SkillCatalog.IsAvailableTo(doctrine, id)) return false;
+            if (SkillPoints <= 0) return false;
 
             ownedSkillMask |= 1 << index;
+            skillEverMask |= 1 << index;
             return true;
+        }
+
+        /// <summary>
+        /// 本世第一次确认流派：只记流派，不再免费送技能。
+        /// P10 的 1 点技能点由 SkillPoints 派生，玩家自己在技能面板里选第一个技能。
+        /// </summary>
+        public bool BeginDoctrine(int chosenDoctrine)
+        {
+            if (chosenDoctrine != 1 && chosenDoctrine != 2) return false;
+            if (HasDoctrine) return false;
+
+            doctrine = chosenDoctrine;
+            pendingSkillPicks = 0;
+            return true;
+        }
+
+        /// <summary>旧档迁移：确认流派后一次性补发本流派六专属 + 三通用。</summary>
+        public void GrantDoctrineKit(int chosenDoctrine)
+        {
+            if (chosenDoctrine != 1 && chosenDoctrine != 2) return;
+            doctrine = chosenDoctrine;
+            SkillId[] kit = SkillCatalog.KitOf(chosenDoctrine);
+            for (int i = 0; i < kit.Length; i++)
+            {
+                int index = (int)kit[i];
+                ownedSkillMask |= 1 << index;
+                skillEverMask |= 1 << index;
+            }
+        }
+
+        /// <summary>按毕业 build 装六格；流派非法时清空。</summary>
+        public void EquipDoctrineBuild(int chosenDoctrine)
+        {
+            SkillId[] build = SkillCatalog.BuildOf(chosenDoctrine);
+            for (int i = 0; i < SkillSlotCount; i++)
+                SetSkillSlot(i, i < build.Length ? (int)build[i] : -1);
+        }
+
+        /// <summary>转生重置：本世技能与流派清空，跨世 skillEverMask 保留。</summary>
+        public void ResetSkillsForRebirth()
+        {
+            doctrine = 0;
+            ownedSkillMask = 0;
+            pendingSkillPicks = 0;
+            pendingLegacyDoctrineGrant = false;
+            for (int i = 0; i < SkillSlotCount; i++) SetSkillSlot(i, -1);
         }
 
         /// <summary>按精英 / Boss 档次判断是否为「巨人杀手」的目标。</summary>

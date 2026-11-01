@@ -21,17 +21,17 @@ namespace AutoBattle
         // ==================== 舞台几何 ====================
         // 全部是舞台卡内部坐标：原点左上、y 向下（和 CreateRect 的约定一致）。
         private const float StageW = 808f;
-        private const float StageH = 332f;
-        private const float StageGroundY = 250f;      // 脚底线：主角/怪物都站在这里
+        private const float StageH = 312f;
+        private const float StageGroundY = 230f;      // 脚底线：主角/怪物都站在这里
         private const float StageHeroCx = 178f;
         private const float StageMonsterCx = 604f;
         private const float StageHeroH = 190f;
         private const float StageMonsterH = 192f;
         private const float StageEliteH = 206f;
         private const float StageBossH = 226f;
-        private const float StageTickerY = 262f;
+        private const float StageTickerY = 242f;
         private const float StageTickerH = 56f;
-        private const float StageLogPanelH = 256f;
+        private const float StageLogPanelH = 236f;
         private const int StageFxPool = 12;
         // ---- 地面光环：俯视看是扁椭圆，高度按宽度乘这个系数 ----
         private const float AuraSquash = 0.42f;
@@ -103,11 +103,11 @@ namespace AutoBattle
         /// <summary>建战斗舞台（替换原来的日志卡），同时把 _logCard 指向它——引导高亮仍打在这一块上。</summary>
         private void BuildBattleStage(Transform panel)
         {
-            _battleStageCard = CreateCard(panel, "BattleStageCard", 8, 154, StageW, StageH,
+            _battleStageCard = CreateCard(panel, "BattleStageCard", 8, 174, StageW, StageH,
                 GameConfig.InsetBg, RadiusCard, GameConfig.BorderSoft);
             _logCard = _battleStageCard;
 
-            _battleStageRoot = CreateRect(panel, "BattleStage", 8, 154, StageW, StageH);
+            _battleStageRoot = CreateRect(panel, "BattleStage", 8, 174, StageW, StageH);
             // 舞台是「窗口」：特效应在卡片边缘被裁掉，而不是糊到描边外面。
             _battleStageRoot.gameObject.AddComponent<RectMask2D>();
 
@@ -175,14 +175,16 @@ namespace AutoBattle
             tickerButton.onClick.AddListener(ToggleBattleLog);
 
             _logText = CreateText(_battleStageRoot, "LogTicker", "", 14, StageTickerY, 744, StageTickerH,
-                FontSmall, GameConfig.TextNormal, TextAnchor.LowerLeft);
+                FontSmall, new Color(0.86f, 0.89f, 0.95f), TextAnchor.LowerLeft);
             _logText.horizontalOverflow = HorizontalWrapMode.Wrap;
             _logText.verticalOverflow = VerticalWrapMode.Truncate;
             _logText.lineSpacing = 1.12f;
 
+            // 深皮革小钮 + 金箭头：之前用浅纸色 RowBg，压在深色战斗图上像块贴纸。
             _battleLogToggle = CreateButton(_battleStageRoot, "LogToggle", "▲", 764, StageTickerY + 8, 28, 30,
-                GameConfig.RowBg, out _battleLogToggleLabel);
+                GameConfig.SlotBg, out _battleLogToggleLabel);
             _battleLogToggleLabel.fontSize = 13;
+            _battleLogToggleLabel.color = GameConfig.Border;
             _battleLogToggle.onClick.AddListener(ToggleBattleLog);
 
             BuildBattleLogPanel();
@@ -254,7 +256,7 @@ namespace AutoBattle
             bg.raycastTarget = true;   // 吃点击：展开时不该点穿到底下的舞台按钮
 
             _battleLogHeader = CreateText(_battleLogPanel, "BattleLogHeader", "", 16, 6, 620, 22, FontSmall,
-                GameConfig.TextMuted, TextAnchor.MiddleLeft);
+                GameConfig.BtnTextDim, TextAnchor.MiddleLeft);
 
             RectTransform viewport = CreateRect(_battleLogPanel, "BattleLogViewport", 0, 0, 0, 0);
             viewport.anchorMin = Vector2.zero;
@@ -275,7 +277,7 @@ namespace AutoBattle
 
             // 整段日志用一个 Text：180 条行式布局的 GameObject 开销比一个 12k 字的文本高得多。
             _battleLogDetail = CreateText(_battleLogContent, "BattleLogDetail", "", 0, 0, 0, 0,
-                FontSmall, GameConfig.TextNormal, TextAnchor.UpperLeft);
+                FontSmall, GameConfig.BtnText, TextAnchor.UpperLeft);
             Stretch(_battleLogDetail.rectTransform);
             _battleLogDetail.horizontalOverflow = HorizontalWrapMode.Wrap;
             _battleLogDetail.verticalOverflow = VerticalWrapMode.Overflow;

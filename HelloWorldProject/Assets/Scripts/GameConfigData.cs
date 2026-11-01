@@ -46,7 +46,7 @@ namespace AutoBattle
         public float MaxTierHpFactor = 3.0f;
         public float MaxTierAttackFactor = 3.0f;
         public float MaxTierDefenseFactor = 3.0f;
-        public float FinalBossStatFactor = 1.6f;
+        public float FinalBossStatFactor = 1.25f;
         public float MaxTierSpeedFactor = 2.0f;
         public float AffixChance = 0.30f;
         public float LifestealAffixPercent = 0.30f;
@@ -138,12 +138,12 @@ namespace AutoBattle
 
         // ---- 无尽模式 ----
         public int EndlessBaseMonsterLevel = 110;
-        public int EndlessMonsterLevelStep = 6;
+        public int EndlessMonsterLevelStep = 4;
         public int EndlessKillTargetBase = 3;
         public int EndlessKillTargetEvery = 5;
         public int EndlessKillTargetMax = 6;
         public int EndlessBossEvery = 5;
-        public float EndlessBaseFactor = 3.4f;
+        public float EndlessBaseFactor = 3.1f;
         public int EndlessFloorGoldBase = 300;
         public int EndlessFloorGoldPerFloor = 40;
         public int EndlessFirstClearGoldBase = 1000;

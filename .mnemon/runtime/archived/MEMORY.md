@@ -31,3 +31,19 @@ HelloWorldProject 的 AutoSaveTick（GameController.cs:1541-1547）每 AutoSaveI
 本机 github.com / api.github.com 等被 Watt Toolkit（Steam++）写入 hosts 映射到 127.0.0.1；未开加速时 git fetch/push 报 Failed to connect port 443。push 前启动 `D:\Program Files\Steam++\Steam++.exe`，并用 `git -c http.schannelCheckRevoke=false push origin main`（本地 443 代理证书吊销检查失败），推送后可关闭 Steam++。2026-10-19 以此法推送 7d0cd0d 成功。
 §
 HelloWorldProject 的音效层：GameAudio.cs 用 16 路 AudioSource 播 Resources/Sfx 下 14 个 Kenney CC0 OGG，实际音量 = GameSettings.MasterVolume × SfxVolume，AudioSource.ignoreListenerPause=true，命中音 45ms 节流；设置面板有主音量/音效音量两组 10 格音量条与 ± 微调。逐文件来源见 docs/audio-credits.md。
+
+## 2026-10-28T17:53:11.549Z
+
+HelloWorldProject 的 BGM 是四首本地 MP3（let_me_go / big_fish_cat / embrace / sadness_water），放在 HelloWorldProject/Assets/Resources/Music/，源自 D:\QQMusic 的星落落oi；该目录已 .gitignore，换机/克隆需自备文件。GameMusic.cs 管自动播放、自选、列表/单曲循环与音量（主音量×MusicVolume），GameUI.Music.cs 是顶部音符面板，曲目表在 MusicCatalog；第四首是《我的悲伤是水做的（大肥鱼版）》，224.8s。
+§
+HelloWorldProject 战斗可复现性：BattleSystem.Tick 只用 UnityEngine.Random（无 Time/DateTime），同状态同种子逐帧完全一致（实测 262 帧 firstDiff=-1）。2026-10-22 已修掉「同一进程内第一次 Tick 多消耗一个随机数」：根因是命中音效 GameAudio.PlayHit 用 UnityEngine.Random 变调，现表现层（音频、UI 抖动）统一改用独立 System.Random（GameRandom.cs，种子 0x5EA17），玩法随机保持 UnityEngine.Random；修复后带音频冷启动也是 54/54/54 draws，写探针不再需要热身。存档 2026-10-22 起为 v11，新增 PlayerData.endlessTop（本档 Top-5 历史榜，只记阵亡/撤退结束的局）。
+§
+HelloWorldProject 战斗舞台美术约定（2026-10-22 定型）：怪物贴图 Sprites/Monsters/{族}_{melee,ranged,crit}.png（384×384），族顺序必须与 GameConfig.ChapterFamilyNames 一致——GameUI.Stage.cs 的 StageFamilyKeys = goblin/kobold/skeleton/ogre/orc/spider/undead/gargoyle/demon/abyss/dragon，第 4~11 章才不再复用前三族；Boss 用单独立绘 Sprites/Bosses/{族}_boss.png（512×512），不是小怪放大；光环 Sprites/Auras/{aura_elite 176,aura_boss 208,affix_drain|shield|poison 84} 宽、AuraSquash=0.42 压成地面椭圆、必须比角色 Image 先创建才在脚下；背景 Sprites/Backgrounds/bg_{cavern,wilds,crypt,citadel}.jpg（1616×664）按章映射 + BackdropTint 色温区分同图章节，缓存键带章号；15 个技能各有专属特效图（fx_iron_body / fx_berserk_heart / fx_lethal_strike / fx_swiftness / fx_giant_slayer / fx_undying / fx_crit_chain / fx_near_death 等）。
+§
+dsh-image-gen 的 generate_image 默认 provider 是 ComfyUI（本机没跑会报 Could not connect to ComfyUI at http://127.0.0.1:8188）；要出图必须显式传 provider:"seedream"，模型 doubao-seedream-5-0-pro-260628，落盘在工作区 dsh-image-gen/image-*.png。多角色同图只适合列间有真空白的怪物表，Boss 必须一张一只（对图硬切会把斧头/披风切断）。
+§
+本机 hosts（C:\Windows\System32\drivers\etc\hosts）把 github.com、api.github.com、raw.githubusercontent.com 等解析到 127.0.0.1，git fetch/push 直连会报 Failed to connect to github.com port 443。绕过（不改 hosts）：git -c http.curloptResolve=github.com:443:<当前解析IP> push origin main；2026-10-25 用 20.27.177.113 实测推送成功。IP 可用 Resolve-DnsName github.com -Server 1.1.1.1 取。
+§
+HelloWorldProject 技能获取（2026-10-26 定稿）：P10 选流派得 1 技能点，P20~P90 每 10 级 +1，共 9 点；技能面板自选本流派 6 专属 + 通用 3，另一流派不可选；随机三选一已删除。技能点=Clamp(paragon/10,0,9)-已掌握数，不单独存档，存档仍 v15；v14 旧档选流派后按巅峰发点。
+§
+HelloWorldProject UI 规则：深皮革底框上的文字只用 GameConfig.BtnText/BtnTextDim/BtnTextGold，未选中底框着色用 FrameTintDim；TextNormal/TextMuted 只给羊皮纸（深底上=隐形）。按钮文字居中统一走 UiFace.Pixels（Gain 0.35/Lift 0.6）。另：设计坐标=渲染-12px，grep 判据见 _shots/build16.py。

@@ -1,7 +1,7 @@
 # 成就系统设计
 
-状态：2026-10-20 **已实现**（存档 v10）。实现与验收记录见 §15；本文其余章节保留为设计依据，未逐条回改。2026-10-25 补成就点出口（兑换无尽建议起始层，存档 v13），见 §15.5。
-涉及存档：**v13**（成就本身 v10；v11 无尽榜、v12 转生 v2、v13 成就点兑换）。`SaveSystem.CurrentSaveVersion = 13`；v9 已用于转生，v10 用于成就累计与解锁。
+状态：2026-10-20 **已实现**（存档 v10）。实现与验收记录见 §15；本文其余章节保留为设计依据，未逐条回改。2026-10-25 补成就点出口（兑换无尽建议起始层，存档 v13），见 §15.5；2026-10-26 商店 2.0 升 v14（8 个商店字段，不碰成就字段）；2026-10-26 技能 2.0 升 v15（`doctrine` / `skillEverMask`），`skills_15` / `skill_triple_4` / `all_active` 改用跨世掩码；同日技能改为**技能点自选**（随机三选一删除，P10 起按巅峰发点），回归 **668/0**。
+涉及存档：**v15**（成就本身 v10；v11 无尽榜、v12 转生 v2、v13 成就点兑换、v14 商店 2.0、v15 技能 2.0）。`SaveSystem.CurrentSaveVersion = 15`；v9 已用于转生，v10 用于成就累计与解锁。
 相关文件（已实现）：`Models.PlayerStats.cs` / `Models.Achievements.cs` / `AchievementCatalog.cs` / `AchievementSystem.cs` / `SaveSystem.cs` / `GameController.cs` / `GameController.Endless.cs` / `GameController.Rebirth.cs` / `GameUI.Achievements.cs` / `Assets/Resources/achievements.json`
 参考：`README.md`（当前实现与基线）、`docs/equipment-reforge.md`（装备规则）、`docs/endless-mode.md`（无尽层数口径）、`docs/rebirth.md`（已实现转生与 v10 预留）。文中代码位置以类/方法名为锚点，行号仅为复审时参考。
 
@@ -27,7 +27,7 @@ README 路线图已完成 11/12 项：转生、无尽与成就已实现，只剩
 
 ### 1.4 它不解决什么
 
-- **不解决终局金币软出口**。成就提供贯穿新手至首通的一次性金币（名义总量 43,400），其早期节奏影响仍须测试；成就奖励是金币来源，不是金币出口。金币出口仍应交给洗练/强化/已实现的转生或未来商店。
+- **不解决终局金币软出口**。成就提供贯穿新手至首通的一次性金币（名义总量 43,400），其早期节奏影响仍须测试；成就奖励是金币来源，不是金币出口。金币出口由洗练/强化/转生与 2026-10-26 的 B1 营地行商承担；B1 一次性买满后 P1000 仍剩 1.60 亿，P100 之后的可持续消耗仍待补。
 - **不替代转生**。转生是重置换长期倍率，成就是记录，不是重置。
 - **不直接提供战斗属性**。不做「成就点 +攻击」这类设计，否则会推翻现有 P200 / 无尽平衡基线。2026-10-25 的唯一例外是**兑换无尽建议起始层**（100 点/级，最多 +3 层），它只改「从哪里开始」，不改怪物数值、掉落或战役平衡。
 
@@ -117,7 +117,7 @@ README 路线图已完成 11/12 项：转生、无尽与成就已实现，只剩
 ### 4.2 结算与顺序
 
 - 业务先完成状态修改、累计统计与连续挑战推进，再统一求值。击杀链最多在外层结算结束求值一次；不在每个嵌套 helper 里即时扫描或存盘。
-- 仅实际成功动作计数：强化/洗练失败、资金不足、全锁拒绝、无效技能选择、只打开面板均不计。
+- 仅实际成功动作计数：强化/洗练失败、资金不足、全锁拒绝、无效技能学习、只打开面板均不计。
 - 求值本身只读指标，不加计数、不消耗 Unity 随机数。重复求值不会重复发奖；**解锁 ID 去重不等于业务事件去重**，统计必须在唯一的成功结算入口写入。
 - 目录数组顺序决定显示与同批 toast 顺序。同一击杀可同时完成击杀、掉落、穿戴、等级、关卡等多条，必须按一批处理。
 - 打开面板只读状态。加载走明确的 `LoadReconcile` 模式，绝不靠 `silent=true` 猜是否发钱；正常动作走 `Live`。
@@ -147,7 +147,7 @@ README 路线图已完成 11/12 项：转生、无尽与成就已实现，只剩
 
 ### 5.1 v10 新增结构
 
-> 本节是 v10 设计口径。v13 追加的 `PlayerData.endlessStartRank` 见 §15.5；它只影响无尽建议起始层。
+> 本节是 v10 设计口径。v13 追加的 `PlayerData.endlessStartRank` 见 §15.5；它只影响无尽建议起始层。v14 商店字段与成就无关；v15 的 `doctrine` / `skillEverMask` 会影响技能类成就口径，见 `docs/skill-system-v2-design.md` §17.3。
 
 以下是拟新增结构，不是已经存在的代码：
 
@@ -268,7 +268,7 @@ public AchievementState achievements;
 - 临时状态为 attemptChapter / nextRequiredStage / active；只有从第 9~11 章第 1 关的**完整关卡起点**进入才启动，nextRequiredStage=1。普通自然跨章进入或手动重新开始第 1 关均可；前 8 章不参与。
 - 在 `ResolveStageProgress` 确认本关已清、调用 `ResolveStageClear` 之前，用本次 chapterIndex / stageIndex 核对：章号匹配且 stage==nextRequiredStage 才推进，必须依次完整清 1..10。必须先于 `SuppressFinalStageFarmKill()` 的提前返回记录挑战进度，否则已首通 11-10 的玩家再次完成连续挑战会漏记。该挑战钩子不补发首通金币、不恢复终局刷怪横幅或额外等待；重复/乱序清关不能推进资格，遇到不匹配按失效处理。
 - 有效 `SelectStage` 请求即取消旧尝试，包含重选当前关重置进度；若确实从目标章第 1 关重新开始，可开启新尝试。仅打开/取消选关面板不算跳关。手动 9-1→9-10 或 9-1→9-5 都不能完成。
-- 阵亡、离章、进入无尽、转生、ResetGame、读档/切档都取消未完成尝试；普通暂停、模态面板、技能选择、强化/换装不取消。无阵亡不禁止正常补血或养成。
+- 阵亡、离章、进入无尽、转生、ResetGame、读档/切档都取消未完成尝试；普通暂停、模态面板、技能面板、强化/换装不取消。无阵亡不禁止正常补血或养成。
 - 连续清掉第 10 关时才设置 noDeathChapterMask（第 9/10/11 章 bit 8/9/10），然后结束尝试；此已完成证据持久保存。
 - 不持久化进行中的挑战；重启后即使位于第 1 关中途也不自动获得资格，须重新选第 1 关或自然进入新的合格章。UI 明示「需在同一会话连续通关；中途读档需重试」。
 
@@ -550,9 +550,9 @@ _achievementsButton.onClick.AddListener(OnAchievementsClicked);
 ### 10.3 刷新
 
 - `_achievementsPanel` 字段 + `_achievementsPanelWasOpen` + `_achievementsDirty`。
-- `GameController` 加 `AchievementsOpen` / `ToggleAchievementsPanel()` / `CloseAchievementsPanel()`：打开前判断 `ChoicePending`，不能关闭正在等待的技能选择后绕过选择；再 `CloseAllPanels()`。该方法加入 `AchievementsOpen = false`，所有既有面板打开路径保持互斥；切档/重置/转生关闭。
+- `GameController` 加 `AchievementsOpen` / `ToggleAchievementsPanel()` / `CloseAchievementsPanel()`：打开前判断 `ChoicePending`，不能关闭正在等待的流派选择后绕过选择；再 `CloseAllPanels()`。该方法加入 `AchievementsOpen = false`，所有既有面板打开路径保持互斥；切档/重置/转生关闭。
 - **冻结不是遮罩的副作用**：必须在 `GameController.Update()` 现有面板 OR/return 名单（当前 208~210 行）加入 `AchievementsOpen`，且位于战斗/恢复/商店 Tick 前；不阻止 AutoSaveTick。
-- `RefreshHud.modalOpen` 加 `IsOpen(_achievementsPanel)`，保持现有技能管理和技能选择遮罩判断；显示、遮罩、输入门禁、游戏冻结四处一起验收。
+- `RefreshHud.modalOpen` 加 `IsOpen(_achievementsPanel)`，保持现有技能面板与流派面板的遮罩判断；显示、遮罩、输入门禁、游戏冻结四处一起验收。
 - `RefreshPanels` 里调用 `RefreshAchievementsPanel()`，位置在 `RefreshSettingsPanel` / `RefreshComparePanel` 附近。
 - 打开时重置页码、重建行；之后每 0.5 秒只读刷新。过滤后将页码夹回有效范围；无条目显示空态，翻页均禁用，不出现 1/0。
 - 切换页签/翻页/过滤：`_achievementsDirty = true`，下一帧重建。
@@ -576,11 +576,11 @@ _achievementsButton.onClick.AddListener(OnAchievementsClicked);
 - [x] 首击杀/掉落/穿戴、死亡、强化/洗练、百杀、各章节和等级逐条达成；失败操作不计；同一击杀多条解锁按数组顺序只结算一次（RunCore 42 条指标边界 + Play 实战计数见 §16.5）。
 - [x] 本局计数与累计独立：转生清本局不清累计；阵亡/复活不清累计；彻底重开清空；普通/无尽全部事件路径计数一次（RunCore 转生/统计段 + §15.2 真实转生回归）。
 - [x] 手卖、自动折价、转生待选折现均记 sold；普通收入按财运后实际到账累计；固定成就金币在财运>1 时仍不放大，接近 int.MaxValue 时不溢出，重试存盘不再次发钱（RunCore 金币段：财运例外、`int.MaxValue - 50` 封顶、幂等重存）。
-- [x] ChooseSkill 自动装满及手动 EquipSkill 装满六槽都即时解锁；主动、三系、全技能允许同批完成；未知位/重复槽不多计（RunCore 指标边界含六槽/三系/全技能；Play 技能选择路径见 §16.3）。
+- [x] 技能面板 `LearnSkill` 自动装满及手动 `EquipSkill` 装满六槽都即时解锁；主动、三系、全技能允许同批完成；未知位/重复槽不多计（RunCore 指标边界含六槽/三系/全技能；Play 技能面板路径见 `docs/skill-system-v2-design.md` §18.4）。
 - [x] 五槽品质、历史单件峰值、当前五件同时达标、三锁、千次卖出逐条验证；天然高质量也计；卸装或转生不降低历史峰值，跨世不能拼五件套/技能/110关（RunCore 指标边界 + 质量边界）。
 - [x] 词条质量 79.49/79.50/79.99/80.00% 边界：前三者不解锁且不显示达标，80.00% 解锁；空槽 min=0；小件两词条不能做三锁（RunCore 质量边界段）。
 - [x] 合法 StageKey 去重：重复/非法关卡不补齐 all_stages；章内跳关允许 chapter_clear 达最高章，但不误发 110 关全通（RunCore 无阵亡段 + v8 迁移 62 关回填）。
-- [x] 无阵亡：9/10/11章完整自然连续1..10成功；直接章末、1→5/10跳关、重选当前关重置进度、死亡、离章、进无尽、转生、读档均取消；暂停/技能选择可续；重新从第1关完整起点可重试；前8章不计（RunCore 无阵亡段；挑战隔离见 §16.2）。
+- [x] 无阵亡：9/10/11章完整自然连续1..10成功；直接章末、1→5/10跳关、重选当前关重置进度、死亡、离章、进无尽、转生、读档均取消；暂停/技能面板可续；重新从第1关完整起点可重试；前8章不计（RunCore 无阵亡段；挑战隔离见 §16.2）。
 - [x] 已首通11-10后，从11-1开始连续无阵亡清完11-10仍能完成挑战；SuppressFinalStageFarmKill 不吞挑战记录，且不重发首通金币、不恢复刷怪横幅或额外等待（RunCore 无阵亡段 + 终局重复结算修复记录）。
 - [x] 无尽25/50/100/150/200/250仅清层完成计入，死在N层不算N；全局纪录不混入槽纪录（RunCore 指标边界 + 无尽 Top-5 槽/全局分离回归）。
 
@@ -597,7 +597,7 @@ _achievementsButton.onClick.AddListener(OnAchievementsClicked);
 ### 11.3 UI与回归
 
 - [x] 1280×720入口/页签/16条分页/过滤/关闭无溢出；空筛选不出现1/0；字体能显示图标，否则回退文字「成就」。
-- [x] 打开成就时血量、攻击、恢复与商店计时冻结；自动保存/UI计时正常；关闭恢复；与技能选择、设置、引导、对比、无尽结果和转生全部互斥。
+- [x] 打开成就时血量、攻击、恢复与商店计时冻结；自动保存/UI计时正常；关闭恢复；与流派面板、技能面板、设置、引导、对比、无尽结果和转生全部互斥。
 - [x] 模态/横幅暂缓显示已验证；五条连续 toast、点击穿透与遮挡已全测（2026-10-22，见 §16.1）。
 - [x] 编译无新增错误/警告；NewGameProgression.RunAssert、BalanceRegression.RunStaticOnly、转生/无尽相关现有回归通过。
 - [x] 同状态同种子的纯战斗结果已逐帧比对：262 帧逐帧一致、首处差异 -1，换种子即分叉（2026-10-22，见 §16.3）；冷启动首战偏差已定位到命中音的音高随机并修复（§16.6），现在无需热身。自然养成经济变化已单独记录。合法五槽/明确转生状态的无尽探针 250 层 4/10、260 层 1/10（§15.2），属数值口径，不随本次比对改变。
@@ -640,7 +640,7 @@ _achievementsButton.onClick.AddListener(OnAchievementsClicked);
 ### 15.1 已落地
 
 - 数据与存档：`Models.PlayerStats.cs`（跨世累计 9 个计数 + 无阵亡章掩码）、`Models.Achievements.cs`、`AchievementCatalog.cs`、`AchievementSystem.cs`、`Assets/Resources/achievements.json`；`SaveSystem` 升到 v10，保存 `achievements` 与 `stats`，v9 及更旧档自动补齐字段。
-- 运行时：`GameController.Achievements.cs`（击杀/掉落/卖出/换装/强化/洗练/阵亡记账、无阵亡连续挑战、即时求值）；普通战斗、无尽、转生、技能手动装配与三选一均已接求值。
+- 运行时：`GameController.Achievements.cs`（击杀/掉落/卖出/换装/强化/洗练/阵亡记账、无阵亡连续挑战、即时求值）；普通战斗、无尽、转生、技能面板学习与手动装配均已接求值。
 - UI：`GameUI.Achievements.cs` 入口、面板、7 页签、2×8 行、3 页（16/16/10）、只看未完成、分页；`GameUI.cs` 入口按钮与构建顺序；打开时冻结战斗并与其它浮层互斥。
 - Toast：右侧 500×56，2.5 秒淡出，多条排队；任一模态或通关横幅可见时隐藏并暂停计时，恢复后续播；切档/重置清队列。
 - 旧档：按可证明状态 `LoadReconcile` 静默补发，不弹 toast、不补金币；实测旧档补 14 条，入口显示「成就 14」。
@@ -656,12 +656,12 @@ _achievementsButton.onClick.AddListener(OnAchievementsClicked);
 - 存档：测试污染已清理，slot0 恢复 14 条、stats 全 0、Lv.100 11-10、金币 1,773,385；slot2 恢复 7 条、stats 全 0、Lv.100 1-1；slot1 为独立测试槽，已重建为默认 Lv.1 空档。槽 1/2 独立、删槽 2 不影响槽 1 已在 Play 中实机验证并还原。
 - 回归：`NewGameProgression.RunAssert()` PASS（Lv.100 巅峰 41、13.7min、阵亡 2）；`BalanceRegression.RunStaticOnly()` PASS（静态哨兵与基线一致，说明成就接入没有改战斗数值）。
 - §11 全量回归（2026-10-20，`Assets/Editor/AchievementRegression.cs`）：
-  - 核心 `RunCore()` PASS，644 项 / 0 失败（2026-10-22 复跑；633 是当时数，之后补了存档写失败 11 项）；覆盖 42 条指标上/下界、质量 80% 边界、固定金币与幂等、财运例外、统计记账与溢出、无阵亡 9~11 章、转生印记/五条 rank、v0/v5/v8/v9/v10 迁移、v11/v12（现 v13）/schema>1/坏 JSON 拒读与原档备份、异常字段清洗、重复加载幂等。（2026-10-25 存档升 v13 后复跑仍 644 / 0；版本上界用例从 `CurrentSaveVersion` 常量推导，现拒 v14。）
+  - 核心 `RunCore()` PASS，644 项 / 0 失败（2026-10-22 复跑；633 是当时数，之后补了存档写失败 11 项）；覆盖 42 条指标上/下界、质量 80% 边界、固定金币与幂等、财运例外、统计记账与溢出、无阵亡 9~11 章、转生印记/五条 rank、v0/v5/v8/v9/v10 迁移、v11/v12/v13（现 v14）/schema>1/坏 JSON 拒读与原档备份、异常字段清洗、重复加载幂等。（2026-10-26 存档升 v14 后复跑仍 644 / 0；技能 2.0 升 v15 并改三条技能成就口径后复跑为 656 / 0，新增 v14→v15 旧档迁移用例；同日技能点自选改造后最终复跑 **668 / 0**；版本上界用例从 `CurrentSaveVersion` 常量推导，现拒 v16。）
   - 回归中发现并修复：JsonUtility 把 null 的 `List<int>` 读成空列表，旧 v8 档 `clearedStages=null` 时原逻辑不会按 `maxChapterUnlocked` 回填首通记录。改为解析后列表为空即走 fallback（转生档本来就清空进度，仍回填 0）。
   - 真实转生（Play，独立槽）：Lv.100 / P1000 / 无尽 250 / 金币 100 万，`PerformRebirth()` 成功；成就、stats（123 杀 / 7 死 / mask 256）、无尽最高层保留，等级/巅峰/金币/关卡清空，印记 +19（巅峰 10 + 无尽 5 + 金币 3 + 基础 1）；落盘重载后一致。
   - 经济：新档 13.7min / P41 / 阵亡 2 / 金币 8,755；注入成就金币上界 +43,400 后 12.3min / P43 / 阵亡 8 / 金币 8,964；满转生模板 7.7min / P63 / 阵亡 0 / 金币 24,348。
   - 终局 P200：1028 次挑战 / 6144 击杀 / 24 阵亡 / 含刷怪 164.8min / 余额 5,864,020；首通 11-10 第 14 次。
-  - 无尽：P200 中位 65；P1000（Lv110/80%/满转生）中位 120；合法五槽 P1000（Lv150/85%/满转生/10 seeds）中位 240，250 层通过 4/10、260 层 1/10，50 层均金币 6,390,723。250 可达但不稳定；290 是 maxGear 理想模板口径。
+  - 无尽：P200 中位 65；P1000（Lv110/80%/满转生）中位 120；合法五槽 P1000（Lv150/85%/满转生/10 seeds）中位 240，250 层通过 4/10、260 层 1/10，50 层均金币 6,390,723。250 可达但不稳定；290 是 maxGear 理想模板口径。（以上是旧技能系统 / 2.8~3.4 口径的历史数据；当前 3.1 + Step 4 的两流派中位 240 / 245，见 `docs/endless-mode.md` §12.5.5。）
 
 ### 15.3 与设计的偏差
 
@@ -685,7 +685,7 @@ _achievementsButton.onClick.AddListener(OnAchievementsClicked);
 
 - **规则**：100 点/级，最多 +3 级（合计 300 点）；只抬高无尽**建议**起始层，不越过本档最高层，不改怪物数值、掉落、经验或战役平衡。
 - **代码**：`AchievementSystem` 新增 `MaxEndlessStartRank=3`、`EndlessStartPointCost=100`；`EarnedPoints(PlayerData)` 按目录重算，`SpentPoints = clamp(endlessStartRank,0,3)*100`，`AvailablePoints = max(0, earned-spent)`；`TryBuyEndlessStartRank` 成功时 `player.endlessStartRank=rank+1`，失败返回中文原因。`GameController.BuyEndlessStartRank()` 负责日志与 `TrySave`；`GameController.EndlessSuggestedStartFloor` 在本世未重通 11-10 时返回 1，否则返回 `Min(best, EndlessCatalog.StartFloorFor(best)+clamp(rank,0,3))`。
-- **存档 v13**：`PlayerData.endlessStartRank` 与 `SaveData` 同名字段；`CurrentSaveVersion` 12→13；仅 `version>=13` 读该字段，旧档（含手写 v12 但带该字段）一律读成 0。
+- **存档 v13**：`PlayerData.endlessStartRank` 与 `SaveData` 同名字段；`CurrentSaveVersion` 12→13；仅 `version>=13` 读该字段，旧档（含手写 v12 但带该字段）一律读成 0。v14 商店 2.0 不碰该字段，语义不变。
 - **UI**：成就面板底部按钮按状态显示「还差 N 点」/「兑换 +1 层（100 点）」/「起始 +3 已满」；摘要改为「已完成 a/b · 成就点 N（可用 M）」；状态行「已兑换 r/3（起始 +r 层）· 已用 S · 可用 A」；tooltip 说明不越最高层、转生后需重通 11-10、不加战斗属性。
 - **验收（Play，槽隔离）**：原槽 5/42、25 点，按钮禁用并显示「还差 75 点」；内存灌满 42 条/805 点后按钮可用，买 1 级得 rank=1、available=705；纯逻辑连买 3 次成功，第 4 次返回 false「无尽起始层已兑换满（+3 层）。」，spent=300、available=505。建议层实测 best=14 rank=3 → 13、rank=0 → 10、best=12 rank=3 → 11、best=3 rank=3 → 3（被最高层夹住）。存档 Save→Load 得 rank=2、unlocked=42、version=13；手写 v12 + rank=3 读回 0。
 - **截图**：`b2_achievement.png`（25 点禁用）、`b2_achievement_full.png`（805 可兑换）、`b2_achievement_bought.png`（已兑换 1 级），位于 `HelloWorldProject/Assets/Screenshots/`（已 gitignore）。
