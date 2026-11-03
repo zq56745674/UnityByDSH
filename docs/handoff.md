@@ -6,7 +6,7 @@
 
 - 工作区：`E:\pytest\unitydsh1`
 - Unity 工程：`HelloWorldProject/`，Unity **6000.6.5f1**，单场景 `Assets/Scenes/SampleScene.unity`
-- `HEAD = 50a71ed`（`origin/main` 已同步；该提交含无尽结算卡、深渊遗物 v1、文档回填与 `.mnemon/` 移出仓库）
+- `HEAD`：与 `origin/main` 同步，工作区干净；本轮功能提交是 `50a71ed`（无尽结算卡 + 深渊遗物 v1 + 文档回填 + `.mnemon/` 移出仓库），其后只有文档回填的小提交
 - **未提交**：无（`git status` 干净）。`Assets/_shots/`、`Resources/Music/` 与 `.mnemon/` 均在 `.gitignore` 内，不进仓库。
 - **不要自行 commit / push**：按 USER.md 的 critical 规矩，只有用户明确说「提交」才允许操作 git；push 另需明确同意。
 - 当前存档：**v15 / 3 槽**；`CurrentSaveVersion = 15`（`HelloWorldProject/Assets/Scripts/SaveSystem.cs:31`）。
