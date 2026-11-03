@@ -1,6 +1,6 @@
 # 项目整体梳理与待办清单（Roadmap）
 
-> 生成日期：2026-10-23　最近更新：2026-10-29（UI 方向 B 主题收尾：换字体、加材质与光、动效反馈已落地并验收；B1 商店 2.0、技能 2.0 内容层、技能点自选此前已验收；B9 的重抽/禁选因随机三选一被删而暂缓）。依据：`HEAD = d6c50d8`（A7/A8 已提交并推送，`origin/main` 同步；当前工作区 116 项改动：80 M + 36 未跟踪（含 `docs/handoff.md` 与 `AGENTS.md`）；换会话先读 [docs/handoff.md](handoff.md)）。
+> 生成日期：2026-10-23　最近更新：2026-11-03（A 深渊遗物 v1 与无尽结算卡已落地并验收；行数 / 体积 / 未提交数按实测回填；删掉 0 引用的 `NotoSerifSC-Bold.ttf`，`.mnemon/` 移出仓库索引；B9 的重抽/禁选因随机三选一被删而暂缓）。依据：`HEAD = 9be2b80`（本地领先 `origin/main` 1 个提交，尚未推送；当前工作区 17 改 + 4 未跟踪 + 57 个 `.mnemon/` 已从索引移除；换会话先读 [docs/handoff.md](handoff.md)）。
 > 本文替代「凭记忆列待办」：每条都标了现状证据与验收口径，改完打勾并把实测数字写回对应小节。
 > 与 `README.md` 的关系：README 记「已完成什么」，本文记「还差什么、为什么、按什么顺序」。README「已知问题」里的旧条目与本文交叉引用。
 
@@ -11,15 +11,15 @@
 3. **数字要落到文档**：改完数值/行为，同时更新 README 与对应 `docs/` 文件；只改代码不回填文档视为未完成。
 4. **不擅自提交**：本地 commit 需用户明确说「提交」，push 另需明确同意（USER.md 规矩）。
 
-## 1. 现状快照（2026-10-25 实测）
+## 1. 现状快照（2026-11-03 实测）
 
 ### 1.1 规模
 
 | 维度 | 实测 | 说明 |
 |---|---|---|
-| 运行时脚本 | **66 个文件 / 23,171 行** | `HelloWorldProject/Assets/Scripts/`（2026-10-29 UI 主题收尾后实测），其中 `GameUI*` 32 个 partial / 10,483 行；B1 新增 ShopCatalog 274 / GameController.Shop 320 / GameUI.Shop 607，技能 2.0 新增 GameController.Skills 80 / GameUI.Doctrine 215 |
-| 编辑器工具 | **10 个文件 / 4,711 行** | 回归与探针（2026-10-26）：AchievementRegression 1,182、AutoBattle.CI 118、BalanceRegression 692、EndgamePacing 260、EndlessPacing 560、GameConfigReloader 56、LateGameProbe 749、NewGameProgression 582、ProbePolicy 392、SkillTableVerify 120 |
-| 资源体积 | **约 81 MB** | `Assets/` 全量 172.3 MB，扣掉 gitignore 的 `Music/` 12.7 MB 与 `_shots/` 验收截图 78.5 MB（2026-10-29 实测）；其中 `Resources/Fonts` 21.8 MB（三套 TTF，`NotoSerifSC-Bold.ttf` 11.2 MB 已无人引用，可省）、`Resources/UI` 1.8 MB |
+| 运行时脚本 | **68 个文件 / 24,016 行** | `HelloWorldProject/Assets/Scripts/`（2026-11-03 实测），其中 `GameUI*` 33 个 partial / 10,814 行；B1 新增 ShopCatalog 274 / GameController.Shop 320 / GameUI.Shop 607，技能 2.0 新增 GameController.Skills 80 / GameUI.Doctrine 215，A 遗物新增 RelicCatalog 282 / GameUI.Endless.Relics 236 |
+| 编辑器工具 | **10 个文件 / 4,978 行** | 回归与探针（2026-11-03）：AchievementRegression 1,182、AutoBattle.CI 118、BalanceRegression 692、EndgamePacing 260、EndlessPacing 827、GameConfigReloader 56、LateGameProbe 749、NewGameProgression 582、ProbePolicy 392、SkillTableVerify 120 |
+| 资源体积 | **约 71 MB** | `Assets/` 全量 168 MB，扣掉 gitignore 的 `Music/` 13 MB 与 `_shots/` 验收截图 84 MB（2026-11-03 实测）；其中 `Resources/Fonts` 11 MB（两套 TTF；`NotoSerifSC-Bold.ttf` 约 11 MB 已于 2026-11-03 删除）、`Resources/UI` 1.8 MB |
 | 图片 | **70 PNG + 4 JPG** | Sprites：Monsters 33 / Bosses 11 / Fx 20 / Auras 5 / Hero 1；Backgrounds 4 张 JPG |
 | 音频 | **14 SFX + 4 BGM** | SFX 在 `Resources/Sfx/*.ogg`；BGM 在 `Resources/Music/`（已 gitignore，换机需自备） |
 | 配置 | `game_config.json` **149 键**、`skills.json` **15 技能**、`achievements.json` **42 条 / 805 点 / 7 称号 / 43,400 金币** | 三方必须与 `GameConfigData` 等字段一一对应 |
@@ -70,6 +70,7 @@
 | A7 | 提交 B4/B8 + B2/B4c/D3 + D2/E4 + A8 的 36 个文件 | ✅ 2026-10-25（e0b9f72；推送见文末） |
 | B1 | 金币出口（商店 2.0）：营地行商 + 收藏家 20 级 + 6 服务 + 15 珍藏 | ✅ 2026-10-26（存档 v14 引入；当前 v15） |
 | B9 内容层 | 技能 2.0：风暴/山崩双流派、两套毕业 build、技能点自选 9 个 | ✅ 2026-10-26（存档 v15；50 种子 240/245，30 种子 29/1/0） |
+| B10 | 深渊遗物 v1（无尽局内构筑）：tier1 12 件 / 6 槽 / 每 10 层三选一 + 满槽替换 + 结算行 | ✅ 2026-11-02（50 种子五策略：满 6 件 +18.4 层、离散度比 0.56、确定性 36/36） |
 | A2 | 治理 `_tmp_verify/`、`_art/ui-audit/` 未跟踪目录 | ✅ 2026-10-24 |
 | A3 | README「项目结构」段落与代码漂移 | ✅ 2026-10-24 |
 | A4 | 产物名/版本号/关于页缺失 | ✅ 2026-10-24 |
@@ -81,7 +82,7 @@
 | B2 | 成就点没有出口（称号佩戴之外） | ✅ 2026-10-25（兑换无尽建议起始层，100 点/级，最多 +3） |
 | B4c | P100 转生门槛复评 | ✅ 2026-10-25（50 种子实测，保持 100） |
 | D3 | 财运掉落 +10% 对五槽毕业时间的量化 | ✅ 2026-10-25（50 种子三组对照，保持 +2%/级） |
-| D2 | 无尽理想配装中位 290 vs 目标 235~250 | ✅ 2026-10-25（`EndlessBaseFactor` 2.8→3.1、`EndlessMonsterLevelStep=4`；技能 2.0 后理想 240/245、随机 181） |
+| D2 | 无尽理想配装中位 290 vs 目标 235~250 | ✅ 2026-10-25（`EndlessBaseFactor` 2.8→3.1、`EndlessMonsterLevelStep=4`；技能 2.0 后理想 240/245、随机 181）；2026-11-02 随机五槽重测 **330**（同一装备换固定 build 235、maxGear + 自动技能 300），见 `docs/endless-mode.md` §12.5.6 |
 | E4 | 一次性产物路径统一 | ✅ 2026-10-25（`_tmp_verify/` → `_art/tmp-verify/`；索引见 `_art/README.md`） |
 | C1–C11 | 11 项 UI/UX（速度记忆、批量强化、tooltip、音乐进度、显示设置、存档改名/复制等） | ✅ 2026-10-24 |
 | D1 | 转生加速 | ✅ 2026-10-22（82.6% / 47.1%） |
@@ -332,12 +333,20 @@
   - 验收：`QuickRegression.RunAllQuick()` 3/3、`AchievementRegression.RunCore()` 668/0、`NewGameProgression.RunAssert(12345,30)` PASS（Lv100 P49、15.8min、阵亡 32）、基线已重做；Play 截图 `skill2_doctrine.png`、`skill2_pool.png`、`skill2_pool_learned.png`、`skill2_pool_1920.png`、`skill2_resource_storm.png`、`skill2_resource_mountain.png`。
 - **决策层（暂缓）**：[docs/skill-build-design.md](skill-build-design.md) 的「每世 1 次重抽 + 1 次禁选」建立在随机候选上；用户 m10055 把获取方式改为技能点自选后，重抽/禁选已失去对象。该设计稿保留为历史，仅「4 个纯显示标签」仍可复用；若将来恢复，需重新定义目标，不再按 v2.1 实施。
 
+### B10 深渊遗物 v1（P0，局内层，出自 [docs/gameplay-expansion.md](gameplay-expansion.md) 方案 A）— ✅ 2026-11-02
+
+- **玩法**：无尽每清掉第 10、20、30… 层弹一次三选一（tier1 池 12 件，锋 / 守 / 贪 / 险四类），选定即锁定、本局不可撤销；满 6 槽后三选一变「替换」——**必须先舍弃一件才能拿新的**。遗物只在本局有效，撤退 / 阵亡清空，结算卡列出本局遗物。
+- **触发前提**：本档有过无尽记录才开（首局不弹，降低第一次进无尽的理解成本），即 `RelicsEnabledThisRun`。
+- **代码**：`RelicCatalog.cs`（数据 + `ShouldOffer` / `RollChoices` / `RelicMods.Build`）、`GameController.Endless.Relics.cs`（`OfferRelicChoice` / `TakeRelic` / `ApplyRelicMods` / `RelicChoiceOpen`）、`GameUI.Endless.Relics.cs`（三选一与替换面板，实体卡牌：硬投影 + 烫金边 + 纸面高光）、`Endless.cs`（`relicIds` 运行时字段 + `resultRelics` 结算快照）、`GameController.cs` 的 `ChoicePending` 纳入 `RelicChoiceOpen`（面板打开时战斗冻结）。
+- **实测（50 种子 / 900 层 / P1000 / Lv150 / maxGear / 自动技能）**：无遗物中位 300 → 满 6 件 320，配对均值 **+18.4 层（50 胜 0 负）**；自然获取 +14.9（胜 48/50）；选择质量 +0.9、替换价值 −0.4（tier1 区分度不足，留给 tier2/3）；离散度比 0.56；确定性 36/36；`QuickRegression.RunAllQuick()` 3/3。明细见 `docs/endless-mode.md` §12.6。
+- **未做**：tier2（8 件）/ tier3（4 件）、契约分解锁 7/8 槽——依赖 B 深层契约。
+
 ## 6. 平衡（D）
 
 | 编号 | 问题 | 数字 | 建议 |
 |---|---|---|---|
 | D1 | 转生加速 — ✅ 2026-10-22 达标 | `RebirthExpPerRank=0.60` + `RebirthLegacyLevelPerRank=3` 落地后，第 2 世 82.6% / 满轮回 47.1%（目标 85% / 50%）；旧数据 92.4% / 63.5% / 61.8% 按日期保留作历史 | 已收口，不再调参。战斗 +5% 偏强、满轮回无尽首死中位 315 是另一件事（见 README「转生加速已落地，无尽仍偏强」） |
-| D2 | 无尽理想配装偏强 — ✅ 2026-10-25 已收紧 | 理想配装 50 种子首死中位 290（P10 272 / P90 305 / max 320）vs 目标 235~250；随机五槽 50 种子实际 220（旧「242」是 3 种子） | 已选「保留 235~250 理想配装口径」：D2 先收紧 `EndlessBaseFactor` 2.8→3.4 并实测理想 240、随机 181；技能 2.0 复测又把现状校准为 **`EndlessBaseFactor=3.1` + `EndlessMonsterLevelStep=4`**，两流派 50 种子中位 240 / 245。压词条上限（×0.85 只到 280）与压暴击上限（0.70 仍 277）都不够；详见 `_balance/balance-analysis.md` §10.3、`docs/endless-mode.md` §12.5.4、技能稿 §17.3 |
+| D2 | 无尽理想配装偏强 — ✅ 2026-10-25 已收紧 | 理想配装 50 种子首死中位 290（P10 272 / P90 305 / max 320）vs 目标 235~250；随机五槽 50 种子实际 220（旧「242」是 3 种子） | 已选「保留 235~250 理想配装口径」：D2 先收紧 `EndlessBaseFactor` 2.8→3.4 并实测理想 240、随机 181；技能 2.0 复测又把现状校准为 **`EndlessBaseFactor=3.1` + `EndlessMonsterLevelStep=4`**，两流派 50 种子中位 240 / 245。2026-11-02 补测随机五槽：现行口径下中位 **330**（自动技能）/ 235（固定 build），技能续航位的影响大于装备口径，240 不能再当天花板（§12.5.6）。压词条上限（×0.85 只到 280）与压暴击上限（0.70 仍 277）都不够；详见 `_balance/balance-analysis.md` §10.3、`docs/endless-mode.md` §12.5.4、技能稿 §17.3 |
 | D3 | 掉落 +10% — ✅ 2026-10-25 已量化 | 固定财运 rank5，只改 `RebirthDropPerRank` 做 0% / +5% / +10% 三组 50 种子：五槽集齐中位 60.5 / 65 / 55.5 次，+10% vs 0% 配对中位 7.5 次、95% CI −7..+16、p=0.39；非单调、无显著效果 | **保持 +2%/级**；BOSS 固定掉 2 件不吃 drop bonus、普通怪 Lv100 不出 Lv110，所以掉落不是终局毕业的有效杠杆。详见 `docs/rebirth.md` §14.8、`_balance/balance-analysis.md` §3.5.4c |
 | D4 | 章节压迫已重调 | 5.5%/4%，300 套 98%→21.8%，真实推进 25/30 通关 | 已收口，无需再动；仅当改 `ChapterStatBias` 时复跑 |
 | D5 | 终局倍率 | 技能 2.0 后由 1.6 下调到 **1.25**：30 种子风暴 27/3/0、山崩 27/3/0；1.2 为 28/2 与 30/0，1.6 只有 13/17 与 9/21 | 已收口；1.25 是「≥25 通关且两流派对称」的最小下调点。只作用战役，无尽不吃 |
@@ -404,7 +413,7 @@
 | D2 ✅ | `EndlessBaseFactor` 2.8→3.4→现状 3.1、`EndlessMonsterLevelStep=4`：理想配装 50 种子中位 290→240（风暴）/245（山崩） | `GameConfig.cs:675`、`GameConfigData.cs:146`、`game_config.json:123/128`；docs/endless-mode.md §12.5.5（§12.5.4 是 3.4 历史）；技能稿 §17.3 |
 | B7（D4） | 章节压迫 4%/3% → **5.5%/4%**；300 套抽样 98%→21.8%，真实推进 25/30 通关 | `GameConfig.cs:206/:212`；balance-analysis §3.5.2a |
 | D5 | 终局 BOSS 倍率 **1.6→1.25**（技能 2.0 后），30 种子 29/1/0（技能点自选后） | `GameConfig.cs:312`、`Models.cs:715`；技能稿 §17.3 |
-| — | GameUI 由 4 个胖文件拆成 **32 个 partial**（2026-10-29 实测 10,483 行；A3 时 6,749 行） | README 项目结构；A3 |
+| — | GameUI 由 4 个胖文件拆成 **33 个 partial**（2026-11-03 实测 10,814 行；A3 时 6,749 行） | README 项目结构；A3 |
 | — | 六项 UI 修复 + R 键确认字号 18→15 | `GameUI.Build.Right.cs:137`、`GameUI.Core.cs:53` |
 | A2 ✅ | `.gitignore` 纳入 `_tmp_verify/`、`_art/ui-audit/`；2026-10-25 已迁到 `_art/tmp-verify/` | `.gitignore`、`_art/README.md` |
 | A3 ✅ | README 项目结构按实测重写（A3 时 59/15,620 + 10/4,048；2026-10-25 为 59/17,109） | `README.md:117` 起 |

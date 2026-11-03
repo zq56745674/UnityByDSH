@@ -68,6 +68,7 @@ namespace AutoBattle
                 || _game.SavePanelOpen || _game.EnhancePanelOpen || _game.ReforgePanelOpen
                 || _game.CompareOpen || _game.AchievementPanelOpen || _game.EndlessPanelOpen
                 || _game.RebirthPanelOpen || _game.GuideOpen || _game.EndlessResultOpen
+                || _game.RelicChoiceOpen
                 || _game.AboutOpen || _game.DisplayOpen || _game.DoctrinePanelOpen || _game.ShopPanelOpen;
         }
 
@@ -80,7 +81,8 @@ namespace AutoBattle
             HideTooltip();
             if (_game == null) return;
 
-            if (_game.EndlessResultOpen || _game.GuideOpen || _game.DoctrinePanelOpen)
+            // 遗物三选一也必须由玩家自己选完，Esc 不能代关。
+            if (_game.EndlessResultOpen || _game.GuideOpen || _game.DoctrinePanelOpen || _game.RelicChoiceOpen)
                 return;
 
             // 关法照抄各面板自己的关闭按钮：有的要顺手清掉确认倒计时（存档 / 无尽 / 轮回）。
@@ -502,7 +504,8 @@ namespace AutoBattle
                     || IsOpen(_savePanel) || IsOpen(_enhancePanel) || IsOpen(_reforgePanel)
                     || IsOpen(_settingsPanel) || IsOpen(_musicPanel) || IsOpen(_comparePanel) || IsOpen(_endlessPanel)
                     || IsOpen(_endlessResultPanel) || IsOpen(_rebirthPanel) || IsOpen(_achievementPanel)
-                    || IsOpen(_merchantPanel) || IsOpen(_guideRoot);
+                    || IsOpen(_merchantPanel) || IsOpen(_guideRoot)
+                    || (_game != null && _game.RelicChoiceOpen);
                 if (_modalDim.gameObject.activeSelf != modalOpen) _modalDim.gameObject.SetActive(modalOpen);
             }
         }

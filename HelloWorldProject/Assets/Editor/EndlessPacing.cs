@@ -39,6 +39,8 @@ namespace AutoBattle.EditorTools
             public long xp;
             public int level;
             public int paragon;
+            public int relicCount;
+            public string relicIds;
         }
 
         class FloorSample
@@ -55,7 +57,7 @@ namespace AutoBattle.EditorTools
             int paragonLevel = 200, int gearLevel = 110, float affixQuality = 0.8f, bool maxGear = false,
             int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
             int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0, bool fixedSkills = false,
-            int fixedDoctrine = 0)
+            int fixedDoctrine = 0, int relicPolicy = 0)
         {
             seedCount = Mathf.Max(1, seedCount);
             maxFloor = Mathf.Clamp(maxFloor, 1, EndlessCatalog.MaxFloor);
@@ -75,7 +77,7 @@ namespace AutoBattle.EditorTools
             for (int i = 0; i < seedCount; i++)
             {
                 int seed = baseSeed + i * 7919;
-                RunResult rr = Simulate(template, seed, maxFloor, floorSamples, affixQuality);
+                RunResult rr = Simulate(template, seed, maxFloor, floorSamples, affixQuality, relicPolicy);
                 results.Add(rr);
             }
 
@@ -100,9 +102,23 @@ namespace AutoBattle.EditorTools
                 else deaths.Add(r.firstDeathFloor);
 
                 sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
-                    "seed {0,-10}  首死 {1,-4}  清层 {2,3}  {3,7:0.0}min  击杀 {4,4}  药 {5,3}  金币 +{6,8}",
+                    "seed {0,-10}  首死 {1,-4}  清层 {2,3}  {3,7:0.0}min  击杀 {4,4}  药 {5,3}  金币 +{6,8}{7}",
                     r.seed, r.firstDeathFloor > maxFloor ? "无" : r.firstDeathFloor.ToString(),
-                    r.clearedFloors, r.seconds / 60f, r.kills, r.potionsUsed, r.goldEarned));
+                    r.clearedFloors, r.seconds / 60f, r.kills, r.potionsUsed, r.goldEarned,
+                    relicPolicy > 0 ? $"  遗物 {r.relicCount}/{RelicCatalog.SlotsFor(0)}" : ""));
+            }
+
+            if (relicPolicy > 0)
+            {
+                int relicSum = 0, relicFull = 0;
+                foreach (RunResult r in results)
+                {
+                    relicSum += r.relicCount;
+                    if (r.relicCount >= RelicCatalog.SlotsFor(0)) relicFull++;
+                }
+                sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "遗物策略 {0}：平均 {1:0.00} 件 / {2} 件槽位，满槽 {3}/{4} 局（0 无 / 1 总拿第一张 / 2 按分最优+替换 / 3 按分最优不替换 / 4 开局满 6 件）",
+                    relicPolicy, (float)relicSum / Mathf.Max(1, results.Count), RelicCatalog.SlotsFor(0), relicFull, results.Count));
             }
 
             sb.AppendLine();
@@ -196,8 +212,154 @@ namespace AutoBattle.EditorTools
             return sb.ToString();
         }
 
+        /// <summary>
+        /// 遗物验收对照（docs/gameplay-expansion.md §4.5）：同一批种子跑五种策略，输出首死层数分布与层数差。
+        /// 0 无遗物 / 1 总拿第一张 / 2 按分最优 + 满槽替换 / 3 按分最优但永不替换 / 4 开局满 6 件（上限参照）。
+        /// 三选一的抽签只依赖（种子, 层号），四组策略共享同一条战斗随机流，层数差只来自遗物。
+        /// </summary>
+        public static string CompareRelics(int seedCount = 20, int maxFloor = 400, int baseSeed = 20261019,
+            int paragonLevel = 1000, int gearLevel = 150, float affixQuality = 0.85f, bool maxGear = true)
+        {
+            seedCount = Mathf.Max(1, seedCount);
+            maxFloor = Mathf.Clamp(maxFloor, 1, EndlessCatalog.MaxFloor);
+            affixQuality = Mathf.Clamp01(affixQuality);
+            Random.InitState(baseSeed);
+            PlayerData template = BuildFullPlayer(paragonLevel, gearLevel, affixQuality, maxGear);
+
+            string[] names = { "无遗物", "总拿第一张", "按分最优+替换", "按分最优不替换", "开局满6件(上限)" };
+            int[] policies = { 0, 1, 2, 3, 4 };
+            var medians = new int[policies.Length];
+            var p10s = new int[policies.Length];
+            var p90s = new int[policies.Length];
+
+            var sb = new StringBuilder();
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "[RelicCompare] {0} 个种子，最多 {1} 层；模板 Lv.{2} 巅峰 {3}，攻 {4} 防 {5} 血 {6} 暴击 {7:P1} 暴伤 {8:P0}",
+                seedCount, maxFloor, template.level, template.paragonLevel, template.Attack, template.Defense,
+                template.MaxHp, template.CritChance, template.CritDamage));
+
+            var perPolicy = new List<List<int>>(policies.Length);
+            for (int k = 0; k < policies.Length; k++)
+            {
+                var floors = new List<int>(seedCount);
+                for (int i = 0; i < seedCount; i++)
+                {
+                    int seed = baseSeed + i * 7919;
+                    var samples = new Dictionary<int, List<FloorSample>>();
+                    RunResult rr = Simulate(template, seed, maxFloor, samples, affixQuality, policies[k]);
+                    floors.Add(rr.firstDeathFloor > maxFloor ? maxFloor + 1 : rr.firstDeathFloor);
+                }
+                perPolicy.Add(floors);
+                floors.Sort();
+                p10s[k] = Percentile(floors, 0.10f);
+                medians[k] = Percentile(floors, 0.50f);
+                p90s[k] = Percentile(floors, 0.90f);
+                sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "策略 {0} {1,-14} 首死 P10 {2,4}  中位 {3,4}  P90 {4,4}",
+                    policies[k], names[k], p10s[k], medians[k], p90s[k]));
+            }
+
+            float spread0 = p90s[0] - p10s[0];
+            float spread4 = p90s[4] - p10s[4];
+            sb.AppendLine();
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "遗物总收益（4 - 0）：中位 {0:+#;-#;0} 层，P10 {1:+#;-#;0}，P90 {2:+#;-#;0}   ← §4.5 目标 +30~+40",
+                medians[4] - medians[0], p10s[4] - p10s[0], p90s[4] - p90s[0]));
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "自然获取（2 - 0）：中位 {0:+#;-#;0} 层", medians[2] - medians[0]));
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "选择质量（2 - 1）：中位 {0:+#;-#;0} 层   ← §4.5 目标 ≥ +15", medians[2] - medians[1]));
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "替换价值（2 - 3）：中位 {0:+#;-#;0} 层   ← §4.5 目标 ≥ +10", medians[2] - medians[3]));
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "离散度（P90-P10）：无遗物 {0:0}，满遗物 {1:0}，比值 {2:0.00}   ← §4.5 要求 ≤ 2.0",
+                spread0, spread4, spread0 > 0f ? spread4 / spread0 : 0f));
+
+            // 第 3 条验收：同种子两次抽签序列必须完全一致（只依赖 种子+层号）。
+            int seqOk = 0, seqTotal = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                int seed = baseSeed + i * 7919;
+                int relicSeed = unchecked(seed * 7919 + 104729);
+                var a = new List<int>();
+                var b = new List<int>();
+                for (int floor = 10; floor <= 120; floor += 10)
+                {
+                    List<int> first = RelicCatalog.RollChoices(relicSeed, floor, a);
+                    List<int> second = RelicCatalog.RollChoices(relicSeed, floor, b);
+                    seqTotal++;
+                    if (first.Count == second.Count && first.TrueForAll(x => second.Contains(x))) seqOk++;
+                    // 两份列表保持同步，模拟「一路拿第一张」的持有集合。
+                    if (first.Count > 0) { a.Add(first[0]); b.Add(second[0]); }
+                }
+            }
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture, "序列一致性：{0}/{1} 组抽签完全一致", seqOk, seqTotal));
+
+            // 整数层数的中位很粗（大量并列），再给逐种子配对的均值与胜负局数，才能判断是否真有效果。
+            sb.AppendLine();
+            sb.AppendLine("逐种子配对（相对策略 0 无遗物；正 = 多活）：");
+            for (int k = 1; k < policies.Length; k++)
+            {
+                int win = 0, lose = 0, tie = 0;
+                long sum = 0;
+                for (int i = 0; i < seedCount; i++)
+                {
+                    int d = perPolicy[k][i] - perPolicy[0][i];
+                    sum += d;
+                    if (d > 0) win++; else if (d < 0) lose++; else tie++;
+                }
+                sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "  {0,-14} 平均 {1:+0.0;-0.0;0.0} 层   胜 {2}/{3}  负 {4}  平 {5}",
+                    names[k], (float)sum / Mathf.Max(1, seedCount), win, seedCount, lose, tie));
+            }
+
+            // 选择质量（2-1）与替换价值（2-3）也用逐种子配对，避免中位数并列掩盖差异。
+            sb.AppendLine();
+            sb.AppendLine("逐种子配对（策略 2 按分最优+替换 vs 其他）：");
+            for (int other = 1; other <= 3; other += 2)
+            {
+                int win = 0, lose = 0, tie = 0;
+                long sum = 0;
+                for (int i = 0; i < seedCount; i++)
+                {
+                    int d = perPolicy[2][i] - perPolicy[other][i];
+                    sum += d;
+                    if (d > 0) win++; else if (d < 0) lose++; else tie++;
+                }
+                sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "  2 比 {0}（{1}）平均 {2:+0.0;-0.0;0.0} 层   胜 {3}/{4}  负 {5}  平 {6}",
+                    other, names[other], (float)sum / Mathf.Max(1, seedCount), win, seedCount, lose, tie));
+            }
+
+            // 数值自检：把模板挂满 6 件最优遗物，直接打印面板差，确认乘区真的生效（不是靠战斗随机流碰巧）。
+            PlayerData full = JsonUtility.FromJson<PlayerData>(JsonUtility.ToJson(template));
+            var fullIds = new List<int>();
+            for (int i = 0; i < RelicCatalog.SlotsFor(0); i++)
+            {
+                int id = BestUnheldRelic(full, fullIds);
+                if (id < 0) break;
+                fullIds.Add(id);
+            }
+            full.relic = RelicMods.Build(fullIds);
+            sb.AppendLine();
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "面板自检（模板 + 6 件最优遗物 {0}）：攻 {1} → {2}，血 {3} → {4}，暴击 {5:P1} → {6:P1}，攻速 {7:P1} → {8:P1}",
+                JoinRelics(fullIds), template.Attack, full.Attack, template.MaxHp, full.MaxHp,
+                template.CritChance, full.CritChance, template.AttackSpeedBonus, full.AttackSpeedBonus));
+            return sb.ToString();
+        }
+
+        [MenuItem("Tools/测试/深渊遗物对照（五策略）")]
+        static void MenuCompareRelics()
+        {
+            string text = CompareRelics(50, 900);
+            Debug.Log("[RelicCompare]\n" + text);
+            // eval/菜单都受主线程时限约束，结果同时落盘，避免日志被截断后拿不到数字。
+            System.IO.File.WriteAllText("E:/pytest/unitydsh1/HelloWorldProject/_shots/relic-compare.txt", text);
+        }
+
         static RunResult Simulate(PlayerData template, int seed, int maxFloor,
-            Dictionary<int, List<FloorSample>> samples, float reforgeQuality)
+            Dictionary<int, List<FloorSample>> samples, float reforgeQuality, int relicPolicy = 0)
         {
             Random.InitState(seed);
 
@@ -205,6 +367,24 @@ namespace AutoBattle.EditorTools
             p.FillHp();
             var battle = new BattleSystem();
             var rr = new RunResult { seed = seed, firstDeathFloor = maxFloor + 1 };
+
+            // ---- 深渊遗物（与局内同一套 RelicCatalog / RelicMods）----
+            // relicPolicy：0 无 / 1 总拿第一张 / 2 按分最优 + 满槽替换 / 3 按分最优但不替换 / 4 开局满 6 件（上限参照）。
+            // 抽签种子取自局内种子，不消耗 UnityEngine.Random，四组策略因此共享同一条战斗随机流，层数差只来自遗物。
+            int relicSeed = unchecked(seed * 7919 + 104729);
+            int relicSlots = RelicCatalog.SlotsFor(0);
+            var relics = new List<int>(relicSlots);
+            if (relicPolicy == 4)
+            {
+                for (int i = 0; i < relicSlots; i++)
+                {
+                    int best = BestUnheldRelic(p, relics);
+                    if (best < 0) break;
+                    relics.Add(best);
+                }
+                p.relic = RelicMods.Build(relics);
+                p.FillHp();
+            }
 
             int cap = Mathf.Max(1, GameConfig.EndlessDropLevelCap);
             long goldStart = p.gold;
@@ -250,6 +430,8 @@ namespace AutoBattle.EditorTools
                         rr.goldEnd = p.gold;
                         rr.level = p.level;
                         rr.paragon = p.paragonLevel;
+                        rr.relicCount = relics.Count;
+                        rr.relicIds = JoinRelics(relics);
                         AddSample(samples, floor, new FloorSample
                         {
                             floor = floor,
@@ -283,12 +465,38 @@ namespace AutoBattle.EditorTools
                 long reward = (long)EndlessCatalog.FloorGoldOf(floor) + EndlessCatalog.FirstClearGoldOf(floor);
                 p.AddGold((int)reward);
                 rr.goldEarned += reward;
+
+                // 每清 10 层弹一次三选一（与 GameController.ResolveEndlessFloorClear 同触发点）。
+                if (relicPolicy > 0 && relicPolicy != 4 && RelicCatalog.ShouldOffer(floor))
+                {
+                    List<int> choices = RelicCatalog.RollChoices(relicSeed, floor, relics);
+                    if (choices.Count > 0)
+                    {
+                        int pick = relicPolicy == 1 ? choices[0] : BestChoiceOf(choices, p);
+                        if (relics.Count < relicSlots)
+                        {
+                            relics.Add(pick);
+                        }
+                        else if (relicPolicy == 2)
+                        {
+                            // 满槽后必须替换：挑当前评分最低的一件，只有新的更高才换。
+                            int worst = 0;
+                            for (int i = 1; i < relics.Count; i++)
+                                if (RelicValue(RelicCatalog.Get(relics[i]), p) < RelicValue(RelicCatalog.Get(relics[worst]), p)) worst = i;
+                            if (RelicValue(RelicCatalog.Get(pick), p) > RelicValue(RelicCatalog.Get(relics[worst]), p)) relics[worst] = pick;
+                        }
+                        p.relic = RelicMods.Build(relics);
+                        if (p.currentHp > p.MaxHp) p.currentHp = p.MaxHp;
+                    }
+                }
             }
 
             rr.goldEnd = p.gold;
             rr.goldEarned = p.gold - goldStart;
             rr.level = p.level;
             rr.paragon = p.paragonLevel;
+            rr.relicCount = relics.Count;
+            rr.relicIds = JoinRelics(relics);
             return rr;
         }
 
@@ -300,6 +508,65 @@ namespace AutoBattle.EditorTools
                 map[floor] = list;
             }
             list.Add(sample);
+        }
+
+        // ---- 深渊遗物：探针侧的策略评分（只用于挑遗物，不进游戏逻辑）----
+
+        /// <summary>把一件遗物折成「等效战力」：进攻按期望 DPS 增量，生存/收益按经验权重打折。</summary>
+        static float RelicValue(RelicDef d, PlayerData p)
+        {
+            if (d == null) return 0f;
+            float crit = Mathf.Clamp01(p.CritChance);
+            float critAfter = Mathf.Clamp(p.CritChance + d.critChanceAdd, 0f, GameConfig.MaxCritChance);
+            float critDmg = Mathf.Max(1f, p.CritDamage);
+            // 暴击率有上限：已经 95% 时「+6% 暴击率」等于 0，不能按未封顶的增量算。
+            float critGain = critAfter - crit;
+            float offense = (d.damageMult - 1f)
+                          + critGain * (critDmg - 1f)
+                          + d.critDamageAdd * critAfter
+                          + d.hasteAdd;
+            float survive = (1f - d.damageTakenMult) * 0.6f
+                          + d.lowHpReduction * 0.35f
+                          + (d.maxHpMult - 1f) * 0.6f
+                          + d.lifestealAdd * 0.8f;
+            float economy = (d.goldMult - 1f) * 0.25f
+                          + (d.expMult - 1f) * 0.25f
+                          + d.dropBonus * 0.4f;
+            return offense + survive * 0.8f + economy * 0.5f;
+        }
+
+        static int BestChoiceOf(List<int> choices, PlayerData p)
+        {
+            int best = choices[0];
+            for (int i = 1; i < choices.Count; i++)
+                if (RelicValue(RelicCatalog.Get(choices[i]), p) > RelicValue(RelicCatalog.Get(best), p)) best = choices[i];
+            return best;
+        }
+
+        static int BestUnheldRelic(PlayerData p, List<int> owned)
+        {
+            int best = -1;
+            float bestValue = float.MinValue;
+            RelicDef[] pool = RelicCatalog.All;
+            for (int i = 0; i < pool.Length; i++)
+            {
+                if (owned != null && owned.Contains(pool[i].id)) continue;
+                float v = RelicValue(pool[i], p);
+                if (v > bestValue || (v == bestValue && best < 0)) { bestValue = v; best = pool[i].id; }
+            }
+            return best;
+        }
+
+        static string JoinRelics(List<int> relics)
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < relics.Count; i++)
+            {
+                RelicDef d = RelicCatalog.Get(relics[i]);
+                if (i > 0) sb.Append('/');
+                sb.Append(d != null ? d.name : relics[i].ToString());
+            }
+            return sb.ToString();
         }
 
         /// <summary>无尽击杀结算：经验按等级封顶，精英/BOSS 掉落也按封顶等级，普通怪仍用主角等级（与 GameController 一致）。</summary>

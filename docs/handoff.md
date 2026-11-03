@@ -1,4 +1,4 @@
-# 会话交接（2026-10-29）
+# 会话交接（2026-11-03）
 
 > 用途：换会话时先读这一页，再读 `README.md` 与 `docs/roadmap.md`。本文只记**当前状态、未提交改动、验证结果、下一步和环境坑**，不重复设计与历史论证。
 
@@ -6,19 +6,25 @@
 
 - 工作区：`E:\pytest\unitydsh1`
 - Unity 工程：`HelloWorldProject/`，Unity **6000.6.5f1**，单场景 `Assets/Scenes/SampleScene.unity`
-- `HEAD = d6c50d8`（`origin/main` 已同步）
-- **未提交**：**118 项**（82 M + 36 未跟踪；含方向 B 的 UI 主题、字体、材质、动效与本文档回填；`Assets/_shots/` 已补进 `.gitignore`，不再计入）。`git diff --check` 干净。
+- `HEAD = 9be2b80`（本地领先 `origin/main` 1 个提交，尚未推送）
+- **未提交**：**17 改 + 4 未跟踪 + 57 个 `.mnemon/` 已从索引移除**（含 A 深渊遗物 v1、无尽结算卡与文档回填；`Assets/_shots/` 与 `.mnemon/` 均已进 `.gitignore`）。`git diff --check` 干净。
 - **不要自行 commit / push**：按 USER.md 的 critical 规矩，只有用户明确说「提交」才允许操作 git；push 另需明确同意。
 - 当前存档：**v15 / 3 槽**；`CurrentSaveVersion = 15`（`HelloWorldProject/Assets/Scripts/SaveSystem.cs:31`）。
 - **Editor 的存档在 `HKCU\Software\Unity\UnityEditor\DefaultCompany\My project`**，不在 `UnityByDSH\AutoBattle`：工程 `ProjectSettings/ProjectSettings.asset` 里 companyName / productName 仍是默认值（见 §6）。
 
-本轮（2026-10-29）已完成并验收：
+2026-10-29 那轮已完成并验收：
 
 1. **UI 方向 B 收尾**：正文换思源黑体、标题换得意黑（`Resources/Fonts/SmileySans-Oblique.ttf`，2.5 MB，OFL）；`GameUI.Theme.PickFont` 只在「粗体 + 字号 ≥ 18」时切展示字，全界面 90 个 Text 里 4 个（角色属性 / 装备 / 等待下一只怪物 / 商店）走展示字。
 2. **左栏再压一轮**：装备卡 396×168、钱包卡 y510 h84、技能栏 y604 h82（`rowStep` 44）、删掉装备与钱包之间的 Divider，四处间隙 8/8/12/11 px 无重叠。
 3. 12 张面板截图验收（`HelloWorldProject/Assets/_shots/v19_*.png`），控制台 `consoleErrors=0`。
 
-上一轮（2026-10-26）已完成并验收：
+2026-11-02 那轮已完成并验收：
+
+1. **无尽结算卡片**：`GameUI.Endless.cs` 的 680×420 结果卡——大号「第 N 层」+ 阵亡/撤退皮革标签 + 用时/击杀/清层三格 + 榜单名次 + 遗物行；`docs/endless-mode.md` §8.3 已重写为「结果面板」。
+2. **A 深渊遗物 v1**：tier1 12 件 / 6 槽 / 每 10 层三选一 / 满槽先舍后换；50 种子五策略配对均值 **+18.4 层**（中位 300→320，P90 335），确定性 36/36。
+3. **随机五槽复测**：现行口径中位 **330**（P10 300 / P90 360 / max 375），替换了文档里过期的 181。
+
+2026-10-26 那轮已完成并验收：
 
 1. **B1 商店 2.0**：营地行商四页签（服务 / 珍藏 / 声望 / 战绩）、收藏家 20 级、6 项服务、15 件珍藏、≥100 万二次确认、自动出售阈值；总吸收 699,251,348。
 2. **技能 2.0 内容层**：风暴 / 山崩双流派，各 6 专属 + 3 通用；两套毕业 build。
@@ -37,7 +43,7 @@
 | 快速回归 | `QuickRegression.RunAllQuick()` → **3 通过 / 0 失败**（静态哨兵、成就核心、无尽冒烟 2 种子 × 40 层） |
 | 成就回归 | `AchievementRegression.RunCore()` → **668 通过 / 0 失败** |
 | 编译 | `console_status` groundTruth：`compilationFailed=false`、`consoleErrors=0`；测试注入的存档失败警告可能显示 4 条 |
-| 规模 | 运行时 **66 .cs / 23,171 行**；GameUI **32 partial / 10,483 行**；Editor **10 / 4,711 行**（2026-10-29 实测） |
+| 规模 | 运行时 **68 .cs / 24,016 行**；GameUI **33 partial / 10,814 行**；Editor **10 / 4,978 行**（2026-11-03 实测） |
 
 ## 3. 代码地图（本轮新增 / 重点）
 
@@ -46,29 +52,33 @@
 - **存档 v15**：`PlayerData.doctrine`、`skillEverMask`；技能点**不单独存档**，由 `ExpectedSkillCount = Clamp(paragonLevel/10,0,9)` 减已掌握数实时派生。v14 旧档首次加载会强制选流派，按巅峰发点，由玩家自选；不再自动送 9 技能。
 - **探针**：`EndlessPacing.Run(... fixedDoctrine)` 第 14 参数；`ProbePolicy.ResolvePendingSkills` 先按 `SkillCatalog.BuildOf(doctrine)` 挑毕业 build，再按推荐分补齐；`_balance/baseline.json` 已按技能点口径重做。
 - **未完成但保留的字段**：`GameConfig.SkillChoiceCount` 已废弃但仍保留，避免 `game_config.json` 缺键告警；`pendingSkillPicks` 保留为 v15 字段并固定 0。删除前先确认配置加载与旧档迁移。
+- **A 深渊遗物 v1（2026-11-02）**：`RelicCatalog.cs`（tier1 12 件 + `ShouldOffer` / `RollChoices` / `RelicMods.Build`）、`GameController.Endless.Relics.cs`（`OfferRelicChoice` / `TakeRelic` / `ApplyRelicMods` / `RelicChoiceOpen` / 满槽替换）、`GameUI.Endless.Relics.cs`（三选一与替换面板）、`Endless.cs` 的 `relicIds` 与 `resultRelics`（结算快照——**`EndEndlessRun` 会清空 `relics`，结算卡必须读 `resultRelics`**）、`EndlessPacing.Run` 第 15 参 `relicPolicy` 与 `CompareRelics` 五策略对照。
 
 ## 4. 换会话后的下一步
 
 1. **先读**：`README.md`（已完成功能与已知问题）→ `docs/roadmap.md`（未完成 / 优先级）→ 本文。
-2. **提交**：若用户明确说「提交」，直接提交当前 118 项（82 M + 36 未跟踪）；推送仍需单独同意。不要擅自 commit/push。
+2. **提交**：工作区已在 2026-11-02 提交到 `9be2b80`（181 files / +9,324 / −1,774），推送仍需单独同意。不要擅自 commit/push。
 3. **A8（P3，工程）**：GitHub 仓库 Secrets 配 `UNITY_LICENSE_SERIAL`；重跑 `Unity CI / verify`，确认 3/3 + 8/8 + Windows 构建；把该 check 设为分支保护 required。首跑失败仅是缺 secret。
 4. **B9（P4，暂缓）**：随机三选一已删，重抽 / 禁选失去对象；只剩 4 个显示标签可复用。不要按 v2.1 直接实施。
-5. **D2 剩项**：当前 3.1 / Step 4 只复测了两套固定 build 的 P1000 50 种子；**随机五槽**中位 181 是旧 3.4 / Step 6 口径，尚未在 3.1 / Step 4 下重测。若用户问随机配装的无尽强度，先补这一组。
-6. **可选复测**：满轮回 +5% 战斗加成在 3.1 / Step 4 下未复测；旧 3.4 口径为 260（转生前 242）。P200 的 11-10 胜率 80.8/90.5 是 1.6 口径，1.25 后未重测。
+5. **D2 随机五槽已补测（2026-11-02）**：现行 3.1 / Step 4 下，随机五槽 + 自动技能 50 种子中位 **330**（P10 300 / P90 360 / max 375）；同一套随机装备换成固定风暴 build 掉到 **235**，maxGear + 自动技能 **300**。结论：拉开差距的是技能选择（吸血鬼 + 保命顶掉三个输出位）不是装备，maxGear 已不是上限。见 `docs/endless-mode.md` §12.5.6。**后续数值以 330 为基准，不要再用 240。**（§12.6 的遗物对照是在 maxGear + 自动技能、基线 300 上做的；换算率 ≈ +1% 战力 ≈ +1 层，与基准选择无关。）
+6. **无尽结算卡片已落地（2026-11-02；「本局遗物」行同日接上 A 方案实数据）**：`GameUI.Endless.cs` 的结果面板从 560×300 纯文本升级成 680×420 结算卡（大号到达层数 + 阵亡/撤退标签 + 用时/击杀/清层三格 + 榜单名次 + 「本局奖励」占位行），版式与规则见 `docs/endless-mode.md` §8.3。其中「本局遗物」行当天就接上了 A 方案实数据（读 `resultRelics`）；「深层契约」仍是占位，B 落地后把「尚未开放」换成逐条清单即可，不要在这里另算数值。
+7. **可选复测**：满轮回 +5% 战斗加成在 3.1 / Step 4 下未复测；旧 3.4 口径为 260（转生前 242）。P200 的 11-10 胜率 80.8/90.5 是 1.6 口径，1.25 后未重测。
+8. **A 深渊遗物 v1 已落地（2026-11-02，本地未提交）**：tier1 12 件 + 6 槽 + 每 10 层三选一 + 满槽强制替换 + 结算卡遗物行。50 种子 / 900 层实测满 6 件比无遗物 **+18.4 层**（50 胜 0 负），选择质量只 +0.9、替换价值 −0.4 —— **tier1 的区分度不足是已知结论**，tier2/tier3 与 7/8 槽等 B 深层契约一起做。数值纪律与验收改判见 `docs/gameplay-expansion.md` §4.3/§4.5，实测表见 `docs/endless-mode.md` §12.6。顺手确认：`EndlessBaseFactor` 未动。
+9. **下一步候选**：B 深层契约（接 A 的解锁钩子）→ C 巅峰符文 → D 屠魔录；A8 的 UNITY_LICENSE_SERIAL 仍是 P3 尾巴。
 
 ## 5. 文档状态（哪些是当前口径）
 
 | 文档 | 状态 |
 |---|---|
 | `README.md` | 当前实现、结构、已知问题；本会话已更新 |
-| `docs/roadmap.md` | 待办与证据；B1 / 技能 2.0 / 技能点自选已标 ✅；A8 ◐、B9 暂缓 |
+| `docs/roadmap.md` | 待办与证据；B1 / 技能 2.0 / 技能点自选 / **B10 深渊遗物 v1** 已标 ✅；A8 ◐、B9 暂缓 |
 | `docs/shop-2-design.md` | B1 已实现；§11 为实现与验收口径 |
 | `docs/skill-system-v2-design.md` | 技能 2.0 已实现；**§17 战斗数值、§18 技能点自选为当前口径**；§10 / §12 早期段落有「三选一」历史描述 |
 | `docs/skill-build-design.md` | **历史 / 暂缓**；被技能点自选取代，仅 4 个显示标签可复用 |
 | `docs/achievements.md` | 成就 v15 当前口径；「技能三选一」处已改技能面板 / 流派面板 |
-| `docs/endless-mode.md` | 当前 3.1 + Step 4；§12.5.4 是 3.4 / Step 6 历史，§12.5.5 是技能 2.0 复校 |
+| `docs/endless-mode.md` | 当前 3.1 + Step 4；§12.5.4 是 3.4 / Step 6 历史，§12.5.5 是技能 2.0 复校，§12.5.6 随机五槽 330，**§12.6 是深渊遗物五策略对照** |
 | `docs/rebirth.md` | 当前 v15；技能点自选与转生重置口径已回填 |
-| `docs/gameplay-expansion.md` | 提案（未实现）；2026-11-02 按增量游戏结构重排为三层循环（A 局内 / B 局的形状 / C 永久），**§3 为总览与总循环图**，§4–§6 为分层细则 |
+| `docs/gameplay-expansion.md` | 提案文档；2026-11-02 按增量游戏结构重排为三层循环（A 局内 / B 局的形状 / C 永久），**§3 为总览与总循环图**，§4–§6 为分层细则。**方案 A（深渊遗物）v1 已实现**，§4 状态行与 §4.3/§4.5 已改成实测口径；B/C/D/E 仍是提案 |
 | `docs/equipment-reforge.md` | 洗练规则长期有效；「v8」是首次写入版本，当前存档 v15 |
 | `_balance/README.md` / `balance-analysis.md` | 探针调用与当前 3.1 / Step 4 口径；旧 3.4 数据标历史 |
 
@@ -117,7 +127,7 @@ AutoBattle.EditorTools.EndlessPacing.Run(50, 300, 20261018, 1000, 150, 0.85f,
 
 | 层 | 落点 | 状态 |
 |---|---|---|
-| 字体 | 正文 `Assets/Resources/Fonts/NotoSansSC-Regular.ttf`（思源黑体），标题 `SmileySans-Oblique.ttf`（得意黑，2026-10-29）；`GameUI.cs:296-308` 的 `LoadFonts()` + `GameUI.Theme.cs:35-38` 的 `PickFont()`（粗体且字号 ≥ `FontSection`(18) 才切展示字）+ `GameUI.Factory.cs:69-76` 把展示字的 `fontStyle` 改回 `Normal`（用原生斜切笔形，不叠合成粗体）。`NotoSerifSC-Bold.ttf` 11.2 MB 已无人引用，可删 | 已落地 |
+| 字体 | 正文 `Assets/Resources/Fonts/NotoSansSC-Regular.ttf`（思源黑体），标题 `SmileySans-Oblique.ttf`（得意黑，2026-10-29）；`GameUI.cs:296-308` 的 `LoadFonts()` + `GameUI.Theme.cs:35-38` 的 `PickFont()`（粗体且字号 ≥ `FontSection`(18) 才切展示字）+ `GameUI.Factory.cs:69-76` 把展示字的 `fontStyle` 改回 `Normal`（用原生斜切笔形，不叠合成粗体）。`NotoSerifSC-Bold.ttf`（约 11 MB，0 引用）已于 2026-11-03 删除 | 已落地 |
 | 配色 | `GameConfig.Colors.cs`：木桌 + 羊皮纸 + 墨字 + 烫金；`InkOf/InkHex` 把亮语义色压到纸面墨度 | 已落地 |
 | 材质 | `GameUI.Theme.cs`：`CreateHardShadow`（4,6 偏移 / 纯黑 0.34）、`AddPaperSheen`、`LinkShadow`；`Assets/Resources/UI/` 下 `ui_bg_wood.png`(1600x900)、`ui_noise.png`、`ui_paper_tex.png`、`ui_card_shadow.png` | 已落地 |
 | 动效 | `GameUI.Motion.cs`：`UiMotion.Attach`（悬停抬 1px / 按下沉 2px）、`PanelIn`（淡入 + 8px 落位）、`GrabCanvasGroup`、`UiCardShadow` | 已落地 |

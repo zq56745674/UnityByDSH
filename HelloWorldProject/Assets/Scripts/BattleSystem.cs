@@ -409,6 +409,11 @@ namespace AutoBattle
             if (_shockStacks > 0)
                 dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f + 0.06f * _shockStacks)));
 
+            // 深渊遗物：独立伤害乘区，落在最终伤害上（不并入技能加算池）。
+            float relicDamage = player.RelicDamageMultiplier;
+            if (relicDamage != 1f)
+                dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * relicDamage));
+
             int absorbed;
             int hpDamage;
             SplitShield(ref monster.shield, dmg, out absorbed, out hpDamage);
@@ -614,6 +619,14 @@ namespace AutoBattle
                 : player.doctrine == 2 ? 0.06f * _mountainLayers : 0f;
             if (doctrineGuard > 0f)
                 dmg = Mathf.Max(GameConfig.MinDamage, Mathf.RoundToInt(dmg * (1f - doctrineGuard)));
+
+            // 深渊遗物：受伤乘区（铁壁 / 死斗）与残喘（低血额外减伤），排在流派减伤之后、护盾之前。
+            float relicTaken = player.RelicDamageTakenMultiplier;
+            if (relicTaken != 1f)
+                dmg = Mathf.Max(GameConfig.MinDamage, Mathf.RoundToInt(dmg * relicTaken));
+            float relicLowHp = player.RelicLowHpReduction;
+            if (relicLowHp > 0f)
+                dmg = Mathf.Max(GameConfig.MinDamage, Mathf.RoundToInt(dmg * (1f - relicLowHp)));
 
             int absorbed;
             int hpDamage;

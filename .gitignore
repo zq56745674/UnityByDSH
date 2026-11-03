@@ -11,6 +11,9 @@ HelloWorldProject/[Rr]ecordings/
 # Unity CLI 的 NUnit 报告（本地/CI 一次性产物，见 README「构建与 CI」）
 HelloWorldProject/test-results.xml
 
+# mnemon 插件的按工作区记忆库（MEMORY/USER/Documents，纯本地运行数据，不入游戏仓库）
+.mnemon/
+
 # Unity 崩溃恢复时自动写出的临时场景
 HelloWorldProject/Assets/_Recovery/
 HelloWorldProject/Assets/_Recovery.meta

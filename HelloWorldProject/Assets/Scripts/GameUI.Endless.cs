@@ -51,10 +51,15 @@ namespace AutoBattle
         /// <summary>内容区当前显示历史榜还是规则。只影响显示，不参与存档。</summary>
         private bool _endlessHistoryOpen;
 
-        // ---- 本局结果面板 ----
+        // ---- 本局结果面板（结算卡片） ----
         private RectTransform _endlessResultPanel;
         private Text _endlessResultTitle;
-        private Text _endlessResultBody;
+        private Text _endlessResultRank;
+        private Image _endlessResultTagBg;
+        private Text _endlessResultTag;
+        private Text[] _endlessResultStats;
+        private Text _endlessResultCompare;
+        private Text _endlessResultReward;
         private Text _endlessRetryLabel;
         private Text _endlessResultReturnLabel;
 
@@ -165,31 +170,72 @@ namespace AutoBattle
 
             _endlessPanel.gameObject.SetActive(false);
 
-            // ---- 结果面板 ----
-            _endlessResultPanel = CreatePanel(root, "EndlessResultPanel", 360, 210, 560, 300,
+            // ---- 结果面板（结算卡片） ----
+            // 一局打完只会停在这一个界面上，所以它得有「结算」的分量：
+            // 大号到达层数 + 结局标签 + 三格数据 + 本档/全局对照，往下给 A 遗物 / B 契约留位置。
+            _endlessResultPanel = CreatePanel(root, "EndlessResultPanel", 300, 150, 680, 420,
                 GameConfig.OverlayBg, true);
 
-            CreateText(_endlessResultPanel, "EndlessResultCaption", "本局结束", 20, 14, 320, 24,
-                FontSmall, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            CreateIcon(_endlessResultPanel, "ui_endless", 24, 16, 24);
+            CreateText(_endlessResultPanel, "EndlessResultCaption", "无尽结算", 56, 16, 300, 24,
+                FontSmall + 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
-            _endlessResultTitle = CreateText(_endlessResultPanel, "EndlessResultTitle", "", 20, 44, 520, 40,
-                FontTitle, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+            // 结局标签：阵亡 / 撤退。深皮革底 + 亮金字，和左栏名牌同一套配方。
+            _endlessResultTagBg = CreateCard(_endlessResultPanel, "EndlessResultTag", 552, 14, 104, 28,
+                GameConfig.SlotBg, RadiusButton, GameConfig.Border);
+            _endlessResultTag = CreateText(_endlessResultTagBg.transform, "EndlessResultTagText", "阵亡",
+                0, 0, 104, 28, FontSmall + 1, GameConfig.BtnTextGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Stretch(_endlessResultTag.rectTransform);
 
-            _endlessResultBody = CreateText(_endlessResultPanel, "EndlessResultBody", "", 20, 94, 520, 124,
-                FontSmall + 1, GameConfig.TextInfo, TextAnchor.UpperLeft);
-            _endlessResultBody.lineSpacing = 1.2f;
+            CreateText(_endlessResultPanel, "EndlessResultFloorLabel", "到达层数", 24, 42, 200, 18,
+                FontTiny + 2, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
-            Button retry = CreateButton(_endlessResultPanel, "EndlessRetry", "再次挑战", 20, 238, 260, 42,
+            _endlessResultTitle = CreateText(_endlessResultPanel, "EndlessResultTitle", "", 24, 58, 400, 50,
+                34, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+            _endlessResultRank = CreateText(_endlessResultPanel, "EndlessResultRank", "", 404, 62, 252, 28,
+                FontSmall + 2, GameConfig.TextGoldDeep, TextAnchor.MiddleRight, FontStyle.Bold);
+
+            CreateImage(_endlessResultPanel, "EndlessResultDivider", 24, 116, 632, 2, GameConfig.Divider);
+
+            // 三格数据：用时 / 击杀 / 清除层数。放大字号的数值是这张卡的主角。
+            string[] statNames = { "用时", "本局击杀", "清除层数" };
+            float[] statX = { 24f, 240f, 456f };
+            _endlessResultStats = new Text[statNames.Length];
+            for (int i = 0; i < statNames.Length; i++)
+            {
+                Image statCard = CreateCard(_endlessResultPanel, "EndlessResultStat" + i, statX[i], 132, 200, 88,
+                    GameConfig.CardBg, RadiusCard, GameConfig.BorderSoft);
+                CreateText(statCard.transform, "StatLabel", statNames[i], 16, 10, 168, 20,
+                    FontTiny + 2, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+                _endlessResultStats[i] = CreateText(statCard.transform, "StatValue", "—", 16, 32, 168, 42,
+                    FontTitle + 4, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+            }
+
+            _endlessResultCompare = CreateText(_endlessResultPanel, "EndlessResultCompare", "", 24, 232, 632, 22,
+                FontTiny + 2, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+            // 遗物 / 契约的奖励位：A、B 两个玩法落地前先把版式留出来，空态如实写「尚未开放」。
+            Image rewardCard = CreateCard(_endlessResultPanel, "EndlessResultReward", 24, 264, 632, 52,
+                GameConfig.InsetBg, RadiusCard, GameConfig.BorderSoft);
+            _endlessResultReward = CreateText(rewardCard.transform, "RewardText", "", 16, 6, 600, 40,
+                FontSmall, GameConfig.TextNormal, TextAnchor.MiddleLeft);
+            _endlessResultReward.lineSpacing = 1.15f;
+
+            Button retry = CreateButton(_endlessResultPanel, "EndlessRetry", "再次挑战", 24, 336, 340, 44,
                 GameConfig.BtnGold, out _endlessRetryLabel);
             StyleBar(retry, _endlessRetryLabel, "frame_bar_round", "glyph_reset", 22f, "再次挑战");
             retry.onClick.AddListener(OnEndlessRetryClicked);
 
-            Button back = CreateButton(_endlessResultPanel, "EndlessResultReturn", "返回战役", 296, 238, 180, 42,
+            Button back = CreateButton(_endlessResultPanel, "EndlessResultReturn", "返回战役", 380, 336, 276, 44,
                 GameConfig.BtnHeader, out _endlessResultReturnLabel);
             StyleBar(back, _endlessResultReturnLabel, "frame_pill", "glyph_back", 22f, "返回战役");
             back.onClick.AddListener(OnEndlessResultReturnClicked);
 
             _endlessResultPanel.gameObject.SetActive(false);
+
+            // 遗物三选一最后建：它要压在这两张卡之上（同层级的后建者在上）。
+            BuildRelicPanel(root);
         }
 
         /// <summary>每帧刷新入口、面板与结果面板。文本量很小，直接按当前状态写。</summary>
@@ -355,6 +401,41 @@ namespace AutoBattle
             }
         }
 
+        /// <summary>
+        /// 结算卡上的「本局奖励」：A 深渊遗物落地后逐件列出；B 深层契约还没做，如实写未开放。
+        /// </summary>
+        private static string DescribeRunRelics(EndlessRunState run)
+        {
+            // 读结束时的快照：EndEndlessRun 已经把 relics 清空（加成不外带），
+            // 直接读 relics 会永远显示 0/6。
+            var owned = run.resultRelics;
+            if (owned == null || owned.Count == 0)
+            {
+                return run.relicsEnabled
+                    ? "本局奖励  <color=#4E463C>深渊遗物 0/6（本局没拿到）· 深层契约尚未开放</color>"
+                    : "本局奖励  <color=#4E463C>深渊遗物 0/6（首局不开放，下一局起生效）· 深层契约尚未开放</color>";
+            }
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append("本局遗物 ");
+            sb.Append(owned.Count);
+            sb.Append("/");
+            sb.Append(run.RelicSlots);
+            sb.Append("：");
+            for (int i = 0; i < owned.Count; i++)
+            {
+                RelicDef def = RelicCatalog.Get(owned[i]);
+                if (def == null) continue;
+                if (i > 0) sb.Append(" · ");
+                sb.Append("<color=#8A5A12>");
+                sb.Append(def.ClassName);
+                sb.Append("</color> ");
+                sb.Append(def.name);
+            }
+            sb.Append("\n<color=#4E463C>深层契约尚未开放（B 落地后逐条列在这里）。</color>");
+            return sb.ToString();
+        }
+
         /// <summary>一行历史榜成绩：名次 · 到达层 · 清除/巅峰/第几世 · 用时 · 日期 · 结局。</summary>
         private static string DescribeEndlessScore(EndlessScoreEntry entry, int rank, long lastRecordUtc)
         {
@@ -369,10 +450,12 @@ namespace AutoBattle
             else if (entry.reason == (int)EndlessEndReason.Death) reason = "<color=#A2461E>阵亡</color>";
             else reason = "<color=#6F6252>中断</color>";
 
+            // 老纪录没有 hasRelic 字段（v15 及更早），显示成「遗物前」：那会儿还没有遗物玩法。
+            string relicMark = entry.hasRelic ? " · 遗物" : " · <color=#7A6A55>遗物前</color>";
             string mark = entry.endedUtc > 0 && entry.endedUtc == lastRecordUtc
                 ? "   <color=#8A5A12>◀ 本次</color>"
                 : "";
-            return $"<color=#8A5A12><b>{rank}</b></color>    {floorText}    {detail} · " +
+            return $"<color=#8A5A12><b>{rank}</b></color>    {floorText}    {detail}{relicMark} · " +
                 $"{FormatEndlessDuration(entry.seconds)} · {FormatEndlessDate(entry.endedUtc)} · {reason}{mark}";
         }
 
@@ -413,21 +496,34 @@ namespace AutoBattle
             EndlessRunState run = _game.EndlessRun;
             int best = _game.EndlessBestFloor;
             int globalBest = EndlessRecord.GlobalBest;
+            bool retreat = run.endReason == EndlessEndReason.Retreat;
 
-            _endlessResultTitle.text = run.endReason == EndlessEndReason.Retreat
-                ? $"已撤退（第 {run.reachedFloor} 层）"
-                : $"第 {run.reachedFloor} 层阵亡";
+            _endlessResultTag.text = retreat ? "撤退" : "阵亡";
+            _endlessResultTagBg.color = retreat ? GameConfig.BtnHeader : GameConfig.BtnDanger;
 
-            string cleared = run.clearedThisRun > 0
-                ? $"本局清除 <color=#2F6B3B>{run.clearedThisRun}</color> 层"
-                : "尚未清除任何层";
-            string rankNote = run.historyRank > 0
-                ? $"历史榜第 <color=#8A5A12>{run.historyRank}</color> 名"
-                : "未进历史榜前 5";
-            _endlessResultBody.text =
-                $"{cleared} · 本档最高 <color=#8A5A12>{best}</color> 层 · 全局最高 <color=#8A5A12>{globalBest}</color> 层\n" +
-                $"起始层 第 {run.startFloor} 层 · 本局击杀 {run.runKills} 只\n" +
-                $"用时 {FormatEndlessDuration(run.finishSeconds)} · {rankNote}";
+            // 层数是这张卡的主标题：只写「第 N 层」，结局交给右上角的标签。
+            _endlessResultTitle.text = $"第 {run.reachedFloor} 层";
+
+            _endlessResultRank.text = run.historyRank == 1
+                ? "本档历史第一"
+                : run.historyRank > 0
+                    ? $"本档历史榜 第 {run.historyRank} 名"
+                    : "未进历史榜前 5";
+
+            _endlessResultStats[0].text = FormatEndlessDuration(run.finishSeconds);
+            _endlessResultStats[1].text = run.runKills.ToString("N0");
+            _endlessResultStats[2].text = run.clearedThisRun.ToString();
+
+            // best 是「跑完之后」的本档最高层：本局追平或超过它时两者相等。
+            string record = best <= 0
+                ? "首次无尽记录"
+                : run.reachedFloor >= best
+                    ? "<color=#8A5A12>已达本档最高</color>"
+                    : $"距本档最高 {best - run.reachedFloor} 层";
+            _endlessResultCompare.text =
+                $"起始层 第 {run.startFloor} 层 · 本档最高 {best} 层 · 全局最高 {globalBest} 层 · {record}";
+
+            _endlessResultReward.text = DescribeRunRelics(run);
 
             int retryFloor = _game.EndlessSuggestedStartFloor;
             _endlessRetryLabel.text = $"再次挑战（第 {retryFloor} 层）";

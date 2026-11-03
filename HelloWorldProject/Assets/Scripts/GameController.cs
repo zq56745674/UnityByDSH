@@ -154,6 +154,9 @@ namespace AutoBattle
         public bool EndlessPanelOpen { get; private set; }
         public bool EndlessResultOpen { get; private set; }
 
+        /// <summary>深渊遗物三选一是否正等着玩家选（由本局的待选列表决定，没有独立开关）。</summary>
+        public bool RelicChoiceOpen => EndlessRun != null && EndlessRun.pendingRelics.Count > 0;
+
         // ==================== 生命周期 ====================
 
         private void Awake()
@@ -216,6 +219,7 @@ namespace AutoBattle
             // 设置 / 引导 / 对比同理：它们都能从常驻按钮点开，必须和别的浮层一样有冻结权。
             if (StagePanelOpen || SavePanelOpen || EnhancePanelOpen || ReforgePanelOpen || SkillPanelOpen
                 || SettingsOpen || MusicPanelOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen
+                || RelicChoiceOpen
                 || RebirthPanelOpen || AchievementPanelOpen || AboutOpen || DisplayOpen || ShopPanelOpen
                 || DoctrinePanelOpen) return;
 
@@ -439,7 +443,7 @@ namespace AutoBattle
         // ---- 五个浮层（选关 / 技能 / 存档 / 强化 / 洗练）互斥，规则只在这一处 ----
 
         /// <summary>必须先处理的无浮层状态：流派未选、无尽结算未确认时，不许开其它浮层。</summary>
-        private bool ChoicePending => EndlessResultOpen || DoctrinePanelOpen;
+        private bool ChoicePending => EndlessResultOpen || DoctrinePanelOpen || RelicChoiceOpen;
 
         /// <summary>关掉全部浮层。任何 Open 之前先走这里，保证同时只开一个。</summary>
         private void CloseAllPanels()
@@ -1798,7 +1802,7 @@ namespace AutoBattle
 
             int dropCount = GameConfig.MonsterTierGuaranteedDrops[(int)Monster.tier];
             int unlockedSlots = Player.UnlockedEquipmentSlotCount;
-            if (dropCount == 0 && LootSystem.RollDrop(unlockedSlots, Player.RebirthDropBonus)) dropCount = 1;
+            if (dropCount == 0 && LootSystem.RollDrop(unlockedSlots, Player.RebirthDropBonus + Player.RelicDropBonus)) dropCount = 1;
 
             float[] fixedWeights = GameConfig.MonsterTierDropQualityWeights[(int)Monster.tier];
             int dropLevel = Monster.tier == MonsterTier.Normal ? Player.level : Monster.level;

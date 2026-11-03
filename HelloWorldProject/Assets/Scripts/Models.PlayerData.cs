@@ -407,8 +407,8 @@ namespace AutoBattle
         public float SkillCritDamageBonus => PassiveValue(SkillId.StaticResonance)
                                            + PassiveValue(SkillId.HeavyImpact);
 
-        /// <summary>吸血鬼：吸血 +20%。</summary>
-        public float Lifesteal => PassiveValue(SkillId.Vampire);
+        /// <summary>吸血鬼 + 遗物：吸血（伤害转生命）比例。攻守遗物走独立乘区，只吸血这里加算。</summary>
+        public float Lifesteal => PassiveValue(SkillId.Vampire) + RelicLifestealBonus;
 
         /// <summary>攻速被动：风暴加速 +12%，沉重打击 -10%。</summary>
         public float SkillAttackSpeedBonus => PassiveValue(SkillId.StormHaste)
@@ -434,8 +434,41 @@ namespace AutoBattle
             }
         }
 
-        /// <summary>攻击速度总加成 = 装备副词条 + 攻速被动。</summary>
-        public float AttackSpeedBonus => EquipAttackSpeedBonus + SkillAttackSpeedBonus;
+        /// <summary>攻击速度总加成 = 装备副词条 + 攻速被动 + 遗物。</summary>
+        public float AttackSpeedBonus => EquipAttackSpeedBonus + SkillAttackSpeedBonus + RelicHasteBonus;
+
+        // ==================== 深渊遗物（局内，不进存档） ====================
+        // 遗物只在本局无尽生效：撤退/阵亡即清空。放在 PlayerData 上是为了让攻击、暴击、
+        // 攻速、吸血、金币、经验这些既有派生属性一次性吃到，不必在每个调用点各插一遍。
+        // 伤害/受伤的乘区例外——它们在 BattleSystem 的最终伤害处结算（见 HitMonster/MonsterAttack）。
+
+        /// <summary>本局遗物加成聚合；null = 没有遗物（战役 / 还没拿到第一件）。</summary>
+        [System.NonSerialized] public RelicMods relic;
+
+        /// <summary>遗物伤害乘区（独立乘区，不并入技能加算池）。</summary>
+        public float RelicDamageMultiplier => relic != null ? relic.damageMult : 1f;
+
+        /// <summary>遗物受伤乘区（< 1 减伤）。</summary>
+        public float RelicDamageTakenMultiplier => relic != null ? relic.damageTakenMult : 1f;
+
+        /// <summary>残喘类遗物：生命低于阈值时的额外减伤。</summary>
+        public float RelicLowHpReduction
+        {
+            get
+            {
+                if (relic == null || relic.lowHpReduction <= 0f) return 0f;
+                return currentHp <= MaxHp * RelicCatalog.LowHpThreshold ? relic.lowHpReduction : 0f;
+            }
+        }
+
+        public float RelicCritChanceBonus => relic != null ? relic.critChanceAdd : 0f;
+        public float RelicCritDamageBonus => relic != null ? relic.critDamageAdd : 0f;
+        public float RelicHasteBonus => relic != null ? relic.hasteAdd : 0f;
+        public float RelicLifestealBonus => relic != null ? relic.lifestealAdd : 0f;
+        public float RelicMaxHpMultiplier => relic != null ? relic.maxHpMult : 1f;
+        public float RelicGoldMultiplier => relic != null ? relic.goldMult : 1f;
+        public float RelicExpMultiplier => relic != null ? relic.expMult : 1f;
+        public float RelicDropBonus => relic != null ? relic.dropBonus : 0f;
 
         // ==================== 转生永久加成 ====================
 
@@ -492,10 +525,10 @@ namespace AutoBattle
         // 装备进公式用的是 Enhanced*（强化后主属性），强化等级因此会自动流进
         // 角色属性 → 战斗 → EquipmentScore 评分，自动换装不需要任何额外改动。
         // 转生加成乘在最终值最外层：先算完装备 / 巅峰，再整体放大。
-        public int MaxHp => Mathf.RoundToInt((Mathf.RoundToInt((BaseMaxHp
+        public int MaxHp => Mathf.Max(1, Mathf.RoundToInt((Mathf.RoundToInt((BaseMaxHp
                               + (armor != null ? armor.EnhancedHp : 0)
                               + (helmet != null ? helmet.EnhancedHp : 0)) * (1f + AllStatsBonus))
-                          + ParagonHpBonus) * RebirthBattleMultiplier);
+                          + ParagonHpBonus) * RebirthBattleMultiplier * RelicMaxHpMultiplier));
 
         /// <summary>不含山岳之躯转攻的攻击（也是转攻上限的分母）。</summary>
         /// <summary>不含「山岳之躯」防御转攻的原始攻击面板（技能评分/探针需要分项）。</summary>
@@ -529,7 +562,7 @@ namespace AutoBattle
         /// <summary>未夹上限的暴击率；静电共鸣用它计算溢出。</summary>
         public float RawCritChance => GameConfig.PlayerBaseCritChance
                                     + (weapon != null ? weapon.critChance : 0f)
-                                    + AffixCritChance + SkillCritChanceBonus;
+                                    + AffixCritChance + SkillCritChanceBonus + RelicCritChanceBonus;
 
         /// <summary>暴击率 = 初始 5% + 武器主属性 + 副词条 + 静电共鸣，并夹在 MaxCritChance 以内。</summary>
         public float CritChance => Mathf.Min(GameConfig.MaxCritChance, RawCritChance);
@@ -540,6 +573,7 @@ namespace AutoBattle
                                  + (accessory != null ? accessory.EnhancedCritDamage : 0f)
                                  + AffixCritDamage)
                                  * (1f + SkillCritDamageBonus)
+                                 + RelicCritDamageBonus
                                  + OverflowCritDamage;
 
         /// <summary>当前等级升到下一级所需经验；满级返回 0（要求 3）。</summary>
@@ -645,8 +679,8 @@ namespace AutoBattle
         {
             if (amount <= 0) return 0;
 
-            // 转生「历练」乘区放在入口，普通经验与巅峰经验都吃到。
-            amount = Mathf.Max(1, Mathf.RoundToInt(amount * RebirthExpMultiplier));
+            // 转生「历练」与遗物「远见」乘区都放在入口，普通经验与巅峰经验都吃到。
+            amount = Mathf.Max(1, Mathf.RoundToInt(amount * RebirthExpMultiplier * RelicExpMultiplier));
 
             if (IsMaxLevel)
             {
@@ -680,7 +714,7 @@ namespace AutoBattle
         public int AddGold(int amount)
         {
             if (amount <= 0) return 0;
-            long gained = (long)Mathf.RoundToInt(amount * RebirthGoldMultiplier);
+            long gained = (long)Mathf.RoundToInt(amount * RebirthGoldMultiplier * RelicGoldMultiplier);
             return AwardGold(gained);
         }
 

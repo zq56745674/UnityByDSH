@@ -154,6 +154,40 @@ namespace AutoBattle
         /// <summary>结束那一刻锁定的用时（秒）。结果面板开着的期间 Seconds 还会涨，不能用它显示。</summary>
         public int finishSeconds;
 
+        // ==================== 深渊遗物（v1） ====================
+        // 只在本局有效：撤退/阵亡即清空，不进存档。种子只用于派生三选一序列，
+        // 与战斗随机流分开，所以「同种子两次遗物序列一致」不依赖战斗走到哪一步。
+
+        /// <summary>本局遗物种子。0 = 未初始化（读档/异常态按无遗物处理）。</summary>
+        public int relicSeed;
+
+        /// <summary>本局是否启用深渊遗物：首局无尽不弹，第二局起才有。</summary>
+        public bool relicsEnabled;
+
+        /// <summary>本局已持有的遗物 id，按获得顺序排列。</summary>
+        public readonly System.Collections.Generic.List<int> relics = new System.Collections.Generic.List<int>();
+
+        /// <summary>
+        /// 结束那一刻的遗物快照。<see cref="GameController.EndEndlessRun"/> 会把 relics 清空
+        /// （遗物加成只在本局有效），结算卡与历史榜读这份，别读已被清空的 relics。
+        /// </summary>
+        public readonly System.Collections.Generic.List<int> resultRelics = new System.Collections.Generic.List<int>();
+
+        /// <summary>当前待选的三张牌（空 = 没有待选）。</summary>
+        public readonly System.Collections.Generic.List<int> pendingRelics = new System.Collections.Generic.List<int>();
+
+        /// <summary>满槽时已点选、等着挑一件舍弃的那张牌；-1 = 没有。</summary>
+        public int relicTakePending = -1;
+
+        /// <summary>触发这次三选一的层号（面板标题与日志用）。</summary>
+        public int relicPendingFloor;
+
+        /// <summary>槽位上限（v1 固定 6，B 落地后按契约分扩到 7/8）。</summary>
+        public int RelicSlots => RelicCatalog.SlotsFor(0);
+
+        /// <summary>槽位是否已满：满了之后必须先舍弃一件才能再拿。</summary>
+        public bool RelicsFull => relics.Count >= RelicSlots;
+
         public int KillsLeft => Mathf.Max(0, EndlessCatalog.KillTargetOf(floor) - killCount);
 
         /// <summary>本局用时（秒）。中途改系统时间会得到离谱值，所以夹在 0..30 天。</summary>
@@ -233,6 +267,9 @@ namespace AutoBattle
         /// <summary>结束原因，存 <see cref="EndlessEndReason"/> 的整数值。</summary>
         public int reason;
 
+        /// <summary>这一局是否带着深渊遗物打完（老纪录没有这个标记，显示成「遗物前」）。</summary>
+        public bool hasRelic;
+
         /// <summary>是不是玩家自己按的撤退（而不是阵亡）。</summary>
         public bool IsRetreat => reason == (int)EndlessEndReason.Retreat;
     }
@@ -300,6 +337,7 @@ namespace AutoBattle
                     seconds = entry.seconds,
                     endedUtc = entry.endedUtc,
                     reason = entry.reason,
+                    hasRelic = entry.hasRelic,
                 };
                 Clamp(copy);
                 result.Add(copy);
@@ -327,6 +365,7 @@ namespace AutoBattle
                     seconds = entry.seconds,
                     endedUtc = entry.endedUtc,
                     reason = entry.reason,
+                    hasRelic = entry.hasRelic,
                 };
                 Clamp(copy);
                 result.Add(copy);

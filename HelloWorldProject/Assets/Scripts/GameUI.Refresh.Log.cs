@@ -24,6 +24,7 @@ namespace AutoBattle
             RefreshMusicPanel();
             RefreshComparePanel();
             RefreshEndlessPanel();
+            RefreshRelicPanel();
             RefreshRebirthPanel();
             RefreshAchievementPanel();
             RefreshShop2();

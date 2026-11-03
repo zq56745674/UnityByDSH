@@ -54,6 +54,116 @@ namespace AutoBattle
 
         public void CloseEndlessPanel() => EndlessPanelOpen = false;
 
+        // ==================== 深渊遗物（v1，docs/gameplay-expansion.md §4） ====================
+        // 一局无尽里每清 10 层弹一次三选一；遗物只在本局有效，撤退/阵亡即清空、不进存档。
+        // 序列由「本局种子 + 层号」派生，不消耗 UnityEngine.Random（战斗随机流），
+        // 所以同种子同层永远给出同一组牌，与战斗走到哪一步无关。
+
+        /// <summary>本局是否启用深渊遗物：首局不弹（先让玩家把无尽本身跑一遍），第二局起才有。</summary>
+        public bool RelicsEnabledThisRun =>
+            Player != null && (Player.endlessBestFloor > 0
+                || (Player.endlessTop != null && Player.endlessTop.Count > 0));
+
+        /// <summary>本局持有的遗物 id（无局时返回 null，UI 只读）。</summary>
+        public System.Collections.Generic.List<int> RunRelics =>
+            EndlessRun != null ? EndlessRun.relics : null;
+
+        /// <summary>满槽后已点选、等着挑一件舍弃的那张牌；-1 = 没有。</summary>
+        public int RelicTakePending => EndlessRun != null ? EndlessRun.relicTakePending : -1;
+
+        /// <summary>生成三张候选（排除本局已持有的，避免出现「已经有了还给你选」）。</summary>
+        private void OfferRelicChoice(int clearedFloor)
+        {
+            System.Collections.Generic.List<int> picks = RelicCatalog.RollChoices(
+                EndlessRun.relicSeed, clearedFloor, EndlessRun.relics);
+            if (picks == null || picks.Count == 0) return;
+
+            EndlessRun.pendingRelics.Clear();
+            EndlessRun.pendingRelics.AddRange(picks);
+            EndlessRun.relicTakePending = -1;
+            EndlessRun.relicPendingFloor = clearedFloor;
+
+            AddLog($"✦ 深渊馈赠 · 第 {clearedFloor} 层：三选一（本局 {EndlessRun.relics.Count}/{EndlessRun.RelicSlots} 槽）",
+                GameConfig.LogUnlock);
+        }
+
+        /// <summary>
+        /// 选一张牌。没满槽立刻拿到；满槽则先记下要拿哪张，等玩家点一件旧遗物舍弃
+        /// （规则：满 6 槽后必须先卖一件才能拿一件）。
+        /// </summary>
+        public void TakeRelic(int id)
+        {
+            if (EndlessRun == null || !RelicChoiceOpen) return;
+            if (!EndlessRun.pendingRelics.Contains(id)) return;
+
+            if (EndlessRun.RelicsFull)
+            {
+                EndlessRun.relicTakePending = id;
+                return;
+            }
+
+            EndlessRun.relics.Add(id);
+            ApplyRelicMods();
+            FinishRelicChoice();
+
+            RelicDef def = RelicCatalog.Get(id);
+            AddLog($"◈ 获得遗物「{def.name}」（{def.ClassName}）：{def.text}", GameConfig.LogUnlock);
+        }
+
+        /// <summary>满槽替换：舍弃 <paramref name="ownedId"/>，换入刚点选的那张。</summary>
+        public void ReplaceRelicWith(int ownedId)
+        {
+            if (EndlessRun == null || !RelicChoiceOpen) return;
+
+            int take = EndlessRun.relicTakePending;
+            if (take < 0) return;
+
+            int index = EndlessRun.relics.IndexOf(ownedId);
+            if (index < 0) return;
+
+            EndlessRun.relics.RemoveAt(index);
+            EndlessRun.relics.Add(take);
+            ApplyRelicMods();
+            FinishRelicChoice();
+
+            RelicDef oldDef = RelicCatalog.Get(ownedId);
+            RelicDef newDef = RelicCatalog.Get(take);
+            AddLog($"◈ 舍弃「{oldDef.name}」，换入「{newDef.name}」：{newDef.text}", GameConfig.LogUnlock);
+        }
+
+        /// <summary>满槽替换中途反悔：退回三张候选，不结束这次三选一。</summary>
+        public void CancelRelicTake()
+        {
+            if (EndlessRun == null) return;
+            EndlessRun.relicTakePending = -1;
+        }
+
+        /// <summary>跳过这一次三选一（槽位不够又不舍得换时的出口）。</summary>
+        public void SkipRelicChoice()
+        {
+            if (EndlessRun == null || !RelicChoiceOpen) return;
+            AddLog($"◇ 放弃了第 {EndlessRun.relicPendingFloor} 层的深渊遗物", GameConfig.LogInfo);
+            FinishRelicChoice();
+        }
+
+        private void FinishRelicChoice()
+        {
+            EndlessRun.pendingRelics.Clear();
+            EndlessRun.relicTakePending = -1;
+            EndlessRun.relicPendingFloor = 0;
+            // 选完之后别让玩家干等整段清层延迟：压到 0.35 秒，下一只马上出来。
+            _respawnTimer = Mathf.Min(_respawnTimer, 0.35f);
+        }
+
+        /// <summary>把本局遗物重新聚合成 <see cref="PlayerData.relic"/> 并夹住当前生命。</summary>
+        private void ApplyRelicMods()
+        {
+            if (Player == null) return;
+            Player.relic = RelicMods.Build(EndlessRun != null ? EndlessRun.relics : null);
+            // 最大生命可能被「血祭」压低：夹一次，别让血条超过上限。
+            if (Player.currentHp > Player.MaxHp) Player.currentHp = Player.MaxHp;
+        }
+
         /// <summary>
         /// 开始一局无尽。startFloor 会被夹在 1..本档最高层：
         /// 最高层是「已经证明能打到的地方」，越过它开局等于跳关。
@@ -104,6 +214,17 @@ namespace AutoBattle
             Monster = null;
             _loadedFromSave = false;
 
+            // 深渊遗物：判定要不要在本局启用（首局不弹），并清掉上一局残留的加成。
+            // 种子用系统时间而不是 UnityEngine.Random：后者是战斗随机流，动它会破坏逐帧可复现。
+            bool relicsOn = RelicsEnabledThisRun;
+            EndlessRun.relicsEnabled = relicsOn;
+            EndlessRun.relicSeed = relicsOn ? (int)(System.DateTime.UtcNow.Ticks & 0x3FFFFFFF) : 0;
+            EndlessRun.relics.Clear();
+            EndlessRun.pendingRelics.Clear();
+            EndlessRun.relicTakePending = -1;
+            EndlessRun.relicPendingFloor = 0;
+            Player.relic = null;
+
             Player.FillHp();
             Player.shield = 0;
             _battle.ResetSkillState();
@@ -123,6 +244,9 @@ namespace AutoBattle
             AddLog($"◆ 进入无尽模式：从第 {floor} 层开始（本档最高 {Player.endlessBestFloor} 层）",
                 GameConfig.LogUnlock);
             AddLog("  阵亡或撤退都会结束本局；每清一层立即记录最高层。", GameConfig.LogInfo);
+            AddLog(relicsOn
+                ? $"✦ 深渊遗物：每清 10 层三选一，槽位 {RelicCatalog.SlotCount}；满槽后需先舍弃一件"
+                : "✦ 深渊遗物将在下一局生效（首局先跑一遍无尽）。", GameConfig.LogUnlock);
         }
 
         /// <summary>结果面板的「再次挑战」：从检查点起步，重新开一局。</summary>
@@ -155,6 +279,7 @@ namespace AutoBattle
                 _pendingTier = MonsterTier.Normal;
                 _finalBossAttempt = 0;
                 _justClearedStage = false;
+                Player.relic = null;
                 Player.FillHp();
                 Player.shield = 0;
                 _battle.ResetSkillState();
@@ -252,6 +377,11 @@ namespace AutoBattle
             Monster = null;
             CurrentState = State.WaitingRespawn;
             _respawnTimer = GameConfig.EndlessFloorClearDelay;
+
+            // 每清 10 层弹一次三选一。面板开着时整局冻结（RelicChoiceOpen 在冻结名单里），
+            // 所以这里的 _respawnTimer 不会被白白消耗。
+            if (EndlessRun.relicsEnabled && RelicCatalog.ShouldOffer(cleared))
+                OfferRelicChoice(cleared);
         }
 
         /// <summary>无尽版的刷怪：等级/关底档次/类型都从层号推导。</summary>
@@ -313,6 +443,17 @@ namespace AutoBattle
             if (reason == EndlessEndReason.Death || reason == EndlessEndReason.Retreat)
                 RecordEndlessHistory(reason);
 
+            // 遗物只在本局有效：无论阵亡、撤退还是掐局，都要把加成一起丢掉，
+            // 否则回战役会带着一套深渊加成打普通怪。
+            // 结算卡与历史榜要读「结束时拿到了几件」，所以清空之前先拍一张快照。
+            EndlessRun.resultRelics.Clear();
+            EndlessRun.resultRelics.AddRange(EndlessRun.relics);
+            EndlessRun.relics.Clear();
+            EndlessRun.pendingRelics.Clear();
+            EndlessRun.relicTakePending = -1;
+            EndlessRun.relicPendingFloor = 0;
+            if (Player != null) Player.relic = null;
+
             Mode = GameMode.Campaign;
             IsRunning = false;
             CurrentState = State.Ended;
@@ -341,6 +482,7 @@ namespace AutoBattle
                 seconds = EndlessRun.finishSeconds,
                 endedUtc = System.DateTime.UtcNow.Ticks,
                 reason = (int)reason,
+                hasRelic = EndlessRun.relics.Count > 0,
             };
 
             int rank = EndlessHistory.Insert(Player.endlessTop, entry);
