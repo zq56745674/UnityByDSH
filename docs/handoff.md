@@ -6,8 +6,8 @@
 
 - 工作区：`E:\pytest\unitydsh1`
 - Unity 工程：`HelloWorldProject/`，Unity **6000.6.5f1**，单场景 `Assets/Scenes/SampleScene.unity`
-- `HEAD = 9be2b80`（本地领先 `origin/main` 1 个提交，尚未推送）
-- **未提交**：**17 改 + 4 未跟踪 + 57 个 `.mnemon/` 已从索引移除**（含 A 深渊遗物 v1、无尽结算卡与文档回填；`Assets/_shots/` 与 `.mnemon/` 均已进 `.gitignore`）。`git diff --check` 干净。
+- `HEAD = 50a71ed`（`origin/main` 已同步；该提交含无尽结算卡、深渊遗物 v1、文档回填与 `.mnemon/` 移出仓库）
+- **未提交**：无（`git status` 干净）。`Assets/_shots/`、`Resources/Music/` 与 `.mnemon/` 均在 `.gitignore` 内，不进仓库。
 - **不要自行 commit / push**：按 USER.md 的 critical 规矩，只有用户明确说「提交」才允许操作 git；push 另需明确同意。
 - 当前存档：**v15 / 3 槽**；`CurrentSaveVersion = 15`（`HelloWorldProject/Assets/Scripts/SaveSystem.cs:31`）。
 - **Editor 的存档在 `HKCU\Software\Unity\UnityEditor\DefaultCompany\My project`**，不在 `UnityByDSH\AutoBattle`：工程 `ProjectSettings/ProjectSettings.asset` 里 companyName / productName 仍是默认值（见 §6）。
