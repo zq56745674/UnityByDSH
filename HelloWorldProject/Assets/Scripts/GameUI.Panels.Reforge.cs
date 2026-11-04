@@ -68,7 +68,7 @@ namespace AutoBattle
 
             if (e != null)
             {
-                _reforgeCardLabel.text = $"{e.Title}\n<size=13><color=#5E6B80>{e.StatLine}</color></size>";
+                _reforgeCardLabel.text = $"{e.Title}\n<size=13><color=#6F6252>{e.StatLine}</color></size>";
             }
             else
             {
@@ -114,7 +114,7 @@ namespace AutoBattle
             if (e == null)
             {
                 _reforgeInfoText.text =
-                    $"<color=#5E6B80>{EquipmentSlots.Name(slot)}</color>\n\n" +
+                    $"<color=#6F6252>{EquipmentSlots.Name(slot)}</color>\n\n" +
                     "空槽位，没有可洗练的词条。\n" +
                     "装备掉落并自动穿上后，这里会显示词条容量、质量分档与锁定费用。";
                 return;
@@ -126,13 +126,13 @@ namespace AutoBattle
 
             // 右侧信息栏：容量、质量分档、锁定倍率。宽 236、11 号字，行数控制在 ~12 行内不裁切。
             _reforgeInfoText.text =
-                $"<color=#5E6B80>词条容量</color>  {e.AffixCount} / {capacity} 条\n" +
+                $"<color=#6F6252>词条容量</color>  {e.AffixCount} / {capacity} 条\n" +
                 $"洗练只重抽种类与数值，条数不变\n\n" +
-                $"<color=#5E6B80>当前质量 {quality}% · {tier}</color>\n" +
+                $"<color=#6F6252>当前质量 {quality}% · {tier}</color>\n" +
                 "≥85 极品 · ≥70 优秀\n" +
                 "≥50 合格 · <50 偏低\n" +
                 "质量 = 各词条数值百分位的平均\n\n" +
-                $"<color=#5E6B80>锁定 ×{GameConfig.ReforgeLockFactor:0.#}/条</color>  当前锁 {locked} 条 → ×{Equipment.ReforgeLockMultiplier(locked):0.#}";
+                $"<color=#6F6252>锁定 ×{GameConfig.ReforgeLockFactor:0.#}/条</color>  当前锁 {locked} 条 → ×{Equipment.ReforgeLockMultiplier(locked):0.#}";
 
             _reforgeQualityLabel.text =
                 $"词条质量 {quality}%（{e.AffixCount} 条）    {e.ReforgeCountText}";

@@ -47,6 +47,17 @@ namespace AutoBattle
         /// </summary>
         public int pendingSkillPicks;
 
+        // ==================== 巅峰符文（方案 C，存档 v17） ====================
+        // 点数由 paragonLevel 派生（每 100 级 1 点，共 10 点），不单独存档；
+        // 真正进存档的只有「哪些技能已解锁符文」和「每个技能当前选的是甲还是乙」。
+        // 转生清巅峰但保留这两张掩码——设计意图是「重置清掉的是等级，留下的是形态解锁」。
+
+        /// <summary>已解锁符文的技能掩码（第 N 位对应 SkillId N）。</summary>
+        public int runeUnlockMask;
+
+        /// <summary>形态掩码：第 N 位 = 1 表示该技能选乙，0 表示甲（仅对已解锁的技能有效）。</summary>
+        public int runeFormMask;
+
         // ==================== 关卡 / 章节进度（步骤 4a） ====================
 
         /// <summary>当前章节号，1 起。关卡怪物等级 = ChapterMonsterLevelStep × chapterIndex。</summary>
@@ -86,6 +97,21 @@ namespace AutoBattle
         /// 只抬高「建议起始层」，仍会被本档最高层夹住；转生后未重通 11-10 不生效。
         /// </summary>
         public int endlessStartRank;
+
+        /// <summary>
+        /// 存档 v16 起：累计深层契约分（跨局、跨转生永久保留，见 <see cref="ContractCatalog"/>）。
+        /// 它不直接进战斗属性，只决定遗物档位 / 槽位 / 里程碑；到 3000 后新得分只记一半。
+        /// </summary>
+        public int contractScore;
+
+        // ==================== 屠魔录（方案 D，存档 v18） ====================
+
+        /// <summary>
+        /// 屠魔录每条记录累计击杀数，长度必为 <see cref="BestiaryCatalog.EntryCount"/>（44），
+        /// 索引 = 族×4 + 型（近战/远程/精锐/BOSS）。跨局、跨转生保留；
+        /// 只用于「目击 / 通晓」展示，不改任何战斗数值。读档时会由 Sanitize 补齐。
+        /// </summary>
+        public int[] bestiaryKills;
 
         // ==================== 本世计时 / 轮回纪录（存档 v12） ====================
 
@@ -366,32 +392,31 @@ namespace AutoBattle
                 || skillPassive1 == v || skillTrigger0 == v || skillTrigger1 == v;
         }
 
-        /// <summary>取某个被动按技能等级放大后的数值；没装则返回 0。</summary>
-        public float PassiveValue(SkillId id)
-        {
-            if (!HasSkill(id)) return 0f;
-            return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value, SkillLevel);
-        }
+        /// <summary>取某个被动按技能等级放大后的数值；没装则返回 0。符文覆写在这里统一生效。</summary>
+        public float PassiveValue(SkillId id) => PassiveValueOf(id, RuneField.Value);
 
         /// <summary>取某个被动的第二数值（未装返回 0）。</summary>
-        public float PassiveValue2(SkillId id)
-        {
-            if (!HasSkill(id)) return 0f;
-            return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value2, SkillLevel);
-        }
+        public float PassiveValue2(SkillId id) => PassiveValueOf(id, RuneField.Value2);
 
         /// <summary>取某个被动的第三数值（未装返回 0）。</summary>
-        public float PassiveValue3(SkillId id)
-        {
-            if (!HasSkill(id)) return 0f;
-            return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value3, SkillLevel);
-        }
+        public float PassiveValue3(SkillId id) => PassiveValueOf(id, RuneField.Value3);
 
         /// <summary>取某个技能的第四数值（未装返回 0）。</summary>
-        public float PassiveValue4(SkillId id)
+        public float PassiveValue4(SkillId id) => PassiveValueOf(id, RuneField.Value4);
+
+        /// <summary>
+        /// 被动数值的统一读取口：未装 → 0；装了 → 先让符文按形态覆写基础值，再按技能等级放大。
+        /// 这样「山岳之躯转攻率」「沉重打击崩山伤害」这类派生属性不用各自知道符文的存在。
+        /// </summary>
+        private float PassiveValueOf(SkillId id, RuneField field)
         {
             if (!HasSkill(id)) return 0f;
-            return GameConfig.ScaleSkillValue(SkillCatalog.Get(id).value4, SkillLevel);
+            SkillDef def = SkillCatalog.Get(id);
+            float raw = field == RuneField.Value ? def.value
+                : field == RuneField.Value2 ? def.value2
+                : field == RuneField.Value3 ? def.value3
+                : def.value4;
+            return GameConfig.ScaleSkillValue(RuneMods.Field(this, id, field, raw), SkillLevel);
         }
 
         // ---- 被动技能带来的属性（技能 2.0）----
@@ -399,9 +424,11 @@ namespace AutoBattle
         /// <summary>山岳之躯：防御 +30%（50 种子对齐风暴后由 40% 下调）；雷霆突袭的「雷印护体」给风暴流 +40%。</summary>
         public float SkillDefenseBonus => PassiveValue(SkillId.MountainBody) + PassiveValue4(SkillId.ThunderGod);
 
-        /// <summary>静电共鸣：暴击率 +12%。</summary>
+        /// <summary>静电共鸣：暴击率 +12%（符文「超载」会压到 +6%）。</summary>
         public float SkillCritChanceBonus => HasSkill(SkillId.StaticResonance)
-            ? SkillCatalog.Get(SkillId.StaticResonance).critBonus : 0f;
+            ? RuneMods.Field(this, SkillId.StaticResonance, RuneField.CritBonus,
+                SkillCatalog.Get(SkillId.StaticResonance).critBonus)
+            : 0f;
 
         /// <summary>暴击伤害乘区：静电共鸣 +25%、沉重打击 +40%。</summary>
         public float SkillCritDamageBonus => PassiveValue(SkillId.StaticResonance)
@@ -444,6 +471,33 @@ namespace AutoBattle
 
         /// <summary>本局遗物加成聚合；null = 没有遗物（战役 / 还没拿到第一件）。</summary>
         [System.NonSerialized] public RelicMods relic;
+
+        // ==================== 深层契约（局内，不进存档） ====================
+        // 契约不改玩家面板：敌人侧在生成时乘好（见 MonsterData.ApplyContract），
+        // 玩家侧只有三处出口——生命上限、暴击率、治疗量。它们都在派生属性里各加一行，
+        // 不并入技能/装备的加算池，避免契约变成「另一种装备词条」。
+
+        /// <summary>本局契约修正；null = 没选契约（战役 / 无尽没勾）。</summary>
+        [System.NonSerialized] public ContractMods contract;
+
+        /// <summary>背水：生命上限乘区。</summary>
+        public float ContractMaxHpMultiplier => contract != null ? contract.maxHpMult : 1f;
+
+        /// <summary>黑雾：护甲有效率乘区（&lt; 1 = 护甲减伤缩水，受击时按防御乘好）。</summary>
+        public float ContractArmorEffectiveMult => contract != null ? contract.playerArmorEffectiveMult : 1f;
+
+        /// <summary>枯竭：治疗与药水乘区（0 = 完全不回血）。</summary>
+        public float ContractHealMultiplier => contract != null ? contract.healMult : 1f;
+
+        /// <summary>硬化：敌人受到伤害的乘区（&lt; 1 = 敌人更耐打）。</summary>
+        public float ContractMonsterDamageTakenMultiplier
+            => contract != null ? contract.monsterDamageTakenMult : 1f;
+
+        /// <summary>群袭：守关怪按「层数 + N」的强度生成（0 = 不加强）。</summary>
+        public int ContractClearFloorBonus => contract != null ? contract.clearFloorBonus : 0;
+
+        /// <summary>决绝：本局不能主动撤退。</summary>
+        public bool ContractNoRetreat => contract != null && contract.noRetreat;
 
         /// <summary>遗物伤害乘区（独立乘区，不并入技能加算池）。</summary>
         public float RelicDamageMultiplier => relic != null ? relic.damageMult : 1f;
@@ -528,7 +582,8 @@ namespace AutoBattle
         public int MaxHp => Mathf.Max(1, Mathf.RoundToInt((Mathf.RoundToInt((BaseMaxHp
                               + (armor != null ? armor.EnhancedHp : 0)
                               + (helmet != null ? helmet.EnhancedHp : 0)) * (1f + AllStatsBonus))
-                          + ParagonHpBonus) * RebirthBattleMultiplier * RelicMaxHpMultiplier));
+                          + ParagonHpBonus) * RebirthBattleMultiplier * RelicMaxHpMultiplier
+                          * ContractMaxHpMultiplier));
 
         /// <summary>不含山岳之躯转攻的攻击（也是转攻上限的分母）。</summary>
         /// <summary>不含「山岳之躯」防御转攻的原始攻击面板（技能评分/探针需要分项）。</summary>
@@ -679,8 +734,9 @@ namespace AutoBattle
         {
             if (amount <= 0) return 0;
 
-            // 转生「历练」与遗物「远见」乘区都放在入口，普通经验与巅峰经验都吃到。
-            amount = Mathf.Max(1, Mathf.RoundToInt(amount * RebirthExpMultiplier * RelicExpMultiplier));
+            // 转生「历练」与遗物「远见」的乘区都放在入口，普通经验与巅峰经验都吃到。
+            amount = Mathf.Max(1, Mathf.RoundToInt(
+                amount * RebirthExpMultiplier * RelicExpMultiplier));
 
             if (IsMaxLevel)
             {
@@ -927,6 +983,86 @@ namespace AutoBattle
             pendingSkillPicks = 0;
             pendingLegacyDoctrineGrant = false;
             for (int i = 0; i < SkillSlotCount; i++) SetSkillSlot(i, -1);
+        }
+
+        // ==================== 巅峰符文读写（C） ====================
+
+        /// <summary>该技能是否已花点解锁符文形态。</summary>
+        public bool HasRuneUnlocked(SkillId id)
+        {
+            int index = (int)id;
+            if (index < 0 || index >= SkillCatalog.All.Length) return false;
+            return (runeUnlockMask & (1 << index)) != 0;
+        }
+
+        /// <summary>该技能当前选的形态；未解锁时按甲返回（调用方应先判断 HasRuneUnlocked）。</summary>
+        public RuneForm RuneFormOf(SkillId id)
+        {
+            int index = (int)id;
+            if (index < 0 || index >= SkillCatalog.All.Length) return RuneForm.A;
+            return (runeFormMask & (1 << index)) != 0 ? RuneForm.B : RuneForm.A;
+        }
+
+        /// <summary>已解锁符文的技能数（花掉的点数）。</summary>
+        public int RuneUnlockCount
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < SkillCatalog.All.Length; i++)
+                    if ((runeUnlockMask & (1 << i)) != 0) n++;
+                return n;
+            }
+        }
+
+        /// <summary>当前巅峰等级给的总点数（P100 起，每 100 级 1 点，上限 10）。</summary>
+        public int RunePointsTotal => RuneCatalog.PointsFor(paragonLevel);
+
+        /// <summary>还能用的符文点：总点数 - 已解锁数。</summary>
+        public int RunePoints => Mathf.Max(0, RunePointsTotal - RuneUnlockCount);
+
+        /// <summary>
+        /// 能否解锁该技能的符文：要有这个技能的符文、本流派可选、还没解锁、点数够。
+        /// 不要求「已学会」——符文是跨世保留的，转生后技能清空但形态解锁仍在。
+        /// </summary>
+        public bool CanUnlockRune(SkillId id)
+        {
+            if (!RuneCatalog.Has(id)) return false;
+            if (!HasDoctrine) return false;
+            if (!SkillCatalog.IsAvailableTo(doctrine, id)) return false;
+            if (HasRuneUnlocked(id)) return false;
+            return RunePoints > 0;
+        }
+
+        /// <summary>花 1 点解锁符文；成功时默认选甲。</summary>
+        public bool UnlockRune(SkillId id)
+        {
+            if (!CanUnlockRune(id)) return false;
+            int index = (int)id;
+            runeUnlockMask |= 1 << index;
+            runeFormMask &= ~(1 << index);
+            return true;
+        }
+
+        /// <summary>切换形态（免费、局外）；未解锁返回 false。</summary>
+        public bool SetRuneForm(SkillId id, RuneForm form)
+        {
+            if (!HasRuneUnlocked(id)) return false;
+            int index = (int)id;
+            if (form == RuneForm.B) runeFormMask |= 1 << index;
+            else runeFormMask &= ~(1 << index);
+            return true;
+        }
+
+        /// <summary>甲 ↔ 乙 互换。</summary>
+        public bool ToggleRuneForm(SkillId id) =>
+            SetRuneForm(id, RuneFormOf(id) == RuneForm.A ? RuneForm.B : RuneForm.A);
+
+        /// <summary>退回全部符文点（解锁与形态一起清空），供换流派 / 重新规划用。</summary>
+        public void ResetRunes()
+        {
+            runeUnlockMask = 0;
+            runeFormMask = 0;
         }
 
         /// <summary>按精英 / Boss 档次判断是否为「巨人杀手」的目标。</summary>

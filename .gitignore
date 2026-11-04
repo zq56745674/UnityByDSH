@@ -50,6 +50,9 @@ HelloWorldProject/Assets/Resources/Music.meta
 HelloWorldProject/Assets/Screenshots/
 HelloWorldProject/Assets/Screenshots.meta
 
+# 工作区根下的 _shots/ 偶尔会被探针写出来（胜率带 dump 之类），同样不入库
+/_shots/
+
 # 同理：_shots/ 是 UI 验收截图与探针脚本产物（2026-10-29 实测 78.5MB），不进仓库
 HelloWorldProject/Assets/_shots/
 HelloWorldProject/Assets/_shots.meta

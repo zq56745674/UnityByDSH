@@ -82,6 +82,11 @@ namespace AutoBattle
             _skillPanelOtherText = CreateText(_skillPanel, "SkillPanelOtherText", "",
                 20, 470, 768, 22, 12, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
+            Button rune = CreateButton(_skillPanel, "SkillPanelRune", "符文", 596, 12, 90, 30,
+                GameConfig.RowBg, out Text skillRuneLabel);
+            StyleBar(rune, skillRuneLabel, "frame_pill", "glyph_star", 14f, "打开巅峰符文面板");
+            rune.onClick.AddListener(OnSkillPanelRuneClicked);
+
             Button close = CreateButton(_skillPanel, "SkillPanelClose", "关闭", 698, 12, 90, 30,
                 GameConfig.CardDanger, out Text skillCloseLabel);
             StyleBar(close, skillCloseLabel, "frame_pill", "glyph_close", 14f, "关闭技能面板");

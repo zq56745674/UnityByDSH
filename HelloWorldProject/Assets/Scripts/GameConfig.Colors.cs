@@ -154,8 +154,11 @@ namespace AutoBattle
 
         // ==================== 悬停提示 ====================
 
-        /// <summary>提示框底：深墨棕（不是纯黑，和木桌/皮革一个色系）。</summary>
-        public static readonly Color TooltipBg = new Color(0.129f, 0.098f, 0.071f, 0.97f);
+        /// <summary>提示框底：深皮革（比技能槽亮一档，和按钮皮片同一族；原来偏黑，压在羊皮纸上像贴了块黑胶布）。</summary>
+        public static readonly Color TooltipBg = new Color(0.235f, 0.180f, 0.133f, 0.985f);
+
+        /// <summary>提示框顶边的 1px 暖白高光：让皮面有受光方向，不再是一块死色。</summary>
+        public static readonly Color TooltipSheen = new Color(1f, 0.945f, 0.855f, 0.14f);
 
         /// <summary>提示框文字：羊皮纸白。原来用的是 TextTitle（深墨），压在深色底上几乎看不清。</summary>
         public static readonly Color TooltipText = new Color(0.969f, 0.929f, 0.839f);
@@ -208,7 +211,7 @@ namespace AutoBattle
         public static readonly Color BtnText = new Color(0.871f, 0.816f, 0.686f);
 
         /// <summary>深皮革底框上的禁用 / 未解锁文字：同一支暖色压暗两档，仍要明显亮于底色。</summary>
-        public static readonly Color BtnTextDim = new Color(0.612f, 0.573f, 0.494f);
+        public static readonly Color BtnTextDim = new Color(0.706f, 0.663f, 0.573f);
 
         /// <summary>深皮革底框上的「已选中但非佩戴」文字：浅金。</summary>
         public static readonly Color BtnTextGold = new Color(0.949f, 0.800f, 0.478f);

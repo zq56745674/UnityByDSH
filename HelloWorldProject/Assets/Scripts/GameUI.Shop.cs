@@ -78,7 +78,7 @@ namespace AutoBattle
 
             CreateSectionTitle(panel, "营地行商", 24, 10, 320, FontTitle, "ui_shop");
             CreateText(panel, "MerchantSub", "只改外观与操作，不影响战斗数值。打开面板时战斗暂停。",
-                24, 37, 540, 18, 11, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+                24, 36, 540, 20, 12, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
             _merchantGoldText = CreateText(panel, "MerchantGold", "", 584, 24, 142, 22, 13,
                 GameConfig.TextGold, TextAnchor.MiddleRight, FontStyle.Bold);
@@ -117,8 +117,8 @@ namespace AutoBattle
 
             CreateText(panel, "MerchantFoot",
                 "购买后立即写入当前存档；单价 100 万以上的条目需要连点两次确认。",
-                24, 560, 560, 22, 11, GameConfig.TextMuted, TextAnchor.MiddleLeft);
-            CreateText(panel, "MerchantVersion", "收藏家等级按存档槽独立", 600, 560, 216, 22, 11,
+                24, 559, 560, 22, 12, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            CreateText(panel, "MerchantVersion", "收藏家等级按存档槽独立", 600, 559, 216, 22, 12,
                 GameConfig.TextMuted, TextAnchor.MiddleRight);
 
             SetMerchantTab(0);
@@ -144,14 +144,14 @@ namespace AutoBattle
                 _merchantSvcNames[i] = CreateText(card.transform, "Name", ShopCatalog.ServiceNames[i],
                     14, 8, 240, 22, 15, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
                 _merchantSvcPrices[i] = CreateText(card.transform, "Price", "",
-                    250, 9, 124, 20, 12, GameConfig.TextGoldDeep, TextAnchor.MiddleRight);
+                    246, 9, 128, 20, 13, GameConfig.TextGoldDeep, TextAnchor.MiddleRight, FontStyle.Bold);
                 _merchantSvcDescs[i] = CreateText(card.transform, "Desc", ShopCatalog.ServiceDescs[i],
-                    14, 32, 360, 44, 11, GameConfig.TextNormal, TextAnchor.UpperLeft);
+                    14, 32, 370, 46, 12, GameConfig.TextNormal, TextAnchor.UpperLeft);
                 _merchantSvcDescs[i].lineSpacing = 1.05f;
 
                 _merchantSvcButtons[i] = CreateButton(card.transform, "Buy", "购买",
                     272, 80, 102, 28, GameConfig.BtnNeutral, out Text label);
-                StyleBar(_merchantSvcButtons[i], label, "frame_pill", "glyph_buy", 13f, "购买服务", 11);
+                StyleBar(_merchantSvcButtons[i], label, "frame_pill", "glyph_buy", 13f, "购买服务", 12);
                 _merchantSvcBtnLabels[i] = label;
                 _merchantSvcButtons[i].onClick.AddListener(() => OnMerchantServiceButton(index));
             }
@@ -171,25 +171,25 @@ namespace AutoBattle
             {
                 int index = i;
                 float x = 24f + (i % 3) * 266f;
-                float y = 106f + (i / 3) * 86f;
-                Image card = CreateCard(page, "MerchantCos" + i, x, y, 258, 80,
+                float y = 106f + (i / 3) * 90f;
+                Image card = CreateCard(page, "MerchantCos" + i, x, y, 258, 84,
                     GameConfig.CardBg, RadiusCard, GameConfig.BorderSoft);
 
                 _merchantCosNames[i] = CreateText(card.transform, "Name", ShopCatalog.CosmeticNames[i],
-                    10, 5, 160, 20, 13, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+                    10, 5, 134, 20, 13, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
                 _merchantCosPrices[i] = CreateText(card.transform, "Price", "",
-                    164, 6, 84, 18, 11, GameConfig.TextGoldDeep, TextAnchor.MiddleRight);
+                    146, 5, 102, 20, 12, GameConfig.TextGoldDeep, TextAnchor.MiddleRight, FontStyle.Bold);
                 _merchantCosDescs[i] = CreateText(card.transform, "Desc", ShopCatalog.CosmeticDescs[i],
-                    10, 25, 238, 26, 10, GameConfig.TextNormal, TextAnchor.UpperLeft);
+                    10, 25, 238, 28, 11, GameConfig.TextNormal, TextAnchor.UpperLeft);
                 _merchantCosDescs[i].lineSpacing = 1.02f;
 
                 _merchantCosButtons[i] = CreateButton(card.transform, "Buy", "购买",
-                    10, 50, 112, 24, GameConfig.BtnNeutral, out Text label);
-                StyleBar(_merchantCosButtons[i], label, "frame_pill", "glyph_buy", 12f, "购买 / 装备", 10);
+                    10, 53, 112, 24, GameConfig.BtnNeutral, out Text label);
+                StyleBar(_merchantCosButtons[i], label, "frame_pill", "glyph_buy", 12f, "购买 / 装备", 11);
                 _merchantCosBtnLabels[i] = label;
                 _merchantCosButtons[i].onClick.AddListener(() => OnMerchantCosmeticClicked(index));
 
-                _merchantCosSwatches[i] = CreateImage(card.transform, "Swatch", 216, 50, 26, 24,
+                _merchantCosSwatches[i] = CreateImage(card.transform, "Swatch", 216, 53, 26, 24,
                     ShopCatalog.CosmeticColor(i));
                 Round(_merchantCosSwatches[i], 5);
             }

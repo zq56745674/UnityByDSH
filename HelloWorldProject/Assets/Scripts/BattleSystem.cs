@@ -139,6 +139,7 @@ namespace AutoBattle
 
         public void ResetSkillState()
         {
+            _carrySeconds = 0f;
             for (int i = 0; i < _activeCooldown.Length; i++) _activeCooldown[i] = 0f;
             _globalCooldown = 0f;
 
@@ -173,6 +174,18 @@ namespace AutoBattle
             _rockShieldTimer = 0f;
             _rockShieldAmount = 0;
             _rockArmorIcd = 0f;
+        }
+
+        /// <summary>
+        /// 技能换槽时把冷却一起搬走：冷却属于技能，不属于槽位。
+        /// 装卸/换槽不再调用 ResetSkillState（那会把主动、公共与保命冷却全部清零，
+        /// 玩家在暂停的技能面板里反复装卸就能刷新 60 秒一次的保命）。
+        /// </summary>
+        public void CarryActiveCooldown(int fromSlot, int toSlot)
+        {
+            if (fromSlot < 0 || toSlot < 0 || fromSlot == toSlot) return;
+            if (fromSlot >= _activeCooldown.Length || toSlot >= _activeCooldown.Length) return;
+            _activeCooldown[toSlot] = Mathf.Max(_activeCooldown[toSlot], _activeCooldown[fromSlot]);
         }
 
         public float GetActiveCooldown(int slot)
@@ -223,15 +236,22 @@ namespace AutoBattle
         public static float AttacksPerSecond(float speed, float haste = 0f) =>
             GameConfig.AttacksPerSecond(speed, haste);
 
-        /// <summary>当前实际出手间隔：装备攻速 + 雷印 + 风暴加速层数 + 雷霆突袭临时攻速。</summary>
+        /// <summary>
+        /// 当前实际出手间隔：装备攻速 + 雷印 + 风暴加速层数 + 雷霆突袭临时攻速。
+        /// 风暴加速每层数值与雷霆突袭攻速都走符文覆写——技能表里的静态值只当默认值。
+        /// </summary>
         private float CurrentAttackInterval(PlayerData player)
         {
             float haste = player.AttackSpeedBonus
                         + 0.015f * _stormMarks
-                        + 0.02f * _stormHasteStacks
-                        + (_rushHasteTimer > 0f ? SkillCatalog.Get(SkillId.ThunderRush).value3 : 0f);
+                        + player.PassiveValue2(SkillId.StormHaste) * _stormHasteStacks
+                        + (_rushHasteTimer > 0f ? RushHaste(player) : 0f);
             return GameConfig.AttackInterval(player.Speed, haste);
         }
+
+        private static float RushHaste(PlayerData player) =>
+            RuneMods.Field(player, SkillId.ThunderRush, RuneField.Value3,
+                SkillCatalog.Get(SkillId.ThunderRush).value3);
 
         public static int RollDamage(int attack, int defense, int defenderLevel,
             float critChance, float critDamage, out bool isCrit, float armorPen = 0f)
@@ -264,8 +284,12 @@ namespace AutoBattle
         private int EffectiveAttack(PlayerData player)
         {
             float mult = 1f;
-            if (_warCryTimer > 0f) mult += SkillCatalog.Get(SkillId.WarCry).value;
-            if (_bulwarkAttackTimer > 0f && player.shield > 0f) mult += SkillCatalog.Get(SkillId.Bulwark).value2;
+            if (_warCryTimer > 0f)
+                mult += RuneMods.Field(player, SkillId.WarCry, RuneField.Value,
+                    SkillCatalog.Get(SkillId.WarCry).value);
+            if (_bulwarkAttackTimer > 0f && player.shield > 0f)
+                mult += RuneMods.Field(player, SkillId.Bulwark, RuneField.Value2,
+                    SkillCatalog.Get(SkillId.Bulwark).value2);
             return Mathf.RoundToInt(player.Attack * mult);
         }
 
@@ -278,7 +302,10 @@ namespace AutoBattle
         private float EffectiveMonsterInterval(MonsterData monster)
         {
             float speed = monster.speed * (_suppressTimer > 0f ? 0.8f : 1f);
-            return GameConfig.AttackInterval(speed);
+            // 疾袭契约的攻速加成跟速度一样进「出手间隔」这一条路，不单开一套计时；
+            // 但乘在间隔上而不是塞进攻速加成，否则深层已撞上限的怪会完全免疫这条契约。
+            return GameConfig.AttackInterval(speed, monster.attackHaste)
+                 * Mathf.Max(0.05f, monster.attackIntervalMult);
         }
 
         private static int ApplyLifesteal(PlayerData player, int damageDealt)
@@ -286,16 +313,63 @@ namespace AutoBattle
             if (damageDealt <= 0 || player.Lifesteal <= 0f) return 0;
             if (player.currentHp <= 0) return 0;
 
+            // 枯竭契约：治疗量走同一个乘区（0 = 完全不回血）。
+            // 符文「血偿」：生命低于 40% 时吸血翻倍（乘在这里，不动 Lifesteal 本身）。
+            int heal = Mathf.RoundToInt(damageDealt * player.Lifesteal
+                                        * player.ContractHealMultiplier
+                                        * RuneMods.LifestealScale(player));
+            if (heal <= 0) return 0;
+
             int before = player.currentHp;
-            player.currentHp = Mathf.Min(player.MaxHp,
-                player.currentHp + Mathf.RoundToInt(damageDealt * player.Lifesteal));
+            player.currentHp = Mathf.Min(player.MaxHp, player.currentHp + heal);
             return player.currentHp - before;
         }
+
+        /// <summary>
+        /// 固定子步长上限。一帧不论多长、倍速多少，只用 ≤1/120 秒的等长子步推进：
+        /// 以前直接按 Time.deltaTime * SpeedMultiplier 推进，x1 / x2 / x4 与掉帧会得到不同的胜负
+        /// （审计 L1：同一个种子、同一份状态，步长不同结果就不同）。
+        /// </summary>
+        public const float MaxTickStep = 1f / 120f;
+
+        /// <summary>单帧最多补算的子步数。超过就丢时间——宁可慢放，也不要长卡顿后一帧算几百步。</summary>
+        private const int MaxSubStepsPerFrame = 32;
+
+        /// <summary>不足一个子步的余量，留到下一帧继续攒。</summary>
+        private float _carrySeconds;
 
         public BattleTickResult Tick(PlayerData player, MonsterData monster, float dt, BattleLog log)
         {
             if (player == null || monster == null) return BattleTickResult.Ongoing;
 
+            // 只推进整数个固定子步，余量留给下一帧：事件序列因此只取决于「已经过的时间」，
+            // 与帧率、与倍速（倍速只是让同样的时间更快流过）都无关。
+            if (dt > 0f) _carrySeconds += dt;
+            int steps = (int)(_carrySeconds / MaxTickStep);
+            if (steps <= 0) return BattleTickResult.Ongoing;
+
+            if (steps > MaxSubStepsPerFrame)
+            {
+                _carrySeconds = 0f;   // 长卡顿 / 后台挂起之后不补算，直接丢掉积压
+                steps = MaxSubStepsPerFrame;
+            }
+            else
+            {
+                _carrySeconds -= steps * MaxTickStep;
+            }
+
+            BattleTickResult result = BattleTickResult.Ongoing;
+            for (int i = 0; i < steps; i++)
+            {
+                result = TickStep(player, monster, MaxTickStep, log);
+                if (result != BattleTickResult.Ongoing) break;
+            }
+            return result;
+        }
+
+        /// <summary>一个固定子步内的结算：技能计时 → 主动施放 → 主角出手 → 怪物出手 → 保命 / 死亡判定。</summary>
+        private BattleTickResult TickStep(PlayerData player, MonsterData monster, float dt, BattleLog log)
+        {
             TickSkillTimers(player, dt, log);
             TryCastActiveSkills(player, monster, log);
 
@@ -344,10 +418,11 @@ namespace AutoBattle
                 SkillDef def = SkillCatalog.Get(SkillId.LastStand);
                 if (_lastStandCooldown <= 0f)
                 {
-                    _lastStandTimer = def.duration;
-                    _lastStandCooldown = def.cooldown;
+                    float window = RuneMods.Field(player, SkillId.LastStand, RuneField.Duration, def.duration);
+                    _lastStandTimer = window;
+                    _lastStandCooldown = RuneMods.Field(player, SkillId.LastStand, RuneField.Cooldown, def.cooldown);
                     player.currentHp = 1;
-                    log.AddCombat($"✦ 保命！保留 1 点生命，{def.duration:0} 秒内不会死亡", def.color);
+                    log.AddCombat($"✦ 保命！保留 1 点生命，{window:0.#} 秒内不会死亡", def.color);
                     RaiseVisual(BattleFx.SkillNearDeath, 1);
                 }
                 else if (_lastStandTimer > 0f)
@@ -414,6 +489,11 @@ namespace AutoBattle
             if (relicDamage != 1f)
                 dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * relicDamage));
 
+            // 深层契约 · 硬化：敌人吃伤害的乘区（同样不并入技能加算池）。
+            float monsterTaken = player.ContractMonsterDamageTakenMultiplier;
+            if (monsterTaken != 1f)
+                dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * monsterTaken));
+
             int absorbed;
             int hpDamage;
             SplitShield(ref monster.shield, dmg, out absorbed, out hpDamage);
@@ -444,12 +524,15 @@ namespace AutoBattle
             if (!player.HasSkill(SkillId.ThunderPunish) || monster.IsDead) return;
 
             _lightningHits++;
-            int need = Mathf.Max(2, SkillCatalog.Get(SkillId.ThunderPunish).hits);
+            SkillDef punish = SkillCatalog.Get(SkillId.ThunderPunish);
+            int need = Mathf.Max(2, Mathf.RoundToInt(
+                RuneMods.Field(player, SkillId.ThunderPunish, RuneField.Hits, punish.hits)));
             if (_lightningHits < need) return;
 
             _lightningHits = 0;
-            SkillDef def = SkillCatalog.Get(SkillId.ThunderPunish);
-            int dmg = HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * def.value),
+            SkillDef def = punish;
+            float punishMult = RuneMods.Field(player, SkillId.ThunderPunish, RuneField.Value, def.value);
+            int dmg = HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * punishMult),
                 false, out _, $"✦ {def.name}！", def.color, BattleFx.SkillGiantSlayer, false, log);
             if (dmg > 0) AddStormMark(player, 1);
         }
@@ -458,16 +541,19 @@ namespace AutoBattle
         {
             if (player.doctrine == 1 && player.HasSkill(SkillId.StormHaste))
             {
-                _stormHasteStacks = Mathf.Min(5, _stormHasteStacks + 1);
-                _stormHasteTimer = SkillCatalog.Get(SkillId.StormHaste).duration;
+                _stormHasteStacks = Mathf.Min(RuneMods.StormHasteMaxStacks(player), _stormHasteStacks + 1);
+                _stormHasteTimer = RuneMods.Field(player, SkillId.StormHaste, RuneField.Duration,
+                    SkillCatalog.Get(SkillId.StormHaste).duration);
             }
 
             if (player.doctrine == 1 && player.HasSkill(SkillId.Arc) && !monster.IsDead)
             {
                 SkillDef arc = SkillCatalog.Get(SkillId.Arc);
-                if (Random.value < arc.triggerChance)
+                float chance = RuneMods.Field(player, SkillId.Arc, RuneField.TriggerChance, arc.triggerChance);
+                if (Random.value < chance)
                 {
-                    HitMonster(player, monster, Mathf.RoundToInt(attack * arc.value), false, out _,
+                    float mult = RuneMods.Field(player, SkillId.Arc, RuneField.Value, arc.value);
+                    HitMonster(player, monster, Mathf.RoundToInt(attack * mult), false, out _,
                         $"✦ {arc.name}！", arc.color, BattleFx.SkillCritChain, true, log);
                 }
             }
@@ -495,7 +581,9 @@ namespace AutoBattle
         private void HealFromLightning(PlayerData player, BattleLog log)
         {
             if (player.currentHp <= 0 || player.currentHp >= player.MaxHp) return;
-            int heal = Mathf.Max(1, Mathf.RoundToInt(player.MaxHp * SkillCatalog.Get(SkillId.ThunderRush).value4));
+            int heal = Mathf.RoundToInt(player.MaxHp * SkillCatalog.Get(SkillId.ThunderRush).value4
+                                        * player.ContractHealMultiplier);
+            if (heal <= 0) return;
             int before = player.currentHp;
             player.currentHp = Mathf.Min(player.MaxHp, player.currentHp + heal);
             int healed = player.currentHp - before;
@@ -525,27 +613,41 @@ namespace AutoBattle
 
         private void CastThunderRush(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
         {
-            HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * def.value), false, out _,
+            float mult = RuneMods.Field(player, SkillId.ThunderRush, RuneField.Value, def.value);
+            int marks = Mathf.RoundToInt(RuneMods.Field(player, SkillId.ThunderRush, RuneField.Value2, def.value2));
+            float haste = RuneMods.Field(player, SkillId.ThunderRush, RuneField.Value3, def.value3);
+            string hasteNote = haste > 0f ? $"，攻速 +{haste * 100f:0}% {def.duration:0} 秒" : "";
+
+            HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * mult), false, out _,
                 $"✦ {def.name}！", def.color, BattleFx.SkillHeavy, true, log);
-            AddStormMark(player, Mathf.RoundToInt(def.value2));
-            _rushHasteTimer = def.duration;
-            log.AddCombat($"  ↳ 雷印 {_stormMarks}/{StormMarkMax}，攻速 +{def.value3 * 100f:0}% {def.duration:0} 秒",
-                def.color);
+            AddStormMark(player, marks);
+            if (haste > 0f) _rushHasteTimer = def.duration;
+            log.AddCombat($"  ↳ 雷印 {_stormMarks}/{StormMarkMax}{hasteNote}", def.color);
         }
 
         private void CastThunderGod(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
         {
             int marks = _stormMarks;
-            float mult = def.value + def.value2 * marks;
+            float perMark = RuneMods.Field(player, SkillId.ThunderGod, RuneField.Value2, def.value2);
+            float fullMult = RuneMods.Field(player, SkillId.ThunderGod, RuneField.Value3, def.value3);
+            float mult = def.value + perMark * marks;
             bool full = marks >= StormMarkMax;
-            if (full) mult *= def.value3;
+            if (full) mult *= fullMult;
 
             HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * mult), false, out _,
                 $"✦ {def.name}！", def.color, BattleFx.SkillHeavy, true, log);
             if (full)
             {
-                _activeCooldown[0] = 0f;
-                log.AddCombat("  ↳ 满雷印爆发，雷霆突袭冷却已重置", def.color);
+                // 符文「审罚」：满印爆发更狠，但不再重置雷霆突袭——两条收益只能选一条。
+                if (!RuneMods.SuppressFullMarkReset(player))
+                {
+                    _activeCooldown[0] = 0f;
+                    log.AddCombat("  ↳ 满雷印爆发，雷霆突袭冷却已重置", def.color);
+                }
+                else
+                {
+                    log.AddCombat("  ↳ 满雷印爆发（审罚：不重置雷霆突袭）", def.color);
+                }
             }
             log.AddCombat($"  ↳ 本次按 {marks} 层雷印结算（不消耗）", def.color);
         }
@@ -558,8 +660,18 @@ namespace AutoBattle
 
             HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * mult), false, out _,
                 $"✦ {def.name}！", def.color, BattleFx.SkillExecute, false, log);
-            ApplyArmorBreak(1f - def.value3, def.duration);
+            ApplyArmorBreak(1f - RuneMods.Field(player, SkillId.MountainSlam, RuneField.Value3, def.value3),
+                def.duration);
             _suppressTimer = Mathf.Max(_suppressTimer, def.duration2);
+
+            // 符文「余震」：按当前岩层数补一段，代价是破甲从 30% 砍到 15%。
+            float layerBonus = RuneMods.MountainSlamLayerBonus(player);
+            if (layerBonus > 0f && layers > 0 && !monster.IsDead)
+            {
+                HitMonster(player, monster, Mathf.RoundToInt(EffectiveAttack(player) * layerBonus * layers),
+                    false, out _, $"  ↳ 余震 ×{layers} 层", def.color, BattleFx.SkillCounter, false, log);
+            }
+
             if (!monster.IsDead) OnMountainHit(player, monster, EffectiveAttack(player), log);
         }
 
@@ -567,22 +679,26 @@ namespace AutoBattle
         {
             if (!player.HasSkill(SkillId.Aftershock) || monster.IsDead) return;
             SkillDef def = SkillCatalog.Get(SkillId.Aftershock);
-            if (Random.value >= def.triggerChance) return;
+            float chance = RuneMods.Field(player, SkillId.Aftershock, RuneField.TriggerChance, def.triggerChance);
+            if (Random.value >= chance) return;
 
-            float mult = def.value * (1f + player.MountainSkillDamageBonus);
+            float mult = RuneMods.Field(player, SkillId.Aftershock, RuneField.Value, def.value)
+                       * (1f + player.MountainSkillDamageBonus);
             HitMonster(player, monster, Mathf.RoundToInt(attack * mult), false, out _,
                 $"✦ {def.name}！", def.color, BattleFx.SkillCounter, false, log);
         }
 
         private void CastBulwark(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
         {
-            int amount = Mathf.RoundToInt(player.MaxHp * def.value);
+            float shieldPct = RuneMods.Field(player, SkillId.Bulwark, RuneField.Value, def.value);
+            float attackPct = RuneMods.Field(player, SkillId.Bulwark, RuneField.Value2, def.value2);
+            int amount = Mathf.RoundToInt(player.MaxHp * shieldPct);
             _bulwarkShieldAmount = amount;
             _bulwarkShieldTimer = def.duration;
             player.shield = Mathf.Max(player.shield, amount);
             _bulwarkAttackTimer = def.duration2;
 
-            log.AddCombat($"✦ {def.name}！护盾 {amount}，{def.duration:0} 秒；攻击 +{def.value2 * 100f:0}% {def.duration2:0} 秒",
+            log.AddCombat($"✦ {def.name}！护盾 {amount}，{def.duration:0} 秒；攻击 +{attackPct * 100f:0}% {def.duration2:0} 秒",
                 def.color);
             RaiseVisual(BattleFx.Shield, amount);
         }
@@ -590,7 +706,9 @@ namespace AutoBattle
         private void CastWarCry(PlayerData player, MonsterData monster, SkillDef def, BattleLog log)
         {
             _warCryTimer = def.duration;
-            log.AddCombat($"✦ {def.name}！攻击 +{def.value * 100f:0}%、受伤 -{def.value2 * 100f:0}% {def.duration:0} 秒",
+            float atk = RuneMods.Field(player, SkillId.WarCry, RuneField.Value, def.value);
+            float guard = RuneMods.Field(player, SkillId.WarCry, RuneField.Value2, def.value2);
+            log.AddCombat($"✦ {def.name}！攻击 +{atk * 100f:0}%、受伤 -{guard * 100f:0}% {def.duration:0} 秒",
                 def.color);
             RaiseVisual(BattleFx.Berserk);
         }
@@ -607,18 +725,29 @@ namespace AutoBattle
             }
 
             bool crit;
-            int dmg = RollDamage(monster.attack, player.Defense, player.level,
+            // 黑雾：护甲有效率被压，受击时按缩水后的防御算减伤（对肉装打击更大）。
+            float armorMult = player.ContractArmorEffectiveMult;
+            int incomingDefense = armorMult >= 1f
+                ? player.Defense
+                : Mathf.Max(0, Mathf.RoundToInt(player.Defense * Mathf.Max(0f, armorMult)));
+            int dmg = RollDamage(monster.attack, incomingDefense, player.level,
                 monster.critChance, monster.critDamage, out crit);
 
             if (_warCryTimer > 0f)
                 dmg = Mathf.Max(GameConfig.MinDamage,
-                    Mathf.RoundToInt(dmg * (1f - SkillCatalog.Get(SkillId.WarCry).value2)));
+                    Mathf.RoundToInt(dmg * (1f - RuneMods.Field(player, SkillId.WarCry, RuneField.Value2,
+                        SkillCatalog.Get(SkillId.WarCry).value2))));
 
             // 流派核心减伤：风暴按雷印层数、山崩按岩层数，资源越满越硬。
             float doctrineGuard = player.doctrine == 1 ? 0.03f * _stormMarks
                 : player.doctrine == 2 ? 0.06f * _mountainLayers : 0f;
             if (doctrineGuard > 0f)
                 dmg = Mathf.Max(GameConfig.MinDamage, Mathf.RoundToInt(dmg * (1f - doctrineGuard)));
+
+            // 符文「嗜血」：用受到伤害 +8% 换吸血 30%（乘法区，放在遗物受伤乘区之前）。
+            float runeTaken = RuneMods.TakenDamageMultiplier(player);
+            if (runeTaken != 1f)
+                dmg = Mathf.Max(GameConfig.MinDamage, Mathf.RoundToInt(dmg * runeTaken));
 
             // 深渊遗物：受伤乘区（铁壁 / 死斗）与残喘（低血额外减伤），排在流派减伤之后、护盾之前。
             float relicTaken = player.RelicDamageTakenMultiplier;
@@ -675,14 +804,17 @@ namespace AutoBattle
             if (player.HasSkill(SkillId.RockArmor) && _rockArmorIcd <= 0f)
             {
                 SkillDef def = SkillCatalog.Get(SkillId.RockArmor);
-                if (Random.value < def.triggerChance)
+                float chance = RuneMods.Field(player, SkillId.RockArmor, RuneField.TriggerChance, def.triggerChance);
+                if (Random.value < chance)
                 {
-                    int amount = Mathf.RoundToInt(player.MaxHp * def.value);
-                    int cap = Mathf.RoundToInt(player.MaxHp * def.value2);
+                    int amount = Mathf.RoundToInt(player.MaxHp *
+                        RuneMods.Field(player, SkillId.RockArmor, RuneField.Value, def.value));
+                    int cap = Mathf.RoundToInt(player.MaxHp *
+                        RuneMods.Field(player, SkillId.RockArmor, RuneField.Value2, def.value2));
                     _rockShieldAmount = Mathf.Min(amount, cap);
                     _rockShieldTimer = def.duration;
                     player.shield = Mathf.Max(player.shield, _rockShieldAmount);
-                    _rockArmorIcd = def.value3;
+                    _rockArmorIcd = RuneMods.Field(player, SkillId.RockArmor, RuneField.Value3, def.value3);
                     RaiseVisual(BattleFx.Shield, _rockShieldAmount);
                 }
             }
@@ -783,7 +915,7 @@ namespace AutoBattle
 
         private void CastActive(PlayerData player, MonsterData monster, SkillDef def, int slot, BattleLog log)
         {
-            _activeCooldown[slot] = def.cooldown;
+            _activeCooldown[slot] = RuneMods.Field(player, def.id, RuneField.Cooldown, def.cooldown);
             _globalCooldown = GameConfig.SkillGlobalCooldown;
 
             switch (def.id)

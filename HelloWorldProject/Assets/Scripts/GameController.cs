@@ -221,7 +221,7 @@ namespace AutoBattle
                 || SettingsOpen || MusicPanelOpen || GuideOpen || CompareOpen || EndlessPanelOpen || EndlessResultOpen
                 || RelicChoiceOpen
                 || RebirthPanelOpen || AchievementPanelOpen || AboutOpen || DisplayOpen || ShopPanelOpen
-                || DoctrinePanelOpen) return;
+                || DoctrinePanelOpen || RunePanelOpen || BestiaryPanelOpen) return;
 
             // 本世计时（v12）：暂停 / 浮层不计；刷怪等待、复活与商店倒计时都计真实秒。
             // 速度倍率不影响它，读的是 realDt；上限防手改档把计时写爆。
@@ -464,6 +464,8 @@ namespace AutoBattle
             DisplayOpen = false;
             ShopPanelOpen = false;
             DoctrinePanelOpen = false;
+            RunePanelOpen = false;
+            BestiaryPanelOpen = false;
             CancelShopConfirm();
         }
 
@@ -863,16 +865,19 @@ namespace AutoBattle
             slot = Mathf.Clamp(slot, 0, SaveSystem.SlotCount - 1);
             if (slot == SaveSystem.CurrentSlot) return;
 
-            // 换槽等于结束当前无尽局（不弹结果面板），再把战役进度落盘。
-            if (EndlessActive) EndEndlessRun(EndlessEndReason.SlotChanged);
-
+            // 顺序很重要：**先落盘，再结束无尽局**。Save 会失败、EndEndlessRun 不会，
+            // 反过来的话写盘一失败，本局已经掐掉、遗物与契约都没了，切槽却取消了（审计 L6）。
             // 当前进度先落盘，否则切走之后这一段就没了。
             // 写不进去就**不换槽**：换过去会立刻用目标槽覆盖内存，未落盘的成就/进度直接消失。
             if (!SaveSystem.Save(Player))
             {
-                AddLog("⚠ 存档写入失败，已取消切换存档槽（当前进度仍在本槽，稍后再试）", GameConfig.LogWarn);
+                AddLog("⚠ 存档写入失败，已取消切换存档槽（当前进度与当前无尽局都还在，稍后再试）", GameConfig.LogWarn);
                 return;
             }
+
+            // 换槽等于结束当前无尽局（不弹结果面板）。换档掐局不给契约分，也不占历史榜。
+            if (EndlessActive) EndEndlessRun(EndlessEndReason.SlotChanged);
+
             SaveSystem.SelectSlot(slot);
 
             Player = new PlayerData();
@@ -954,6 +959,10 @@ namespace AutoBattle
                 source = SaveSystem.ExportPathOf(SaveSystem.CurrentSlot);
             }
 
+            // 写之前先留一份原槽原文：万一写进去的内容 Load 读不回来，原样退回，
+            // 不能让「导入失败」变成「原档被覆盖」（审计 L5）。
+            string backupJson = SaveSystem.SnapshotSlot(SaveSystem.CurrentSlot);
+
             if (!SaveSystem.TryImport(SaveSystem.CurrentSlot, text, out string error))
             {
                 AddLog($"⚠ 导入失败：{error}", GameConfig.LogWarn);
@@ -973,12 +982,18 @@ namespace AutoBattle
                 AddLog($"⇩ 已从{source}导入存档 {SaveSystem.CurrentSlot + 1}：Lv.{Player.level}  {Player.CurrentStage.Title}  金币 {Player.gold:N0}",
                     GameConfig.LogSuccess);
                 EnsureEquipmentSlotStarters();
+                ShowBanner("存档已导入", "当前槽已按导入内容重载");
+                return;
             }
-            else
-            {
-                AddLog("⚠ 导入已写入但读回失败，已按新档开始；坏内容备份在 " + SaveSystem.BackupSuffix + " 键下", GameConfig.LogWarn);
-            }
-            ShowBanner("存档已导入", "当前槽已按导入内容重载");
+
+            // 读回失败：把导入前的原文写回去，再按新档重开，避免停在一个半坏状态。
+            SaveSystem.RestoreSlotSnapshot(SaveSystem.CurrentSlot, backupJson);
+            Player = new PlayerData();
+            Player.FillHp();
+            _loadedFromSave = false;
+            ResetSessionState();
+            AddLog("⚠ 导入失败：内容读不回来，已恢复导入前的存档。", GameConfig.LogWarn);
+            ShowBanner("导入失败", "内容不可读，已恢复导入前的存档");
         }
 
         /// <summary>删除某个存档槽（当前槽被删则回到该槽的新游戏状态）。</summary>
@@ -1084,7 +1099,9 @@ namespace AutoBattle
 
         /// <summary>
         /// 把技能装到指定槽位。槽位与技能类别必须匹配（0~1 主动、2~3 被动、4~5 触发）；
-        /// 技能还需要已经通过巅峰获得（100 级前没有任何技能）。装配后会重置技能冷却。
+        /// 技能还需要已经通过巅峰获得（100 级前没有任何技能）。
+        /// 装卸**不会**清冷却：冷却跟着技能走（换槽时搬过去），否则暂停面板里反复装卸
+        /// 就能刷新主动技能与 60 秒一次的保命（审计 L2）。
         /// </summary>
         public bool EquipSkill(int slot, SkillId id)
         {
@@ -1116,7 +1133,7 @@ namespace AutoBattle
             if (old >= 0) Player.SetSkillSlot(old, -1);
 
             Player.SetSkillSlot(slot, (int)id);
-            _battle.ResetSkillState();
+            if (old >= 0) _battle.CarryActiveCooldown(old, slot);
 
             AddLog($"◆ 已装备技能：{def.name}", def.color);
             Debug.Log($"[AutoBattle] 装备技能 {def.name} 到槽位 {slot}");
@@ -1132,8 +1149,8 @@ namespace AutoBattle
             int id = Player.GetSkillSlot(slot);
             if (id < 0) return;
 
+            // 只清槽位引用：冷却留在槽上，重新装回同一技能不会白拿一次释放。
             Player.SetSkillSlot(slot, -1);
-            _battle.ResetSkillState();
 
             AddLog($"◆ 已卸下技能：{SkillCatalog.All[id].name}", GameConfig.LogInfo);
             EvaluateAchievements();
@@ -1323,9 +1340,16 @@ namespace AutoBattle
         /// <summary>喝下一瓶生命药剂：按最大生命的比例回血，并进入冷却。</summary>
         private void UsePotion()
         {
-            Player.potionCount--;
+            int healAmount = Mathf.RoundToInt(
+                Player.MaxHp * GameConfig.PotionHealPercent * Player.ContractHealMultiplier);
+            // 枯竭 Ⅲ：完全回不了血。别白扣药剂，进冷却后就当这次自动喝药被压掉了。
+            if (healAmount <= 0)
+            {
+                _potionCooldownTimer = GameConfig.PotionCooldown;
+                return;
+            }
 
-            int healAmount = Mathf.RoundToInt(Player.MaxHp * GameConfig.PotionHealPercent);
+            Player.potionCount--;
             int hpBefore = Player.currentHp;
             Player.currentHp = Mathf.Min(Player.MaxHp, Player.currentHp + healAmount);
             int healed = Player.currentHp - hpBefore;
@@ -1723,12 +1747,17 @@ namespace AutoBattle
         /// </summary>
         private int GrantKillReward(int rewardLevel = -1)
         {
+            // 屠魔录按**真实**怪等级归族：无尽里 rewardLevel 被封顶到 150，
+            // 拿它归族会把深层全部算进最后一族。
+            RecordBestiaryKill(Monster.level, Monster.type, Monster.tier);
+
             int level = rewardLevel > 0 ? rewardLevel : Monster.level;
             int reward = GameConfig.MonsterExpReward(level, Monster.type, Monster.tier);
             AddLog($"☠ 击杀 {Monster.Title}，获得 {reward} 经验", GameConfig.LogGold);
 
             int healAmount = Mathf.RoundToInt(
-                Player.MaxHp * GameConfig.MonsterTierHealOnKillPercent[(int)Monster.tier]);
+                Player.MaxHp * GameConfig.MonsterTierHealOnKillPercent[(int)Monster.tier]
+                * Player.ContractHealMultiplier);
             int hpBefore = Player.currentHp;
             Player.currentHp = Mathf.Min(Player.MaxHp, Player.currentHp + healAmount);
             int healed = Player.currentHp - hpBefore;

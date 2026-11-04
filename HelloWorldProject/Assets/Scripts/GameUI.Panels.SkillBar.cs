@@ -26,6 +26,14 @@ namespace AutoBattle
             RefreshSkillPanel();
         }
 
+        /// <summary>技能面板右上角的「符文」：直接切到巅峰符文面板（两者互斥，控制器里统一关）。</summary>
+        private void OnSkillPanelRuneClicked()
+        {
+            _game.OpenRunePanel();
+            GameAudio.PlayUiOpen();
+            RefreshSkillPanel();
+        }
+
         /// <summary>
         /// 点击技能池卡片：未掌握 → 花 1 技能点学习并自动装空槽；
         /// 已掌握 → 装到当前槽位（类别不符则放进同类空槽），再点一次卸下。

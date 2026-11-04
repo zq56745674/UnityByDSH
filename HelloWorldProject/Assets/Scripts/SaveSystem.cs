@@ -27,10 +27,13 @@ namespace AutoBattle
         /// v12：加入本世计时（lifeSeconds）与最快轮回 Top-5（rebirthTop）；
         /// v13：加入成就点兑换的无尽起始层等级（endlessStartRank）；
         /// v14：加入营地行商（收藏家等级 / 服务 / 珍藏 / 外观 / 自动出售）；
-        /// v15：加入技能流派（doctrine）与跨世技能掩码（skillEverMask）。
+        /// v15：加入技能流派（doctrine）与跨世技能掩码（skillEverMask）；
+        /// v16：加入累计深层契约分（contractScore）；
+        /// v17：加入巅峰符文（runeUnlockMask / runeFormMask）；
+        /// v18：加入屠魔录击杀数组（bestiaryKills，44 条）。
         /// 旧档缺 version 字段时读到 0，据此判断需要迁移。
         /// </summary>
-        private const int CurrentSaveVersion = 15;
+        private const int CurrentSaveVersion = 18;
 
         /// <summary>成就状态结构版本；比它新的档拒绝读取，避免旧版本覆盖新结构。</summary>
         public const int CurrentAchievementSchema = 1;
@@ -386,9 +389,21 @@ namespace AutoBattle
                 && (t.Contains("\"version\"") || t.Contains("\"format\""));
         }
 
+        /// <summary>导入前抓一份原槽原文；导入后读回失败时要原样写回。</summary>
+        public static string SnapshotSlot(int slot) => PlayerPrefs.GetString(KeyOf(slot), string.Empty);
+
+        /// <summary>把快照原样写回（原槽本来是空的就删键）。PlayerPrefs 不是事务存储，这层兜底只能靠调用方。</summary>
+        public static void RestoreSlotSnapshot(int slot, string json)
+        {
+            if (string.IsNullOrEmpty(json)) PlayerPrefs.DeleteKey(KeyOf(slot));
+            else PlayerPrefs.SetString(KeyOf(slot), json);
+            PlayerPrefs.Save();
+        }
+
         /// <summary>
         /// 把一段文本（导出信封或裸 SaveData）导进指定槽。**只写 PlayerPrefs，不动内存里的 Player**：
         /// 调用方负责重新 Load 与清会话状态，避免出现「内存是旧档、磁盘是新档」的半新半旧。
+        /// 所有能在写盘前判定的兼容性问题都在这里拒绝（见审计 L5）。
         /// </summary>
         public static bool TryImport(int slot, string text, out string error)
         {
@@ -432,6 +447,16 @@ namespace AutoBattle
             if (data.level < 1 && data.paragonLevel <= 0 && data.rebirthCount <= 0)
             {
                 error = "存档内容不完整（等级 / 巅峰 / 转生全为空），已拒绝导入";
+                return false;
+            }
+            // 成就子结构有自己的版本。Load 会拒绝它，但导入此前已经先覆盖了原槽，
+            // 于是「导入失败」的代价是原档没了（审计 L5）：兼容性检查必须在写盘之前做，
+            // 且必须与 Load 的判据完全一致。
+            if (data.version >= 10 && data.achievements != null
+                && data.achievements.schemaVersion > CurrentAchievementSchema)
+            {
+                error = "成就状态版本 " + data.achievements.schemaVersion + " 高于当前支持的 "
+                    + CurrentAchievementSchema + "，已拒绝导入（原存档未改动）";
                 return false;
             }
 
@@ -514,6 +539,16 @@ namespace AutoBattle
 
             /// <summary>v13 起：成就点兑换的无尽起始层等级（0~3）。</summary>
             public int endlessStartRank;
+
+            /// <summary>v16 起：累计深层契约分（跨局、跨转生永久保留）。</summary>
+            public int contractScore;
+
+            /// <summary>v17 起：已解锁巅峰符文的技能掩码与形态掩码（转生不清）。</summary>
+            public int runeUnlockMask;
+            public int runeFormMask;
+
+            /// <summary>v18 起：屠魔录 44 条各自的累计击杀数（转生不清）。</summary>
+            public int[] bestiaryKills;
 
             /// <summary>v12 起：本世真实秒数（用于最快轮回榜）。</summary>
             public float lifeSeconds;
@@ -601,6 +636,10 @@ namespace AutoBattle
                 endlessBestFloor = Mathf.Clamp(player.endlessBestFloor, 0, 9999),
                 endlessTop = EndlessHistory.CopyTop(player.endlessTop),
                 endlessStartRank = Mathf.Clamp(player.endlessStartRank, 0, AchievementSystem.MaxEndlessStartRank),
+                contractScore = Mathf.Clamp(player.contractScore, 0, 1000000000),
+                runeUnlockMask = player.runeUnlockMask & ((1 << SkillCatalog.All.Length) - 1),
+                runeFormMask = player.runeFormMask & ((1 << SkillCatalog.All.Length) - 1),
+                bestiaryKills = BestiaryCatalog.Sanitize(player.bestiaryKills),
                 lifeSeconds = Mathf.Clamp(player.lifeSeconds, 0f, RebirthHistory.MaxSeconds),
                 rebirthTop = RebirthHistory.CopyTop(player.rebirthTop),
                 rebirthCount = player.rebirthCount,
@@ -810,9 +849,6 @@ namespace AutoBattle
             if (player.boots == null) player.slotStarterMask &= ~(1 << (int)EquipmentSlot.Boots);
             if (player.accessory == null) player.slotStarterMask &= ~(1 << (int)EquipmentSlot.Accessory);
 
-            // 生命必须夹在当前等级的真实上限内（装备变动后上限会变）。
-            player.currentHp = Mathf.Clamp(data.currentHp, 1, Mathf.Max(1, player.MaxHp));
-
             // v7：无尽最高层。老档没有这项就是 0（未解锁）。顺手把它回填到全局纪录：
             // 全局纪录用于「删档也不丢本机最好成绩」，以本档纪录为下界。
             int endlessBest = data.version >= 7 ? Mathf.Clamp(data.endlessBestFloor, 0, 9999) : 0;
@@ -829,6 +865,20 @@ namespace AutoBattle
             player.endlessStartRank = data.version >= 13
                 ? Mathf.Clamp(data.endlessStartRank, 0, AchievementSystem.MaxEndlessStartRank)
                 : 0;
+
+            // v16：累计深层契约分。旧档没有这项，读 0（遗物回到 6 槽、只出第一档）。
+            player.contractScore = data.version >= 16 ? Mathf.Clamp(data.contractScore, 0, 1000000000) : 0;
+
+            // v17：巅峰符文。旧档没有这两项，读 0（= 一个符文都没解锁）；形态掩码只能落在
+            // 已解锁的位上，未解锁的位读出来也不生效，这里仍按全掩码裁一遍防手改档越界。
+            player.runeUnlockMask = data.version >= 17 ? (data.runeUnlockMask & allSkillMask) : 0;
+            player.runeFormMask = data.version >= 17 ? (data.runeFormMask & allSkillMask) : 0;
+
+            // v18：屠魔录。旧档没有这项，读成全 0（= 一条都没见过）；
+            // 长度不足/超长或负数都靠 Sanitize 修，不信任存档里的数组形状。
+            player.bestiaryKills = data.version >= 18
+                ? BestiaryCatalog.Sanitize(data.bestiaryKills)
+                : new int[BestiaryCatalog.EntryCount];
 
             // v12：本世计时与最快轮回榜。旧档没有这两项：计时从 0 开始，榜为空。
             // 计时还要挡住 NaN / Infinity / 负数（手改档或坏 JSON），否则会污染耗时榜。
@@ -952,6 +1002,10 @@ namespace AutoBattle
             if (player.equippedBackdrop >= 0 && !ShopCatalog.HasCosmetic(player, player.equippedBackdrop)) player.equippedBackdrop = -1;
             if (player.equippedDamage >= 0 && !ShopCatalog.HasCosmetic(player, player.equippedDamage)) player.equippedDamage = -1;
             if (player.equippedAccent >= 0 && !ShopCatalog.HasCosmetic(player, player.equippedAccent)) player.equippedAccent = -1;
+
+            // 生命必须夹在当前等级的真实上限内。**必须放在最后**：MaxHp 还吃 paragonLevel
+            // 与 rebirthBattleRank，而这两项在函数中段才读入；早钳会让满血的转生档每次读档掉血。
+            player.currentHp = Mathf.Clamp(data.currentHp, 1, Mathf.Max(1, player.MaxHp));
 
             return true;
         }

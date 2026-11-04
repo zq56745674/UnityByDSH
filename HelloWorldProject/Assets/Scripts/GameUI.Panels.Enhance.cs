@@ -24,7 +24,7 @@ namespace AutoBattle
 
             CreateText(_enhancePanel, "EnhancePanelHint",
                 "强化只提升主属性，不影响暴击、暴击伤害与副词条。点顶部标签切换槽位。",
-                20, 42, 640, 22, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+                20, 42, 640, 22, 13, GameConfig.TextInfoDeep, TextAnchor.MiddleLeft);
 
             _enhanceSlotButtons = new Button[EquipmentSlots.Count];
             _enhanceSlotLabels = new Text[EquipmentSlots.Count];
@@ -39,7 +39,7 @@ namespace AutoBattle
             }
 
             CreatePanel(_enhancePanel, "EnhanceCardBox", 20, 112, 640, 196, GameConfig.CardBg);
-            _enhanceCardLabel = CreateText(_enhancePanel, "EnhanceCard", "", 34, 118, 600, 184, 13,
+            _enhanceCardLabel = CreateText(_enhancePanel, "EnhanceCard", "", 34, 118, 600, 184, 14,
                 GameConfig.TextNormal, TextAnchor.UpperLeft);
             _enhanceCardLabel.lineSpacing = 1.15f;
 
@@ -331,7 +331,7 @@ namespace AutoBattle
 
             CreateText(_reforgePanel, "ReforgePanelHint",
                 "点词条行锁定/解锁：锁住的不重抽，每多锁一条费用 ×3；至少要留一条不锁。",
-                20, 44, 640, 36, 13, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+                20, 44, 640, 36, 13, GameConfig.TextInfoDeep, TextAnchor.MiddleLeft);
 
             int affixKinds = GameConfig.EquipAffixNames.Length;
 
@@ -352,7 +352,7 @@ namespace AutoBattle
             }
 
             CreatePanel(_reforgePanel, "ReforgeCardBox", 20, 112, 640, 262, GameConfig.CardBg);
-            _reforgeCardLabel = CreateText(_reforgePanel, "ReforgeCard", "", 34, 118, 600, 44, 14,
+            _reforgeCardLabel = CreateText(_reforgePanel, "ReforgeCard", "", 34, 118, 600, 44, 15,
                 GameConfig.TextNormal, TextAnchor.UpperLeft, FontStyle.Bold);
 
             for (int j = 0; j < affixKinds; j++)
@@ -377,19 +377,19 @@ namespace AutoBattle
 
             // 右侧信息栏：把卡片右半边原来空着的区域用来解释容量、质量分档与锁定倍率。
             // 左列词条行因此收窄到 372（一行最长约「◆ 已锁  暴击伤害 +38.2%」，不会折行）。
-            _reforgeInfoText = CreateText(_reforgePanel, "ReforgeInfo", "", 418, 168, 236, 204, 11,
-                GameConfig.TextMuted, TextAnchor.UpperLeft);
+            _reforgeInfoText = CreateText(_reforgePanel, "ReforgeInfo", "", 418, 168, 236, 204, 12,
+                GameConfig.TextNormal, TextAnchor.UpperLeft);
             _reforgeInfoText.lineSpacing = 1.15f;
 
             _reforgeQualityLabel = CreateText(_reforgePanel, "ReforgeQuality", "",
-                34, 302, 372, 20, 12, GameConfig.TextInfo, TextAnchor.MiddleLeft);
+                34, 302, 372, 20, 12, GameConfig.TextInfoDeep, TextAnchor.MiddleLeft);
             AttachTooltip(_reforgeQualityLabel.rectTransform,
                 "词条质量：每条副词条在其数值区间里的百分位平均，0~100%。\n" +
                 "≥85% 极品，≥70% 优秀，≥50% 合格，<50% 偏低。\n" +
                 "质量只用于比较好坏，不参与评分与战斗计算。");
 
             _reforgeCostLabel = CreateText(_reforgePanel, "ReforgeCost", "",
-                34, 326, 372, 20, 12, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+                34, 326, 372, 20, 12, GameConfig.TextNormal, TextAnchor.MiddleLeft);
 
             _reforgeActionButton = CreateButton(_reforgePanel, "ReforgeAction", "洗练", 34, 350, 200, 30,
                 GameConfig.BtnGold, out _reforgeActionLabel);

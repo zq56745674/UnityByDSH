@@ -395,12 +395,14 @@ namespace AutoBattle.EditorTools
         public static string RunStaticOnly(string baselinePath = null)
         {
             if (string.IsNullOrEmpty(baselinePath)) baselinePath = DefaultBaselinePath;
-            if (!File.Exists(baselinePath)) return $"还没有基线，先跑一次完整版：{baselinePath}";
+            // 缺基线 / 读不出来是**失败**，不是「跳过」：调用方（CI 与测试）都以 PASS 前缀判定，
+            // 旧文案不带 FAIL 会被当通过（审计 L7）。
+            if (!File.Exists(baselinePath)) return $"FAIL — 还没有基线，先跑一次完整版：{baselinePath}";
 
             Report old;
             try { old = JsonUtility.FromJson<Report>(File.ReadAllText(baselinePath)); }
-            catch (Exception ex) { return $"基线读不出来（{ex.GetType().Name}: {ex.Message}）"; }
-            if (old == null) return "基线为空";
+            catch (Exception ex) { return $"FAIL — 基线读不出来（{ex.GetType().Name}: {ex.Message}）"; }
+            if (old == null) return "FAIL — 基线为空";
 
             var cur = Collect(1, 1, DefaultSeed, withWinrate: false);
             var sb = new StringBuilder();

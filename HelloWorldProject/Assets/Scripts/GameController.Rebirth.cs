@@ -250,14 +250,9 @@ namespace AutoBattle
                 if (EquipmentSlots.IsMinor(keptSlot)) Player.slotStarterMask |= 1 << (int)keptSlot;
             }
 
-            Player.ownedSkillMask = 0;
-            Player.pendingSkillPicks = 0;
-            Player.skillActive0 = -1;
-            Player.skillActive1 = -1;
-            Player.skillPassive0 = -1;
-            Player.skillPassive1 = -1;
-            Player.skillTrigger0 = -1;
-            Player.skillTrigger1 = -1;
+            // 本世技能与流派一起清空：doctrine 必须归 0，否则下一世 P10 不会弹流派选择，
+            // 玩家会带着上一世的流派核心重开（skillEverMask 是跨世记录，函数里不动它）。
+            Player.ResetSkillsForRebirth();
 
             // 5) 清本局临时状态、统计、浮层与日志；ResetSessionState 会 CloseAllPanels。
             // 计时归零；rebirthTop 不清（跨世保留）。FillHp 放在保留装备之后，按新上限满血。

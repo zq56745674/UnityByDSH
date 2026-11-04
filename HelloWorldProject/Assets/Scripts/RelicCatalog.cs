@@ -101,6 +101,8 @@ namespace AutoBattle
         public const float LowHpThreshold = 0.3f;
 
         public const int Tier1Count = 12;
+        public const int Tier2Count = 6;
+        public const int Tier3Count = 6;
 
         private static readonly RelicDef[] Pool =
         {
@@ -148,20 +150,20 @@ namespace AutoBattle
             new RelicDef
             {
                 id = 6, name = "金脉", cls = RelicClass.Greed,
-                text = "获得的金币 +12%",
-                goldMult = 1.12f,
+                text = "获得的金币 +12%，最大生命 +2%",
+                goldMult = 1.12f, maxHpMult = 1.02f,
             },
             new RelicDef
             {
                 id = 7, name = "拾荒者之手", cls = RelicClass.Greed,
-                text = "装备掉落率 +6%",
-                dropBonus = 0.06f,
+                text = "装备掉落率 +6%，造成的伤害 +1.5%",
+                dropBonus = 0.06f, damageMult = 1.015f,
             },
             new RelicDef
             {
                 id = 8, name = "远见", cls = RelicClass.Greed,
-                text = "获得的经验 +8%",
-                expMult = 1.08f,
+                text = "获得的经验 +8%，受到的伤害 -2%",
+                expMult = 1.08f, damageTakenMult = 0.98f,
             },
 
             // ---- 险：双刃 ----
@@ -183,6 +185,82 @@ namespace AutoBattle
                 text = "造成的伤害 +9%，受到的伤害 +6%",
                 damageMult = 1.09f, damageTakenMult = 1.06f,
             },
+
+            // ---- 第二档：累计契约分 300 起进入三选一（单件 ≈ +6% 战力） ----
+            new RelicDef
+            {
+                id = 12, name = "裂空之刃", cls = RelicClass.Edge, tier = 2,
+                text = "造成的伤害 +6%",
+                damageMult = 1.06f,
+            },
+            new RelicDef
+            {
+                id = 13, name = "猎杀之瞳", cls = RelicClass.Edge, tier = 2,
+                text = "暴击伤害 +9%",
+                critDamageAdd = 0.09f,
+            },
+            new RelicDef
+            {
+                id = 14, name = "疾风战纹", cls = RelicClass.Edge, tier = 2,
+                text = "攻击速度 +4.5%",
+                hasteAdd = 0.045f,
+            },
+            new RelicDef
+            {
+                id = 15, name = "血契", cls = RelicClass.Guard, tier = 2,
+                text = "造成伤害的 2% 回复为生命",
+                lifestealAdd = 0.02f,
+            },
+            new RelicDef
+            {
+                id = 16, name = "铁誓", cls = RelicClass.Guard, tier = 2,
+                text = "受到的伤害 -4.5%",
+                damageTakenMult = 0.955f,
+            },
+            new RelicDef
+            {
+                id = 17, name = "临渊", cls = RelicClass.Guard, tier = 2,
+                text = "生命低于 30% 时，受到的伤害再 -18%",
+                lowHpReduction = 0.18f,
+            },
+
+            // ---- 第三档：累计契约分 1500 起进入三选一（单件 ≈ +9% 战力） ----
+            new RelicDef
+            {
+                id = 18, name = "深渊裂石", cls = RelicClass.Edge, tier = 3,
+                text = "造成的伤害 +8%",
+                damageMult = 1.08f,
+            },
+            new RelicDef
+            {
+                id = 19, name = "死神之眼", cls = RelicClass.Edge, tier = 3,
+                text = "暴击伤害 +12%",
+                critDamageAdd = 0.12f,
+            },
+            new RelicDef
+            {
+                id = 20, name = "风暴护腕", cls = RelicClass.Edge, tier = 3,
+                text = "攻击速度 +6%",
+                hasteAdd = 0.06f,
+            },
+            new RelicDef
+            {
+                id = 21, name = "血海之器", cls = RelicClass.Guard, tier = 3,
+                text = "造成伤害的 3% 回复为生命",
+                lifestealAdd = 0.03f,
+            },
+            new RelicDef
+            {
+                id = 22, name = "不破之壁", cls = RelicClass.Guard, tier = 3,
+                text = "受到的伤害 -6%",
+                damageTakenMult = 0.94f,
+            },
+            new RelicDef
+            {
+                id = 23, name = "向死而生", cls = RelicClass.Risk, tier = 3,
+                text = "造成的伤害 +14%，受到的伤害 +8%",
+                damageMult = 1.14f, damageTakenMult = 1.08f,
+            },
         };
 
         public static RelicDef Get(int id)
@@ -197,7 +275,7 @@ namespace AutoBattle
         /// 用 <see cref="System.Random"/> 而不是 UnityEngine.Random：后者是全局流，
         /// 战斗里的暴击/掉落也在消耗它，同一个种子换一条战斗路径就会抽出不同遗物。
         /// </summary>
-        public static List<int> RollChoices(int seed, int floor, IList<int> owned)
+        public static List<int> RollChoices(int seed, int floor, IList<int> owned, int maxTier = 1)
         {
             var result = new List<int>(ChoiceCount);
             int[] order = new int[Pool.Length];
@@ -215,14 +293,16 @@ namespace AutoBattle
 
             for (int i = 0; i < order.Length && result.Count < ChoiceCount; i++)
             {
+                RelicDef def = Get(order[i]);
+                if (def == null || def.tier > maxTier) continue;
                 if (owned != null && owned.Contains(order[i])) continue;
                 result.Add(order[i]);
             }
             return result;
         }
 
-        /// <summary>本局该有几格：v1 固定 6（后续按契约分扩到 7/8，B 落地时改这里）。</summary>
-        public static int SlotsFor(int contractScore) => SlotCount;
+        /// <summary>本局该有几格：累计契约分 800 → 7 格，3000 → 8 格（见 <see cref="ContractCatalog.RelicSlots"/>）。</summary>
+        public static int SlotsFor(int contractScore) => ContractCatalog.RelicSlots(contractScore);
 
         /// <summary>这一层清完要不要弹三选一。</summary>
         public static bool ShouldOffer(int clearedFloor)

@@ -25,6 +25,9 @@ namespace AutoBattle.EditorTools
         [MenuItem("Tools/测试/成就 §11 回归（探针）")]
         private static void MenuProbes() { Debug.Log(RunProbes()); }
 
+        /// <summary>最近一次 RunCore/RunProbes 的失败条数；调用方（QuickRegression）按它判 PASS，不解析文案。</summary>
+        public static int LastFailCount => _fail;
+
         public static string RunCore()
         {
             Reset();

@@ -500,7 +500,7 @@ B9 的「重抽 / 禁选 / 标签」能让三选一不那么难受，但候选�
 | skillEverMask | int | 15 位 | **跨世**见过的技能；只增不减，用于成就 |
 | skillActive0/1、skillPassive0/1、skillTrigger0/1 | int | -1~14 | 槽位；旧档迁移时清空后按毕业 build 重装 |
 
-- SaveSystem.CurrentSaveVersion=15；SaveData 增加 doctrine、skillEverMask；Load 夹取 doctrine 0~2，ownedSkillMask/skillEverMask 与 allSkillMask 按位与。
+- SaveSystem.CurrentSaveVersion=15（当时口径；当前 v16，v16 只加深层契约分）；SaveData 增加 doctrine、skillEverMask；Load 夹取 doctrine 0~2，ownedSkillMask/skillEverMask 与 allSkillMask 按位与。
 - 不新增「已选次数」字段：用 paragonLevel 与 ownedSkillMask 推导待选次数（expectedPicks = clamp((paragonLevel-10)/10, 0, 9)）。
 - skills.json 仍 15 条；SkillCatalog.Loader 的条目数校验不变；SkillId 0~14 重排（见 §7）。
 
@@ -797,6 +797,14 @@ B9 的「重抽 / 禁选 / 标签」能让三选一不那么难受，但候选�
 - `pendingSkillPicks` 仅作为 v15 旧字段保留并固定 0，不再驱动 UI。
 - 技能点不能存起来跨世使用；P100 后没有新的技能点，巅峰只加基础属性。B9 的重抽/禁选仍未做。
 
+## 19. 巅峰符文（2026-11-04，存档 v17）
+
+§13.1 里被推迟的「技能符文（改变一个机制，不加大数字）」现由 C 方案落地，编号 B13。规则与验收见 [docs/gameplay-expansion.md](gameplay-expansion.md) §6，这里只记与本文相关的三条边界：
+
+1. **形态不是技能等级**：`GameConfig.SkillLevelScale` 仍为 0，符文只把 `SkillDef` 的某个字段换成另一个常数（`RuneMods.Field(p, id, RuneField, 基础值)`），或翻转一条机制开关（满印是否重置、风暴加速层上限、余震层数补伤、受伤乘区、低血吸血翻倍）。
+2. **被动技能全部自动吃符文**：`PlayerData.PassiveValue/2/3/4` 与 `SkillCritChanceBonus` 都走 `RuneMods.Field`，所以静电流/风暴加速/钢铁之躯/沉重打击/吸血这类派生属性不需要任何额外接线。
+3. **解锁随存档、跨转生保留**：点数由巅峰派生（每 100 级 1 点，满 10 点），但「解锁了哪几个技能、选的甲还是乙」落盘在 `runeUnlockMask` / `runeFormMask`（v17）；`ResetSkillsForRebirth()` 只清技能与六槽，不清符文。
+
 ---
 
-*本稿已按 §17、§18 落地；后续改动请同时更新本节与 `docs/roadmap.md` 的 B9 状态。*
+*本稿已按 §17、§18、§19 落地；后续改动请同时更新本节与 `docs/roadmap.md` 的 B9 / B13 状态。*

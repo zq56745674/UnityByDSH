@@ -182,13 +182,34 @@ namespace AutoBattle
         /// <summary>触发这次三选一的层号（面板标题与日志用）。</summary>
         public int relicPendingFloor;
 
-        /// <summary>槽位上限（v1 固定 6，B 落地后按契约分扩到 7/8）。</summary>
-        public int RelicSlots => RelicCatalog.SlotsFor(0);
+        /// <summary>本局槽位上限（6 起；累计契约分 800 / 3000 扩到 7 / 8，开局算一次、本局不变）。</summary>
+        public int relicSlots = RelicCatalog.SlotCount;
+
+        public int RelicSlots => relicSlots;
 
         /// <summary>槽位是否已满：满了之后必须先舍弃一件才能再拿。</summary>
         public bool RelicsFull => relics.Count >= RelicSlots;
 
-        public int KillsLeft => Mathf.Max(0, EndlessCatalog.KillTargetOf(floor) - killCount);
+        /// <summary>本层击杀需求（开局与每次清层时由控制器算好写进来）。</summary>
+        public int killTarget = 1;
+
+        public int KillsLeft => Mathf.Max(0, killTarget - killCount);
+
+        // ==================== 深层契约（B） ====================
+        // 只在本局有效：开局把所选档位拷进来，之后只读。契约分是「已清层数 ×（1 + 系数和）」，
+        // 结算时写一次，不进本状态之外的状态——累计分与里程碑在 PlayerData.contractScore 上。
+
+        /// <summary>本局所选契约档位，下标 = <see cref="ContractKind"/>，0 = 未选。</summary>
+        public int[] contractTiers = new int[ContractCatalog.All.Length];
+
+        /// <summary>本局契约修正聚合；null = 没选契约。</summary>
+        public ContractMods contract;
+
+        /// <summary>本局契约分（结算卡与历史榜读它；只在 EndEndlessRun 写一次）。</summary>
+        public int contractScore;
+
+        /// <summary>本局选了几条契约。</summary>
+        public int contractCount;
 
         /// <summary>本局用时（秒）。中途改系统时间会得到离谱值，所以夹在 0..30 天。</summary>
         public int Seconds
@@ -270,6 +291,12 @@ namespace AutoBattle
         /// <summary>这一局是否带着深渊遗物打完（老纪录没有这个标记，显示成「遗物前」）。</summary>
         public bool hasRelic;
 
+        /// <summary>本局契约分（v16 起；老纪录 0 = 无契约局）。</summary>
+        public int contractScore;
+
+        /// <summary>本局选了几条契约（v16 起；老纪录 0）。</summary>
+        public int contractCount;
+
         /// <summary>是不是玩家自己按的撤退（而不是阵亡）。</summary>
         public bool IsRetreat => reason == (int)EndlessEndReason.Retreat;
     }
@@ -284,14 +311,16 @@ namespace AutoBattle
         /// <summary>留几局。榜单只用于展示，留多了面板放不下。</summary>
         public const int Capacity = 5;
 
-        /// <summary>排序：层数降序 → 清除层数降序 → 结束时间升序（先做到的在前）。</summary>
+        /// <summary>排序：契约分降序 → 层数降序 → 清除层数降序 → 结束时间升序（先做到的在前）。</summary>
         public static int Compare(EndlessScoreEntry a, EndlessScoreEntry b)
         {
             if (a == null && b == null) return 0;
             if (a == null) return 1;
             if (b == null) return -1;
 
-            int c = b.floor.CompareTo(a.floor);
+            int c = b.contractScore.CompareTo(a.contractScore);
+            if (c != 0) return c;
+            c = b.floor.CompareTo(a.floor);
             if (c != 0) return c;
             c = b.cleared.CompareTo(a.cleared);
             if (c != 0) return c;
@@ -338,6 +367,8 @@ namespace AutoBattle
                     endedUtc = entry.endedUtc,
                     reason = entry.reason,
                     hasRelic = entry.hasRelic,
+                    contractScore = entry.contractScore,
+                    contractCount = entry.contractCount,
                 };
                 Clamp(copy);
                 result.Add(copy);
@@ -366,6 +397,8 @@ namespace AutoBattle
                     endedUtc = entry.endedUtc,
                     reason = entry.reason,
                     hasRelic = entry.hasRelic,
+                    contractScore = entry.contractScore,
+                    contractCount = entry.contractCount,
                 };
                 Clamp(copy);
                 result.Add(copy);
@@ -385,6 +418,8 @@ namespace AutoBattle
             entry.paragon = Mathf.Clamp(entry.paragon, 0, GameConfig.MaxParagonLevel);
             entry.rebirth = Mathf.Clamp(entry.rebirth, 0, 1000000);
             entry.seconds = Mathf.Clamp(entry.seconds, 0, EndlessRunState.MaxSeconds);
+            entry.contractScore = Mathf.Clamp(entry.contractScore, 0, 1000000000);
+            entry.contractCount = Mathf.Clamp(entry.contractCount, 0, ContractCatalog.MaxSelected);
             if (entry.reason < (int)EndlessEndReason.None || entry.reason > (int)EndlessEndReason.Reset)
                 entry.reason = (int)EndlessEndReason.None;
             // 时间戳异常（0 / 未来）统一当「未知」，UI 显示成 —。

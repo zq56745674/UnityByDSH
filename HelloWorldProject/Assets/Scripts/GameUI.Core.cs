@@ -69,7 +69,8 @@ namespace AutoBattle
                 || _game.CompareOpen || _game.AchievementPanelOpen || _game.EndlessPanelOpen
                 || _game.RebirthPanelOpen || _game.GuideOpen || _game.EndlessResultOpen
                 || _game.RelicChoiceOpen
-                || _game.AboutOpen || _game.DisplayOpen || _game.DoctrinePanelOpen || _game.ShopPanelOpen;
+                || _game.AboutOpen || _game.DisplayOpen || _game.DoctrinePanelOpen || _game.ShopPanelOpen
+                || _game.BestiaryPanelOpen;
         }
 
         /// <summary>
@@ -92,6 +93,7 @@ namespace AutoBattle
             if (_game.SkillPanelOpen) { OnSkillPanelCloseClicked(); return; }
             if (_game.CompareOpen) { OnCompareCloseClicked(); return; }
             if (_game.AchievementPanelOpen) { OnAchievementCloseClicked(); return; }
+            if (_game.BestiaryPanelOpen) { OnBestiaryCloseClicked(); return; }
             if (_game.EndlessPanelOpen) { OnEndlessCloseClicked(); return; }
             if (_game.RebirthPanelOpen) { OnRebirthCloseClicked(); return; }
             if (_game.SavePanelOpen)
@@ -504,7 +506,7 @@ namespace AutoBattle
                     || IsOpen(_savePanel) || IsOpen(_enhancePanel) || IsOpen(_reforgePanel)
                     || IsOpen(_settingsPanel) || IsOpen(_musicPanel) || IsOpen(_comparePanel) || IsOpen(_endlessPanel)
                     || IsOpen(_endlessResultPanel) || IsOpen(_rebirthPanel) || IsOpen(_achievementPanel)
-                    || IsOpen(_merchantPanel) || IsOpen(_guideRoot)
+                    || IsOpen(_merchantPanel) || IsOpen(_guideRoot) || IsOpen(_runePanel)
                     || (_game != null && _game.RelicChoiceOpen);
                 if (_modalDim.gameObject.activeSelf != modalOpen) _modalDim.gameObject.SetActive(modalOpen);
             }

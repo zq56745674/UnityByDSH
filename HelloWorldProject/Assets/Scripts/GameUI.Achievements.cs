@@ -163,8 +163,9 @@ namespace AutoBattle
                 _achTitleButtons[i] = CreateButton(_achievementPanel, "AchTitle" + i, def.title,
                     20 + i * 109, 566, 104, 26, GameConfig.BtnHeader, out _achTitleLabels[i]);
                 StyleTab(_achTitleButtons[i], _achTitleLabels[i], "frame_tab", 11);
-                AttachTooltip(_achTitleButtons[i], "佩戴称号「" + def.title + "」\n来源成就：" + def.name +
-                    (string.IsNullOrEmpty(def.desc) ? string.Empty : "\n" + def.desc));
+                // 单行：称号栏贴着面板底边（按钮底 −304，安全线 yMin+10 = −350）。两行提示框高 46.67，
+                // 下方要 −304−8−46.67 = −358.67 放不下，会翻到上方压住「只看未完成」；单行高 28 落在 −340，正好挂得下。
+                AttachTooltip(_achTitleButtons[i], "佩戴称号「" + def.title + "」 · 来源成就：" + def.name);
                 _achTitleButtons[i].onClick.AddListener(() => OnAchievementTitleClicked(index));
             }
 

@@ -47,8 +47,9 @@ namespace AutoBattle.EditorTools
                 bool ok;
                 try
                 {
-                    detail = RunStep(i);
-                    ok = detail != null && detail.IndexOf("FAIL", StringComparison.OrdinalIgnoreCase) < 0;
+                    // 判据由各步自己给（结构化），不再靠「文案里有没有 FAIL」：
+                    // 缺基线、读不出基线这类说明里本来就没有 FAIL，会被静默判成通过（审计 L7）。
+                    detail = RunStep(i, out ok);
                 }
                 catch (Exception e)
                 {
@@ -90,19 +91,33 @@ namespace AutoBattle.EditorTools
             EditorApplication.Exit(code);
         }
 
-        private static string RunStep(int index)
+        private static string RunStep(int index, out bool ok)
         {
             switch (index)
             {
                 case 0:
-                    return BalanceRegression.RunStaticOnly();
+                {
+                    string detail = BalanceRegression.RunStaticOnly();
+                    // 静态哨兵只有以 PASS 开头才算过（FAIL — / 其它说明一律不过）。
+                    ok = detail != null && detail.StartsWith("PASS", StringComparison.Ordinal);
+                    return detail;
+                }
                 case 1:
-                    return AchievementRegression.RunCore();
+                {
+                    string detail = AchievementRegression.RunCore();
+                    // 用条数判据，不解析文案。
+                    ok = AchievementRegression.LastFailCount == 0;
+                    return detail;
+                }
                 case 2:
+                {
                     // 冒烟只看「能不能跑完」：2 个种子、40 层，跑不动或抛异常就是 FAIL。
                     string endless = EndlessPacing.Run(2, 40);
-                    return endless.Contains("首死") ? "无尽 2 种子 / 40 层跑通" : endless;
+                    ok = !string.IsNullOrEmpty(endless) && endless.Contains("首死");
+                    return ok ? "无尽 2 种子 / 40 层跑通" : endless;
+                }
                 default:
+                    ok = false;
                     return "未知步骤";
             }
         }

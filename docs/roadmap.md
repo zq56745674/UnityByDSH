@@ -1,6 +1,6 @@
 # 项目整体梳理与待办清单（Roadmap）
 
-> 生成日期：2026-10-23　最近更新：2026-11-03（A 深渊遗物 v1 与无尽结算卡已落地并验收；行数 / 体积 / 未提交数按实测回填；删掉 0 引用的 `NotoSerifSC-Bold.ttf`，`.mnemon/` 移出仓库索引；B9 的重抽/禁选因随机三选一被删而暂缓）。依据：`origin/main` 已同步、工作区干净（最新功能提交 `50a71ed`；换会话先读 [docs/handoff.md](handoff.md)）。
+> 生成日期：2026-10-23　最近更新：2026-11-05（D 屠魔录已落地：11 族 × 4 型 44 条、存档 v18、族印纯展示；五条 UI/文案小修收口，含称号 tooltip 单行化与章节胜率三档带；C 巅峰符文甲/乙 已调平）。依据：`origin/main` 已同步（最新功能提交 `50a71ed`；换会话先读 [docs/handoff.md](handoff.md)）。
 > 本文替代「凭记忆列待办」：每条都标了现状证据与验收口径，改完打勾并把实测数字写回对应小节。
 > 与 `README.md` 的关系：README 记「已完成什么」，本文记「还差什么、为什么、按什么顺序」。README「已知问题」里的旧条目与本文交叉引用。
 
@@ -11,20 +11,20 @@
 3. **数字要落到文档**：改完数值/行为，同时更新 README 与对应 `docs/` 文件；只改代码不回填文档视为未完成。
 4. **不擅自提交**：本地 commit 需用户明确说「提交」，push 另需明确同意（USER.md 规矩）。
 
-## 1. 现状快照（2026-11-03 实测）
+## 1. 现状快照（2026-11-05 实测）
 
 ### 1.1 规模
 
 | 维度 | 实测 | 说明 |
 |---|---|---|
-| 运行时脚本 | **68 个文件 / 24,016 行** | `HelloWorldProject/Assets/Scripts/`（2026-11-03 实测），其中 `GameUI*` 33 个 partial / 10,814 行；B1 新增 ShopCatalog 274 / GameController.Shop 320 / GameUI.Shop 607，技能 2.0 新增 GameController.Skills 80 / GameUI.Doctrine 215，A 遗物新增 RelicCatalog 282 / GameUI.Endless.Relics 236 |
-| 编辑器工具 | **10 个文件 / 4,978 行** | 回归与探针（2026-11-03）：AchievementRegression 1,182、AutoBattle.CI 118、BalanceRegression 692、EndgamePacing 260、EndlessPacing 827、GameConfigReloader 56、LateGameProbe 749、NewGameProgression 582、ProbePolicy 392、SkillTableVerify 120 |
+| 运行时脚本 | **76 个文件 / 26,499 行** | `HelloWorldProject/Assets/Scripts/`（2026-11-05 实测），其中 `GameUI*` 35 个 partial / 11,594 行；B1 新增 ShopCatalog 274 / GameController.Shop 320 / GameUI.Shop 607，技能 2.0 新增 GameController.Skills 80 / GameUI.Doctrine 215，A 遗物新增 RelicCatalog 362 / GameUI.Endless.Relics 236，B 契约新增 ContractCatalog 350 / RuneCatalog 315 / RelicStrength 61，D 屠魔录新增 BestiaryCatalog 234 / GameController.Bestiary 53 / GameUI.Bestiary 247 |
+| 编辑器工具 | **10 个文件 / 6,589 行** | 回归与探针（2026-11-05）：EndlessPacing 2,119、AchievementRegression 1,185、LateGameProbe 1,048、BalanceRegression 694、NewGameProgression 582、ProbePolicy 392、EndgamePacing 260、AutoBattle.CI 133、SkillTableVerify 120、GameConfigReloader 56（比 11-04 多出的 1,444 行主要是章节胜率三档带与契约/符文回归） |
 | 资源体积 | **约 71 MB** | `Assets/` 全量 168 MB，扣掉 gitignore 的 `Music/` 13 MB 与 `_shots/` 验收截图 84 MB（2026-11-03 实测）；其中 `Resources/Fonts` 11 MB（两套 TTF；`NotoSerifSC-Bold.ttf` 约 11 MB 已于 2026-11-03 删除）、`Resources/UI` 1.8 MB |
 | 图片 | **70 PNG + 4 JPG** | Sprites：Monsters 33 / Bosses 11 / Fx 20 / Auras 5 / Hero 1；Backgrounds 4 张 JPG |
 | 音频 | **14 SFX + 4 BGM** | SFX 在 `Resources/Sfx/*.ogg`；BGM 在 `Resources/Music/`（已 gitignore，换机需自备） |
 | 配置 | `game_config.json` **149 键**、`skills.json` **15 技能**、`achievements.json` **42 条 / 805 点 / 7 称号 / 43,400 金币** | 三方必须与 `GameConfigData` 等字段一一对应 |
 | 文档 | **15 份** | README、AGENTS、achievements、audio-credits、endless-mode、equipment-reforge、rebirth、sprites-and-fx、roadmap（本文）、shop-2-design（B1 设计稿）、skill-build-design（B9 决策层，暂缓）、skill-system-v2-design（技能 2.0 内容层）、handoff（2026-10-29 会话交接）、balance-analysis、_balance/README；行数随回填变化，以各文件为准 |
-| 存档 | **v15 / 3 槽 / 可导出导入、改名、跨槽复制** | `SaveSystem.cs:31`；PlayerPrefs（Windows 为注册表，Editor 下实为 `HKCU\Software\Unity\UnityEditor\DefaultCompany\My project`，见「工程」行）+ `Documents/AutoBattle/slotN.json` 导出/导入（2026-10-24）；名字 ≤12 字，覆盖目标槽需 3 秒内二次确认；v14 加收藏家/服务/珍藏/外观/自动出售字段，v15 加 doctrine/skillEverMask 与 v14 技能迁移 |
+| 存档 | **v18 / 3 槽 / 可导出导入、改名、跨槽复制** | `SaveSystem.cs:36`（v18 = 屠魔录 `int[44] bestiaryKills`；v17 = 巅峰符文 `runeUnlockMask` / `runeFormMask`；v16 = 累计深层契约分 `contractScore`）；PlayerPrefs（Windows 为注册表，Editor 下实为 `HKCU\Software\Unity\UnityEditor\DefaultCompany\My project`，见「工程」行）+ `Documents/AutoBattle/slotN.json` 导出/导入（2026-10-24）；名字 ≤12 字，覆盖目标槽需 3 秒内二次确认；v14 加收藏家/服务/珍藏/外观/自动出售字段，v15 加 doctrine/skillEverMask 与 v14 技能迁移 |
 | 工程 | Unity **6000.6.5f1**，单场景 `SampleScene` | 玩家身份**仍是默认值**：`ProjectSettings/ProjectSettings.asset:15-16` 是 `companyName: DefaultCompany` / `productName: My project`，2026-10-29 在 Editor 里读 `Application.companyName` 也是 `DefaultCompany`（该文件只有初始提交 `334b345`，从来没改过）。所以 **Editor 的 PlayerPrefs 落在 `HKCU\Software\Unity\UnityEditor\DefaultCompany\My project`**；`UnityByDSH\AutoBattle` 那个节点是早期改名后打过的包留下的旧档（v11，最后写入 2026-10-24）。本文旧版写的「2026-10-24 起 productName = AutoBattle」不成立，要改得在 PlayerSettings 里连 `bundleVersion` 一起改并提交。 |
 | 自动化测试 | **快速回归 + EditMode NUnit 8 条 + Windows 构建脚本 + CI workflow**；CI 已触发但缺 Secrets | `AutoBattle.CI.cs` + `tools/quick-regression.ps1`（静态哨兵 + 成就核心 + 无尽冒烟）；`AutoBattle.Tests.asmdef` + `tools/run-editmode-tests.ps1`（8 条）；`tools/build-windows.ps1` + `.github/workflows/unity-ci.yml`；test-framework 1.8.0 已启用，3 个 asmdef |
 
@@ -39,7 +39,7 @@
 | 无尽 | 起始层 = max(1, 本档最高−4)；每 5 层 BOSS；掉落等级封顶 150；本档 Top-5 历史榜 + 清空；全局最高 | docs/endless-mode.md §6.5/§13.1；P200 首死中位 45 层（2.8 历史；当前 3.1 + Step 4 未复测 P200，P1000 两流派 240/245） |
 | 转生 | 5 轨 × 5 级 = 110 印记；战斗 +5% 封顶；Exp +60%/级、起始等级 +3/级（满轮回 Lv16）；保留评分最低 1 件、本档最快轮回 Top-5（v12） | `GameConfig.cs:697`、`RebirthCatalog.cs`；实测第 2 世 82.6% / 满轮回 47.1%（docs/rebirth.md §14.4 / §14.6） |
 | 成就 | 42 条 / 6 类 / 805 点 / 7 称号 / 43,400 金币；按槽独立；toast 队列；称号可佩戴并显示在左栏；100 点/级兑换无尽建议起始层（最多 +3） | docs/achievements.md §15.5；B2 验收 2026-10-25；技能点自选后回归 668 通过 |
-| UI | 32 partial 文件（新增 `GameUI.Motion.cs` 动效、`GameUI.ButtonCluster.cs` 按钮簇）；正文思源黑体 + 标题得意黑（粗体且 ≥18 号，2026-10-29）；设置 5 开关 + 3 音量 + 关于页 + 显示页（全屏/分辨率/缩放/色弱）；战斗速度记忆；强化「+5/满级」批量；属性/技能/无尽/洗练 tooltip；音乐进度条；称号佩戴与左栏展示；存档改名/复制；右栏当前目标条（B8）；营地行商四页签（B1）；流派选择面板与资源条（技能 2.0）；成就/无尽/转生/存档/对比/强化/洗练/选关面板 | 2026-10-23 拆分、2026-10-24 C1–C11 + B3、2026-10-25 B8、2026-10-26 B1、2026-10-29 字体/材质/动效验收截图 |
+| UI | 33 partial 文件（新增 `GameUI.Motion.cs` 动效、`GameUI.ButtonCluster.cs` 按钮簇、`GameUI.Endless.Relics.cs` 遗物面板；2026-11-04 四条可读性打磨收尾）；正文思源黑体 + 标题得意黑（粗体且 ≥18 号，2026-10-29）；设置 5 开关 + 3 音量 + 关于页 + 显示页（全屏/分辨率/缩放/色弱）；战斗速度记忆；强化「+5/满级」批量；属性/技能/无尽/洗练 tooltip；音乐进度条；称号佩戴与左栏展示；存档改名/复制；右栏当前目标条（B8）；营地行商四页签（B1）；流派选择面板与资源条（技能 2.0）；成就/无尽/转生/存档/对比/强化/洗练/选关面板 | 2026-10-23 拆分、2026-10-24 C1–C11 + B3、2026-10-25 B8、2026-10-26 B1、2026-10-29 字体/材质/动效验收截图 |
 | 终局 | 终局 BOSS ×1.25（技能 2.0 后由 1.6 下调；只作用战役，不碰无尽） | `GameConfig.cs:312`；docs/skill-system-v2-design.md §17 |
 
 ### 1.3 一句话判断
@@ -59,8 +59,8 @@
 
 | 编号 | 事项 | 类 | 优先级 | 量级 |
 |---|---|---|---|---|
-| A8 | 构建与 CI：本机脚本/workflow 已写；GitHub 首跑已触发但缺 Secrets 失败，分支保护未做 | 工程 | P3 | 剩余约 30 min（需仓库 Secrets 权限） |
-| B9 | 技能构筑决策层：随机三选一已改为技能点自选，重抽/禁选失去对象；只剩构筑标签可选，暂缓 | 玩法 | P4 | 待重新定义 |
+| A8 | 构建与 CI：本机脚本/workflow 已写；workflow 已支持「serial / base64 ULF / 自托管跳过激活」三路，GitHub 首跑仍缺许可证 secret，分支保护未做 | 工程 | P3 | 剩余约 30 min（需仓库 Secrets + 分支保护权限；本机是 Unity Personal，取不到可用的 serial） |
+| B9 | 技能构筑决策层：随机三选一已改为技能点自选，重抽/禁选失去对象；只剩构筑标签可选 | 玩法 | — | **已退役（2026-11-03）**：目标已由技能点自选 + B12 深层契约承接 |
 
 ### 2.2 已完成（保留编号）
 
@@ -68,9 +68,13 @@
 |---|---|---|
 | A1 | 提交 2026-10-24 的 72 项改动 | ✅ 2026-10-25（12d230a、de8c038，已推送） |
 | A7 | 提交 B4/B8 + B2/B4c/D3 + D2/E4 + A8 的 36 个文件 | ✅ 2026-10-25（e0b9f72；推送见文末） |
-| B1 | 金币出口（商店 2.0）：营地行商 + 收藏家 20 级 + 6 服务 + 15 珍藏 | ✅ 2026-10-26（存档 v14 引入；当前 v15） |
+| B1 | 金币出口（商店 2.0）：营地行商 + 收藏家 20 级 + 6 服务 + 15 珍藏 | ✅ 2026-10-26（存档 v14 引入） |
 | B9 内容层 | 技能 2.0：风暴/山崩双流派、两套毕业 build、技能点自选 9 个 | ✅ 2026-10-26（存档 v15；50 种子 240/245，30 种子 29/1/0） |
 | B10 | 深渊遗物 v1（无尽局内构筑）：tier1 12 件 / 6 槽 / 每 10 层三选一 + 满槽替换 + 结算行 | ✅ 2026-11-02（50 种子五策略：满 6 件 +18.4 层、离散度比 0.56、确定性 36/36） |
+| B11 | UI 四条可读性打磨：行商字号与价签 / 强化洗练属性行 / 皮革底 tooltip / 称号禁用态 | ✅ 2026-11-04（残留已于 2026-11-05 清掉：称号 tooltip 改单行，实测高 28px、底部 y=-348，不再翻到上方盖住「只看未完成」） |
+| B12 | 深层契约 v1（无尽局前难度选择）：八条 × 三档、契约分与里程碑解锁遗物 tier2/3 与 7/8 槽、Top-5 按契约分排序 | ✅ 2026-11-03（20 种子 Ⅰ 档 7/7、Ⅲ 档 7/7；存档 v16） |
+| B13 | C 巅峰符文（L2 永久层）：15 技能 × 甲/乙 两形态、每 100 巅峰 1 点（满 10）、解锁随存档跨转生保留、技能面板「符文」页 | ✅ 2026-11-04（存档 v17；木桩 300 秒 6/6 格在 ±25% 内，最大 −9.1%；遗物组合对照弱成立）｜**2026-11-05 甲/乙 已调平**：60 种子 / 400 层口径 风暴 乙−甲 +4.2 层、山崩 −6.1 层，两形态均高于无符文；残留 战吼 B 风暴 +13.9 / 吸血鬼 B 山崩 −9.7，见 gameplay-expansion §6.3 |
+| B14 | D 屠魔录（L0 收集层）：11 族 × 4 型 44 条、击杀累积三档状态（未目击/已目击/已通晓）、族印纯展示、成就页入口 | ✅ 2026-11-05（存档 v18 = `int[44] bestiaryKills`；记账归族/迁移/Esc 已探针实测，见 gameplay-expansion §7） |
 | A2 | 治理 `_tmp_verify/`、`_art/ui-audit/` 未跟踪目录 | ✅ 2026-10-24 |
 | A3 | README「项目结构」段落与代码漂移 | ✅ 2026-10-24 |
 | A4 | 产物名/版本号/关于页缺失 | ✅ 2026-10-24 |
@@ -148,7 +152,8 @@
   - 本机实测：NUnit **8/8 通过（0 失败、0 跳过，0.11s）**；`build-windows.ps1` 构建成功，`AutoBattle.exe` 0.6 MB / 整目录 171.6 MB，SHA256 `001AEEBFB92718F8B49F0C0E0A03E313C54669552B08E952B2FEE3DDD143683A`；`AutoBattle_Data`、`UnityPlayer.dll`、`MonoBleedingEdge`、`D3D12` 齐全。
   - 顺手修掉一个真 bug：`unity run` 的 batchmode 参数里不能再带 `-quit`（CLI 保留 flag，报 `Forwarded argument '-quit' conflicts with a reserved Unity flag`）；`tools/quick-regression.ps1` 与 CI 都已去掉，退出码由 `RunAllQuickBatch` 自己 `EditorApplication.Exit` 决定。
 - **GitHub 首跑（2026-10-25）**：push `e0b9f72` 与 `ebe8ba8` 各触发一次 `Unity CI`，均在第 3 步「Check required secrets」失败，失败原因就是缺 `UNITY_LICENSE_SERIAL`；第 4~17 步全部 skipped。运行 ID：`40202445313`（e0b9f72）、`40202474782`（ebe8ba8）。说明 workflow 触发与前置逻辑正常，卡在仓库 Secrets。
-- **仍未完成（必须在 GitHub 侧做）**：① 在仓库 Secrets 配 `UNITY_LICENSE_SERIAL`（可选 service account）；② 补 secret 后重跑，确认 `Unity CI / verify` 跑通 3/3 + 8/8 与 Windows 构建；③ 在分支保护里把 `Unity CI / verify` 设为 required check（「失败阻止合并」不能由仓库文件单独保证）。
+- **2026-11-04 许可证调研（结论：卡在「值」，不在「代码」）**：本机没有 `gh` CLI，git 凭据由 git-credential-manager 管（无 PAT），仓库 secret 无法在本地写入；本机 Unity 许可证是 **Personal**（`%LOCALAPPDATA%\Unity\licenses\UnityEntitlementLicense.xml` 里 `1376006380319-UnityPersonal`，账号 mo mo / im.zhaozm@gmail.com），**没有序列号**，而 Unity 官方模板明确写了 Personal 不能靠服务账号令牌无头激活（“`unity license activate --personal` does NOT work here: Unity's licensing backend rejects service-account tokens for activation.”）。因此 workflow 已改成三路可选：`UNITY_LICENSE_SERIAL`（付费 serial）、`UNITY_LICENSE_FILE_BASE64`（离线 `.ulf` 解码到 `$RUNNER_TEMP/unity.ulf` 再 `--file`）、`UNITY_SKIP_LICENSE_ACTIVATION=1`（自托管 runner，Hub 已登录 Personal，跳过激活与 `license return`）。“Check required secrets” 在两者皆缺时给出指向 README 的明确报错，base64 会被 `::add-mask::` 遮掉。
+- **仍未完成（必须在 GitHub / 账号侧做）**：① 决定许可证路线并填 secret（或改用自托管 runner）；② 补上后重跑，确认 `Unity CI / verify` 跑通 3/3 + 8/8 与 Windows 构建；③ 在分支保护里把 `Unity CI / verify` 设为 required check（「失败阻止合并」不能由仓库文件单独保证）。
 - **验收边界**：本机「一条命令出包」与 NUnit 已过；**全新 clone 出包**与 **GitHub 绿跑**尚未完成（首跑已触发，仅因缺 secret 失败），因此 A8 暂记 ◐，不并入 §2.2 的已完成。
 - **依赖**：§8 决策 #5 已按「先落发行向工程化」处理；正式上架/发版仍另说。
 
@@ -233,7 +238,7 @@
 - **现状（原始）**：3 个槽（`SaveSystem.KeyOf(slot)`），只在 PlayerPrefs；无导入导出，重装即丢。
 - **要做什么**：槽位面板加「导出/导入」按钮；导出 JSON 带版本号，导入时校验 schema 并拒绝更高版本。
 - **验收**：导出→删槽→导入→回读一致；导入高版本档被拒并提示。
-- **已完成（2026-10-24）**：导出/导入见 A6——存档面板「导出」「导入」按钮，导出到 `Documents/AutoBattle/slotN.json`，导入优先读剪贴板、读不到再读同名文件，当时 v12 档在写盘前拒绝（当前 v15，拒 v16）；截图 `a6_save_panel2.png`。
+- **已完成（2026-10-24）**：导出/导入见 A6——存档面板「导出」「导入」按钮，导出到 `Documents/AutoBattle/slotN.json`，导入优先读剪贴板、读不到再读同名文件，当时 v12 档在写盘前拒绝（写这条时当前 v16；现为 v18，拒 v19）；截图 `a6_save_panel2.png`。
 - **本轮补完（2026-10-24）**：槽位重命名与跨槽复制。`SaveSystem` 新增 `SlotNameKey` / `DefaultSlotName` / `DisplayNameOf` / `RenameSlot` / `CopySlot`（名字存 `GameConfig.SaveKey + "_name" + slot`，最长 12 字，空名或默认名回退「存档 N」；清槽同时删名字）；`GameController.ReloadCurrentSlotFromDisk()` 让「复制到当前槽」立即重读。存档卡底部按钮改为「改名 / 复制 / 删除」（60/60/64 宽，文字不再被挤成竖排）；2026-10-24 晚又整体下移 4px、摘要文字上移 2px，按钮不再压住最后一行「第 N 世 · 印记」；改名弹层用 InputField（Enter 提交、默认名 / 确定 / 取消），复制弹层按非源槽可视数量重排两个目标按钮，覆盖已有档要求 3 秒内二次点击。
 - **验收（已过）**：改名「鲸鱼娘」后 `DisplayNameOf(0)` 生效；13 字被拒并提示「名字最多 12 个字」，空串恢复「存档 1」。复制 0→1 后目标槽 `level=3 cleared=1` 与源一致，名字一并复制；复制到当前槽后角色立即重读（`playerLv=3`）。截图 `c10_save_panel.png`（三卡按钮完整）、`c10_save_rename.png`、`c10_save_copy.png`（两目标并排 + 覆盖确认倒计时）。
 - **未做**：槽数仍是 3；没有云同步（本轮明确不做）。
@@ -339,17 +344,27 @@
 - **触发前提**：本档有过无尽记录才开（首局不弹，降低第一次进无尽的理解成本），即 `RelicsEnabledThisRun`。
 - **代码**：`RelicCatalog.cs`（数据 + `ShouldOffer` / `RollChoices` / `RelicMods.Build`）、`GameController.Endless.Relics.cs`（`OfferRelicChoice` / `TakeRelic` / `ApplyRelicMods` / `RelicChoiceOpen`）、`GameUI.Endless.Relics.cs`（三选一与替换面板，实体卡牌：硬投影 + 烫金边 + 纸面高光）、`Endless.cs`（`relicIds` 运行时字段 + `resultRelics` 结算快照）、`GameController.cs` 的 `ChoicePending` 纳入 `RelicChoiceOpen`（面板打开时战斗冻结）。
 - **实测（50 种子 / 900 层 / P1000 / Lv150 / maxGear / 自动技能）**：无遗物中位 300 → 满 6 件 320，配对均值 **+18.4 层（50 胜 0 负）**；自然获取 +14.9（胜 48/50）；选择质量 +0.9、替换价值 −0.4（tier1 区分度不足，留给 tier2/3）；离散度比 0.56；确定性 36/36；`QuickRegression.RunAllQuick()` 3/3。明细见 `docs/endless-mode.md` §12.6。
-- **未做**：tier2（8 件）/ tier3（4 件）、契约分解锁 7/8 槽——依赖 B 深层契约。
+- **解锁钩子已接上 B（2026-11-03）**：三选一池按 `ContractCatalog.RelicMaxTier(Player.contractScore)` 取（tier2 在 300 分、tier3 在 1500 分），槽位按 `RelicCatalog.SlotsFor(Player.contractScore)` 取（6 / 7 / 8，800 与 3000 分）。tier2 的 8 件与 tier3 的 4 件数据已在 `RelicCatalog.cs` 里。
+- **解锁后的强度复核已做（2026-11-04）**：五档 50 种子配对矩阵（`EndlessPacing.CompareRelicTiers`），实测 6 槽 T1 **+18.7 层**、6 槽 T2 **+31.4**、7 槽 T2 +28.9、7 槽 T3 **+32.6**、8 槽 T3 **+39.6（上限 +40.4）**（贪类改造后重跑口径）；「6 槽 T3」档不可达（800 分即 7 槽、T3 要 1500 分）。数值纪律成立，不用回调单件上限；明细见 `docs/endless-mode.md` §12.6.1 与 `docs/gameplay-expansion.md` §4.5 第 7 条。tier1 的「选择质量 +0.9 / 替换价值 −0.4」仍说明单件区分度偏平，属于已知设计缺口。
+
+### B12 深层契约 v1（P1，L1 局层，出自 [docs/gameplay-expansion.md](gameplay-expansion.md) 方案 B）— ✅ 2026-11-03
+
+- **玩法**：无尽准备界面「契约」页签里勾 0~3 条契约（八条 × Ⅰ/Ⅱ/Ⅲ 三档，决绝单档），同一档再点取消；契约只改这一局的规则与敌方系数。结算按「已清层数 ×（1 + 档位系数之和）」记契约分（Ⅰ 0.25 / Ⅱ 0.5 / Ⅲ 0.9），累计跨转生保留，里程碑 300 / 800 / 1500 / 3000 解锁遗物 tier2 / 第 7 槽 / tier3 / 第 8 槽。Top-5 历史榜改成按 (契约分, 层数) 排序，结算卡多一行「深层契约 + 契约分 + 里程碑进度」。
+- **三条机制按实测改过**：硬化「敌人护甲」→「敌人受到伤害 −15/35/60%」（护甲杠杆在 `DamageReduction` 里几乎无效）；群袭「击杀需求」→「整层怪物 +12/+18/+26 层」（多刷怪在这套引擎里几乎免费）；黑雾「暴击率扣点」→「护甲有效率 55/40/28%」（暴击扣点在 37.5% 模板上 Ⅱ 档就归零）。
+- **代码**：`ContractCatalog.cs`（八条表 + `ContractMods` + `Sanitize`/`ScoreOf`/`AddToTotal`/里程碑/`Describe`）、`Endless.cs`（`contractTiers` + `resultContracts`）、`GameController.Endless.cs`（`ToggleContractTier`/`ClearContractSelection`/`StartEndlessRun`/`spawnFloor = def.floor + ContractClearFloorBonus()`/`SelectStageIndexFromResolve` 之外的结算与记账）、`Models.PlayerData.cs`（`ContractHealMultiplier`/`ContractArmorEffectiveMult`/`ContractClearFloorBonus`/`ContractMonsterDamageTakenMultiplier`/`ContractNoRetreat`）、`BattleSystem.cs`（怪物打玩家走 `incomingDefense = Defense × ContractArmorEffectiveMult`；`HitMonster` 乘受伤系数）、`GameUI.Endless.cs`（第三个页签 + 结算行）。存档 **v16**（新增 `contractScore`，v15 档读回 0）。
+- **实测（20 种子 / 400 层，基线 P10 85 / 中位 110 / P90 140）**：Ⅰ 档 7/7、Ⅲ 档 7/7 全过判据（Ⅰ 5~15%、Ⅲ 25~45%）——狂躁 15/27、疾袭 13/27、硬化 9/32、群袭 14/27、枯竭 14/27、背水 9/36、黑雾 14/32（Ⅰ/Ⅲ 降幅）。三条 Ⅲ 全开最差 11 层；2 条 Ⅱ 契约分中位 118。明细见 `docs/endless-mode.md` §12.7。
+- **未做**：群袭「低层开局即死」的衰减选项（第 1 层 +26 层 = 怪 Lv.214）；契约分 3000 之后的 softcap（设计稿写过、v1 未实现上限）；契约相关成就与称号。
+- **退役**：roadmap §2.1 的 B9「技能构筑决策层」正式关闭——已被技能点自选（v15 技能 2.0）覆盖。
 
 ## 6. 平衡（D）
 
 | 编号 | 问题 | 数字 | 建议 |
 |---|---|---|---|
-| D1 | 转生加速 — ✅ 2026-10-22 达标 | `RebirthExpPerRank=0.60` + `RebirthLegacyLevelPerRank=3` 落地后，第 2 世 82.6% / 满轮回 47.1%（目标 85% / 50%）；旧数据 92.4% / 63.5% / 61.8% 按日期保留作历史 | 已收口，不再调参。战斗 +5% 偏强、满轮回无尽首死中位 315 是另一件事（见 README「转生加速已落地，无尽仍偏强」） |
+| D1 | 转生加速 — ✅ 2026-10-22 达标 | `RebirthExpPerRank=0.60` + `RebirthLegacyLevelPerRank=3` 落地后，第 2 世 82.6% / 满轮回 47.1%（目标 85% / 50%）；旧数据 92.4% / 63.5% / 61.8% 按日期保留作历史 | 已收口，不再调参。战斗 +5% 偏强是另一件事：2026-11-04 在 3.1 / Step 4 / 技能 2.0 下复测，满轮回中位 305→**335**（配对 +28.9 ± 6.4），降档 0.005/级仍有 +13.4 ± 6.3（中位 320）。**2026-11-04 决定取方案 C：保持 0.01、只记结论**（降档只回收一半，「仅战役生效」会动战役手感；见 README 已知问题 / `docs/rebirth.md` §14.4） |
 | D2 | 无尽理想配装偏强 — ✅ 2026-10-25 已收紧 | 理想配装 50 种子首死中位 290（P10 272 / P90 305 / max 320）vs 目标 235~250；随机五槽 50 种子实际 220（旧「242」是 3 种子） | 已选「保留 235~250 理想配装口径」：D2 先收紧 `EndlessBaseFactor` 2.8→3.4 并实测理想 240、随机 181；技能 2.0 复测又把现状校准为 **`EndlessBaseFactor=3.1` + `EndlessMonsterLevelStep=4`**，两流派 50 种子中位 240 / 245。2026-11-02 补测随机五槽：现行口径下中位 **330**（自动技能）/ 235（固定 build），技能续航位的影响大于装备口径，240 不能再当天花板（§12.5.6）。压词条上限（×0.85 只到 280）与压暴击上限（0.70 仍 277）都不够；详见 `_balance/balance-analysis.md` §10.3、`docs/endless-mode.md` §12.5.4、技能稿 §17.3 |
 | D3 | 掉落 +10% — ✅ 2026-10-25 已量化 | 固定财运 rank5，只改 `RebirthDropPerRank` 做 0% / +5% / +10% 三组 50 种子：五槽集齐中位 60.5 / 65 / 55.5 次，+10% vs 0% 配对中位 7.5 次、95% CI −7..+16、p=0.39；非单调、无显著效果 | **保持 +2%/级**；BOSS 固定掉 2 件不吃 drop bonus、普通怪 Lv100 不出 Lv110，所以掉落不是终局毕业的有效杠杆。详见 `docs/rebirth.md` §14.8、`_balance/balance-analysis.md` §3.5.4c |
 | D4 | 章节压迫已重调 | 5.5%/4%，300 套 98%→21.8%，真实推进 25/30 通关 | 已收口，无需再动；仅当改 `ChapterStatBias` 时复跑 |
-| D5 | 终局倍率 | 技能 2.0 后由 1.6 下调到 **1.25**：30 种子风暴 27/3/0、山崩 27/3/0；1.2 为 28/2 与 30/0，1.6 只有 13/17 与 9/21 | 已收口；1.25 是「≥25 通关且两流派对称」的最小下调点。只作用战役，无尽不吃 |
+| D5 | 终局倍率 | 技能 2.0 后由 1.6 下调到 **1.25**：30 种子风暴 27/3/0、山崩 27/3/0；1.2 为 28/2 与 30/0，1.6 只有 13/17 与 9/21 | 已收口；1.25 是「≥25 通关且两流派对称」的最小下调点。只作用战役，无尽不吃。**2026-11-04 复核**：9 技能口径下 1.25 的 P200 11-10 已有 99.86%（满轮回 99.97%），1.60 → 85.2 / 92.4、1.55 → 90.5 / 93.6 —— 战役这一层已不再承担「门」，是否回调或改成随巅峰缩放待决定 |
 | D6 | 金币软出口 | 见 B1 | 与 B1 合并 |
 
 ## 7. 文档与流程（E）
@@ -366,7 +381,7 @@
 | # | 问题 | 选项 | 影响 | 我的建议 |
 |---|---|---|---|---|
 | 1 | 金币出口做成什么 — ✅ 已决并实现（2026-10-26） | 已选「营地行商 + 收藏家 20 级 + 6 服务 + 15 珍藏」；不做转生印记商店 / 装备赌注 / 账号级共享 | B1 已落地（v14 引入，现 v15）；P1000 买满收藏家剩 1.944 亿、全部买完剩 1.60 亿 | 印记不与金币互通；后续新增出口先看收藏家是否已吸收 |
-| 2 | 成就点换什么 — ✅ 已决（2026-10-25） | 已选「无尽建议起始层 +1/级」，100 点/级、最多 +3；称号佩戴由 B3 完成 | B2 已落地（字段自 v13，当前存档 v15） | 不换战斗属性/装备/掉落；后续若加第二个出口，先看无尽起始层是否够用 |
+| 2 | 成就点换什么 — ✅ 已决（2026-10-25） | 已选「无尽建议起始层 +1/级」，100 点/级、最多 +3；称号佩戴由 B3 完成 | B2 已落地（字段自 v13，当前存档 v16） | 不换战斗属性/装备/掉落；后续若加第二个出口，先看无尽起始层是否够用 |
 | 3 | 无尽目标口径 — ✅ 已决（2026-10-25，2026-10-26 复校） | 保留 235~250 层「理想配装」口径；D2 收紧到 3.4，技能 2.0 复核后现状 `EndlessBaseFactor=3.1` + `EndlessMonsterLevelStep=4` | 现状两流派 50 种子中位 240 / 245；随机配装接受更早死 | 已落地；旧「随机 242 达标」是 3 种子误读。后续若再动无尽，先看 `docs/endless-mode.md` §12.5.4 与技能稿 §17.3 |
 | 4 | P100 转生门槛 — ✅ 已决（2026-10-25） | 50 种子实测 P100 首通后约 30.7min，保持 100 | 不改 `RebirthUnlockParagon`，作废 §14.4 的风险归零 | 若以后要更早转生，改 50 必须重跑 50 种子加速与印记产出 |
 | 5 | 是否面向发行（决定 A8）— ✅ 已按发行向推进（2026-10-25） | 已落 Windows 构建脚本 + GitHub Actions（`windows-latest`）；正式上架/发版另说 | 本机 8/8 与出包已验；GitHub 侧仍需配 `UNITY_LICENSE_SERIAL` 与 required check | 不再等发行决策；剩余是仓库配置，不是代码 |
@@ -413,7 +428,7 @@
 | D2 ✅ | `EndlessBaseFactor` 2.8→3.4→现状 3.1、`EndlessMonsterLevelStep=4`：理想配装 50 种子中位 290→240（风暴）/245（山崩） | `GameConfig.cs:675`、`GameConfigData.cs:146`、`game_config.json:123/128`；docs/endless-mode.md §12.5.5（§12.5.4 是 3.4 历史）；技能稿 §17.3 |
 | B7（D4） | 章节压迫 4%/3% → **5.5%/4%**；300 套抽样 98%→21.8%，真实推进 25/30 通关 | `GameConfig.cs:206/:212`；balance-analysis §3.5.2a |
 | D5 | 终局 BOSS 倍率 **1.6→1.25**（技能 2.0 后），30 种子 29/1/0（技能点自选后） | `GameConfig.cs:312`、`Models.cs:715`；技能稿 §17.3 |
-| — | GameUI 由 4 个胖文件拆成 **33 个 partial**（2026-11-03 实测 10,814 行；A3 时 6,749 行） | README 项目结构；A3 |
+| — | GameUI 由 4 个胖文件拆成 **33 个 partial**（2026-11-04 实测 10,831 行；A3 时 6,749 行） | README 项目结构；A3 |
 | — | 六项 UI 修复 + R 键确认字号 18→15 | `GameUI.Build.Right.cs:137`、`GameUI.Core.cs:53` |
 | A2 ✅ | `.gitignore` 纳入 `_tmp_verify/`、`_art/ui-audit/`；2026-10-25 已迁到 `_art/tmp-verify/` | `.gitignore`、`_art/README.md` |
 | A3 ✅ | README 项目结构按实测重写（A3 时 59/15,620 + 10/4,048；2026-10-25 为 59/17,109） | `README.md:117` 起 |

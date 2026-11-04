@@ -19,6 +19,7 @@ namespace AutoBattle
         private Text[] _relicChoiceNames;
         private Text[] _relicChoiceClasses;
         private Text[] _relicChoiceTexts;
+        private Text[] _relicChoiceStrengths;
         private Image[] _relicChoiceTags;
 
         private Button[] _relicOwnedButtons;
@@ -56,6 +57,7 @@ namespace AutoBattle
             _relicChoiceNames = new Text[RelicCatalog.ChoiceCount];
             _relicChoiceClasses = new Text[RelicCatalog.ChoiceCount];
             _relicChoiceTexts = new Text[RelicCatalog.ChoiceCount];
+            _relicChoiceStrengths = new Text[RelicCatalog.ChoiceCount];
             _relicChoiceTags = new Image[RelicCatalog.ChoiceCount];
 
             for (int i = 0; i < _relicChoiceButtons.Length; i++)
@@ -88,6 +90,12 @@ namespace AutoBattle
                 _relicChoiceTexts[i] = CreateText(card.image.rectTransform, "RelicChoiceText" + i, "", 12, 72,
                     240, 66, FontSmall + 1, GameConfig.TextNormal, TextAnchor.UpperLeft);
                 _relicChoiceTexts[i].lineSpacing = 1.15f;
+
+                // 右上角实测强度（方案①）：让玩家在「守类很强、经济类很弱」这件事上
+                // 不需要靠猜——数值来自 RelicStrength 的静态表，悬停有口径说明。
+                _relicChoiceStrengths[i] = CreateText(card.image.rectTransform, "RelicChoiceStrength" + i,
+                    "", 124, 12, 128, 22, FontSmall + 1, GameConfig.TextMuted,
+                    TextAnchor.MiddleRight, FontStyle.Bold);
             }
 
             CreateImage(_relicPanel, "RelicDivider", 24, 272, 812, 2, GameConfig.Divider);
@@ -117,7 +125,7 @@ namespace AutoBattle
             _relicSkipButton.onClick.AddListener(OnRelicSkipClicked);
 
             CreateText(_relicPanel, "RelicFooterNote",
-                "单件等效战力 ≤ +4%，六槽全满 ≤ +18%；遗物走独立乘区，不进技能面板。", 244, 418, 592, 24,
+                "单件等效战力 ≤ +4%，六槽全满 ≤ +18%；右上角为实测层数（对照不带遗物）。", 244, 418, 592, 24,
                 FontTiny + 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
             _relicPanel.gameObject.SetActive(false);
@@ -163,6 +171,9 @@ namespace AutoBattle
                 _relicChoiceTags[i].color = def.ClassColor;
                 _relicChoiceNames[i].text = def.name;
                 _relicChoiceTexts[i].text = def.text;
+                _relicChoiceStrengths[i].text = "实测 " + RelicStrength.Chip(_relicChoiceIds[i]);
+                _relicChoiceStrengths[i].color = RelicStrength.ColorOf(_relicChoiceIds[i]);
+                SetTooltip(_relicChoiceButtons[i], RelicStrength.Tooltip(_relicChoiceIds[i]));
             }
 
             // ---- 六个槽位 ----

@@ -211,7 +211,7 @@ namespace AutoBattle.EditorTools
                 if (left > 0 && cd <= 0f && p.currentHp > 0 && p.currentHp < p.MaxHp * GameConfig.PotionAutoUseHpPercent)
                 {
                     left--;
-                    p.currentHp = Mathf.Min(p.MaxHp, p.currentHp + Mathf.RoundToInt(p.MaxHp * GameConfig.PotionHealPercent));
+                    p.currentHp = Mathf.Min(p.MaxHp, p.currentHp + Mathf.RoundToInt(p.MaxHp * GameConfig.PotionHealPercent * p.ContractHealMultiplier));
                     cd = GameConfig.PotionCooldown;
                 }
 

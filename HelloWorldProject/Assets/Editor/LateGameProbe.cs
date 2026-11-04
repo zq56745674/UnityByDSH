@@ -187,7 +187,8 @@ namespace AutoBattle.EditorTools
         /// 用来观察「推到这一章时装备大概什么档次」——胜率异常时先看它是否偏离预期。
         /// </summary>
         public static float[] RunChapterWinrateRow(int chapter, int perType, bool resetHp, int trials,
-                                                   out float avgQuality, out int[] accWin)
+                                                   out float avgQuality, out int[] accWin,
+                                                   GearBand band = GearBand.Neutral)
         {
             var battle = new BattleSystem();
             float[] w = { 0.45f, 0.30f, 0.25f };
@@ -199,7 +200,7 @@ namespace AutoBattle.EditorTools
             int qualityCount = 0;
             for (int tr = 0; tr < trials; tr++)
             {
-                var p = BuildForChapter(chapter);
+                var p = BuildForChapter(chapter, band);
                 for (int i = 0; i < EquipmentSlots.Count; i++)
                 {
                     Equipment gear = p.GetEquipment(EquipmentSlots.All[i]);
@@ -230,15 +231,22 @@ namespace AutoBattle.EditorTools
         }
 
         /// <summary>
-        /// 按章节构造主角：等级 = 该章怪级，武器与衣服各按「精英保底掉落」的品质权重抽一件。
-        /// 用精英权重而不是普通怪 QualityWeights，是因为普通怪 62.5% 出普通品质，
-        /// 玩家的可用装备其实来自精英与 Boss；用最保守的权重会得出「所有中期章节都必败」，
-        /// 那种结论没有诊断价值。巅峰技能给 0：满级前本来就没有巅峰。
+        /// 按章节构造主角：等级 = 该章怪级，装备（已解锁的槽位）按某一档掉落品质权重抽一件。
+        /// 旧口径固定用「精英保底」，理由是普通怪 62.5% 出普通品质、用最保守的权重会得出
+        /// 「所有中期章节都必败」，没有诊断价值；但那也只是猜测，代表不了玩家真实配装。
+        /// 现在把三种假设都跑一遍（悲观测普通怪、中性测精英、乐观测 Boss），结论只认三档同向。
+        /// 巅峰技能给 0：满级前本来就没有巅峰。
         /// </summary>
-        static PlayerData BuildForChapter(int chapter)
+        public enum GearBand { Pessimistic, Neutral, Optimistic }
+
+        static PlayerData BuildForChapter(int chapter) => BuildForChapter(chapter, GearBand.Neutral);
+
+        static PlayerData BuildForChapter(int chapter, GearBand band)
         {
             int level = Mathf.Min(GameConfig.ChapterMonsterLevelStep * chapter, GameConfig.MaxLevel);
-            float[] weights = GameConfig.MonsterTierDropQualityWeights[(int)MonsterTier.Elite];
+            MonsterTier dropTier = band == GearBand.Pessimistic ? MonsterTier.Normal
+                : band == GearBand.Optimistic ? MonsterTier.Boss : MonsterTier.Elite;
+            float[] weights = GameConfig.MonsterTierDropQualityWeights[(int)dropTier];
             var p = new PlayerData();
             p.level = level;
             p.paragonLevel = 0;
@@ -261,10 +269,208 @@ namespace AutoBattle.EditorTools
             Debug.Log("[ChapterWinrate]\n" + RunChapterWinrate(30, true, 12));
         }
 
+
+        /// <summary>
+        /// 章节胜率「带」：同一章在悲观 / 中性 / 乐观三种配装假设下各跑一遍。
+        /// 旧口径只给中性一条线，README 那句「中间章节只做了近似验证」指的就是这条线的代表性未知；
+        /// 三档并列后，只要结论在三档下方向一致，就可以说结论不依赖配装假设。
+        /// </summary>
+        [MenuItem("Tools/平衡回归/章节胜率带（悲观/中性/乐观配装）")]
+        static void MenuChapterWinrateBand()
+        {
+            const string path = "E:/pytest/unitydsh1/HelloWorldProject/_shots/chapter-winrate-band.txt";
+            var sb = new StringBuilder();
+            sb.AppendLine("[章节胜率带] 每章每档 12 次装备采样 × 30 场/类型；加权 战45/弓30/盗25；每场重置生命");
+            sb.AppendLine("配装假设：悲观=普通怪品质权重 / 中性=精英 / 乐观=Boss");
+            sb.AppendLine("章节  怪级    悲观 精英/Boss     中性 精英/Boss     乐观 精英/Boss");
+            for (int ch = 1; ch <= GameConfig.ChapterCount; ch++)
+            {
+                var line = new StringBuilder($"{ch,4}  {GameConfig.ChapterMonsterLevelStep * ch,4}   ");
+                foreach (GearBand band in new[] { GearBand.Pessimistic, GearBand.Neutral, GearBand.Optimistic })
+                {
+                    float[] acc = RunChapterWinrateRow(ch, 30, true, 12, out float q, out int[] wins, band);
+                    line.Append($"{acc[0] * 100f,6:0.0}%/{acc[1] * 100f,6:0.0}%   ");
+                }
+                sb.AppendLine(line.ToString());
+            }
+            string text = sb.ToString();
+            Debug.Log("[ChapterWinrateBand]\n" + text);
+            System.IO.File.WriteAllText(path, text);
+        }
+        /// <summary>
+        /// P200 的 11-10 胜率重测（README / docs/rebirth.md §14.4 的 80.8% / 90.5% 是 FinalBossStatFactor=1.6 口径）。
+        /// 口径与旧数据一致：perType=30、trials=12、resetHp=true、smartPick=true，加权 战45/弓30/盗25；
+        /// Lv.110 Boss 那一列即 11-10。两档都走 RunWinrateRow，技能在套 rank 之后选（旧数据同口径）。
+        /// </summary>
+        [MenuItem("Tools/平衡回归/P200 的 11-10 胜率（baseline vs 满轮回）")]
+        static void MenuP200FinalBossWinrate()
+        {
+            const string path = "E:/pytest/unitydsh1/HelloWorldProject/_shots/p200-11-10.txt";
+            var sb = new StringBuilder();
+            sb.AppendLine($"[P200-11-10] FinalBossStatFactor={GameConfig.FinalBossStatFactor:0.00}；perType=30，trials=12，resetHp=true，smartPick=true；加权 战45/弓30/盗25；Lv.110 Boss = 11-10");
+            AppendP200Row(sb, "全 0（baseline）", 0, 0, 0, 0, 0);
+            AppendP200Row(sb, "全 5（满轮回）", 5, 5, 5, 5, 5);
+            string text = sb.ToString();
+            Debug.Log("[P200-11-10]\n" + text);
+            System.IO.File.WriteAllText(path, text);
+        }
+
+        /// <summary>
+        /// 11-10 归因：把「1.6→1.25 的终局倍率」与「技能 1.0 的 3 技能 → 技能 2.x 的 9 技能」两个变量分开。
+        /// 旧数据（80.83% / 90.54%）是 1.6 + 3 技能口径，必须能复现才说明新的 99% 不是探针坏了。
+        /// </summary>
+        [MenuItem("Tools/平衡回归/P200 的 11-10 归因（1.25/1.6 × 3/9 技能）")]
+        static void MenuP200Attribution()
+        {
+            const string path = "E:/pytest/unitydsh1/HelloWorldProject/_shots/p200-11-10-attrib.txt";
+            var sb = new StringBuilder();
+            sb.AppendLine("[P200-11-10 归因] perType=30，trials=12，resetHp=true，smartPick=true；加权 战45/弓30/盗25");
+            float saved = GameConfig.FinalBossStatFactor;
+            try
+            {
+                sb.AppendLine($"当前配置 FinalBossStatFactor={saved:0.00}");
+                sb.AppendLine("倍率 × 技能数 → 11-10 胜率（全 0 转生 / 全 5 满轮回）");
+                foreach (float factor in new[] { 1.25f, 1.6f })
+                {
+                    GameConfig.FinalBossStatFactor = factor;
+                    foreach (int skills in new[] { 9, 3 })
+                    {
+                        sb.AppendLine(AttribRow(factor, skills, 0, 0, 0, 0, 0, "全 0"));
+                        sb.AppendLine(AttribRow(factor, skills, 5, 5, 5, 5, 5, "全 5"));
+                    }
+                }
+            }
+            finally
+            {
+                GameConfig.FinalBossStatFactor = saved;
+            }
+
+            string text = sb.ToString();
+            Debug.Log("[P200-11-10 归因]\n" + text);
+            System.IO.File.WriteAllText(path, text);
+        }
+
+        /// <summary>
+        /// 9 技能口径下的终局倍率扫描：给「要不要把 FinalBossStatFactor 从 1.25 调回去」一个可读的曲线。
+        /// 目标区间按 §14.4 的 80~90%（P200 + 满级传说套 + BiS 技能），但那是技能 1.0 的 3 技能口径，
+        /// 现在实际是 9 技能，所以曲线以 9 技能为准。
+        /// </summary>
+        [MenuItem("Tools/平衡回归/P200 的 11-10 倍率扫描（9 技能）")]
+        static void MenuP200FactorSweep()
+        {
+            const string path = "E:/pytest/unitydsh1/HelloWorldProject/_shots/p200-11-10-sweep.txt";
+            var sb = new StringBuilder();
+            sb.AppendLine("[P200-11-10 倍率扫描] 9 技能，perType=30，trials=12，resetHp=true，smartPick=true；加权 战45/弓30/盗25");
+            float saved = GameConfig.FinalBossStatFactor;
+            try
+            {
+                foreach (float factor in new[] { 1.25f, 1.4f, 1.45f, 1.5f, 1.55f, 1.6f })
+                {
+                    GameConfig.FinalBossStatFactor = factor;
+                    sb.AppendLine(AttribRow(factor, 9, 0, 0, 0, 0, 0, "全 0"));
+                    sb.AppendLine(AttribRow(factor, 9, 5, 5, 5, 5, 5, "全 5"));
+                }
+            }
+            finally
+            {
+                GameConfig.FinalBossStatFactor = saved;
+            }
+
+            string text = sb.ToString();
+            Debug.Log("[P200-11-10 倍率扫描]\n" + text);
+            System.IO.File.WriteAllText(path, text);
+        }
+
+        /// <summary>
+        /// 降噪复跑：trials 12 → 30（1080 → 2700 场/行），只测四个关键倍率。
+        /// 第一轮 1.6 × 9 技能两次跑出 85.3% 与 88.5%，说明单行噪声有 ±3 个点，结论不能靠单次。
+        /// </summary>
+        [MenuItem("Tools/平衡回归/P200 的 11-10 倍率扫描（降噪：30 trials）")]
+        static void MenuP200FactorSweepLowNoise()
+        {
+            const string path = "E:/pytest/unitydsh1/HelloWorldProject/_shots/p200-11-10-sweep2.txt";
+            var sb = new StringBuilder();
+            sb.AppendLine("[P200-11-10 倍率扫描·降噪] 9 技能，perType=30，trials=30（2700 场/行），resetHp=true，smartPick=true；加权 战45/弓30/盗25");
+            float saved = GameConfig.FinalBossStatFactor;
+            try
+            {
+                foreach (float factor in new[] { 1.25f, 1.45f, 1.55f, 1.6f })
+                {
+                    GameConfig.FinalBossStatFactor = factor;
+                    sb.AppendLine(AttribRow(factor, 9, 0, 0, 0, 0, 0, "全 0", 30));
+                    sb.AppendLine(AttribRow(factor, 9, 5, 5, 5, 5, 5, "全 5", 30));
+                }
+            }
+            finally
+            {
+                GameConfig.FinalBossStatFactor = saved;
+            }
+
+            string text = sb.ToString();
+            Debug.Log("[P200-11-10 倍率扫描·降噪]\n" + text);
+            System.IO.File.WriteAllText(path, text);
+        }
+
+        static string AttribRow(float factor, int skills, int rb, int rg, int rf, int rl, int ra, string label, int trials = 12)
+        {
+            const int per = 30;
+            int tr = trials;
+            float[] acc = RunWinrateRowCapped(200, per, true, tr, true, rb, rg, rf, rl, ra, skills, out int skillSum, out int[] accWin);
+            int n = per * tr;
+            return $"系数 {factor:0.00} × {skills} 技能 · {label}：11-10 {acc[3] * 100f:0.00}%（战 {accWin[0] * 100f / n:0.0}% / 弓 {accWin[1] * 100f / n:0.0}% / 盗 {accWin[2] * 100f / n:0.0}%），实际技能 {skillSum / (float)tr:0.0}";
+        }
+
+        /// <summary>带技能数上限的胜率行（口径同 RunWinrateRow 的五 rank 重载）。</summary>
+        public static float[] RunWinrateRowCapped(int paragon, int perType, bool resetHp, int trials, bool smartPick,
+                                                  int rebirthBattleRank, int rebirthGrowthRank, int rebirthFortuneRank,
+                                                  int rebirthLegacyRank, int rebirthAlchemyRank, int maxSkills,
+                                                  out int skillSum, out int[] accWin)
+        {
+            var battle = new BattleSystem();
+            float[] w = { 0.45f, 0.30f, 0.25f };
+            int[] lvArr = { 100, 100, 110, 110 };
+            MonsterTier[] tierArr = { MonsterTier.Elite, MonsterTier.Boss, MonsterTier.Elite, MonsterTier.Boss };
+
+            var acc = new float[lvArr.Length];
+            accWin = new int[3];
+            skillSum = 0;
+            for (int tr = 0; tr < trials; tr++)
+            {
+                var p = Build(paragon, smartPick, rebirthBattleRank, rebirthGrowthRank,
+                    rebirthFortuneRank, rebirthLegacyRank, rebirthAlchemyRank, maxSkills);
+                skillSum += p.OwnedSkillCount;
+                for (int c = 0; c < lvArr.Length; c++)
+                {
+                    for (int t = 0; t < 3; t++)
+                    {
+                        int wins = 0;
+                        var type = (MonsterType)t;
+                        for (int i = 0; i < perType; i++)
+                        {
+                            var m = MonsterData.CreateForLevel(lvArr[c], type, tierArr[c], MonsterAffix.None);
+                            if (Fight(p, m, battle, resetHp)) wins++;
+                        }
+                        acc[c] += w[t] * ((float)wins / perType);
+                        if (c == lvArr.Length - 1) accWin[t] += wins;
+                    }
+                }
+            }
+            for (int c = 0; c < acc.Length; c++) acc[c] /= trials;
+            return acc;
+        }
+
+        static void AppendP200Row(StringBuilder sb, string label, int rb, int rg, int rf, int rl, int ra)
+        {
+            const int per = 30, tr = 12;
+            float[] acc = RunWinrateRow(200, per, true, tr, true, rb, rg, rf, rl, ra, out int skillSum, out int[] accWin);
+            int n = per * tr;
+            sb.AppendLine($"{label}：11-10 胜率 {acc[3] * 100f:0.00}%（战 {accWin[0] * 100f / n:0.0}% / 弓 {accWin[1] * 100f / n:0.0}% / 盗 {accWin[2] * 100f / n:0.0}%），平均技能 {skillSum / (float)tr:0.0}");
+        }
+
         /// <summary>构造一个满级主角：传说五件套 + 按技能点自选（探针按推荐分取前 3 实打）。</summary>
         static PlayerData Build(int paragon, bool smartPick = true,
             int rebirthBattleRank = 0, int rebirthGrowthRank = 0, int rebirthFortuneRank = 0,
-            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0)
+            int rebirthLegacyRank = 0, int rebirthAlchemyRank = 0, int maxSkills = -1)
         {
             var p = new PlayerData();
             p.level = 100;
@@ -276,7 +482,10 @@ namespace AutoBattle.EditorTools
             if (paragon >= 10) p.BeginDoctrine(ProbePolicy.ProbeDoctrine);
 
             // 技能 2.1：没有随机候选。每次花 1 点，从本流派未掌握里按推荐分取前 3 实打。
-            for (int guard = 0; guard < SkillCatalog.TotalPerDoctrine && p.SkillPoints > 0; guard++)
+            // maxSkills 用来复现「技能 1.0 时代只有 3 个技能」的旧口径（归因用，-1 = 不限）。
+            int learned = 0;
+            for (int guard = 0; guard < SkillCatalog.TotalPerDoctrine && p.SkillPoints > 0
+                 && (maxSkills < 0 || learned < maxSkills); guard++)
             {
                 List<SkillId> candidates = p.AvailableSkillIds();
                 if (candidates.Count == 0) break;
@@ -313,6 +522,7 @@ namespace AutoBattle.EditorTools
                         if (p.GetSkillSlot(baseSlot + i) < 0) { p.SetSkillSlot(baseSlot + i, (int)got); break; }
                     }
                 }
+                learned++;
             }
             // 转生加成在技能挑选之后套：先套会改变技能点评分，构筑与正常玩家不可比。
             if (rebirthBattleRank + rebirthGrowthRank + rebirthFortuneRank + rebirthLegacyRank + rebirthAlchemyRank > 0)
@@ -744,6 +954,95 @@ namespace AutoBattle.EditorTools
                 }
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 巅峰符文木桩矩阵（2026-11-04）：两个流派 × 无符文 / 全甲 / 全乙。
+        /// 同一套 Lv.100 传说装、同一个毕业六格技能，只改符文形态，300 秒木桩平均 DPS。
+        /// 验收口径：任一格相对同流派「无符文」基准超出 ±25% 即判失败（方案 C 的验收条件）。
+        /// </summary>
+        [MenuItem("Tools/测试/巅峰符文木桩矩阵（2 流派 × 3 配置，300 秒）")]
+        public static void MenuRuneMatrix() => RunRuneMatrix(300f, 3, 1000);
+
+        [MenuItem("Tools/测试/巅峰符文木桩矩阵（冒烟：30 秒）")]
+        public static void MenuRuneMatrixSmoke() => RunRuneMatrix(30f, 1, 1000);
+
+        const string RuneMatrixPath = "E:/pytest/unitydsh1/HelloWorldProject/_shots/rune-matrix.txt";
+
+        static void RunRuneMatrix(float seconds, int repeats, int paragon)
+        {
+            var set = LegendarySet();
+
+            PlayerData Template(int doctrine, int form)
+            {
+                var p = new PlayerData();
+                p.level = 100;
+                p.paragonLevel = paragon;
+                p.paragonExp = 0;
+                EquipSet(p, set);
+                p.autoBuyPotion = true;
+                p.potionCount = GameConfig.PotionMaxCount;
+                p.BeginDoctrine(doctrine);
+                p.GrantDoctrineKit(doctrine);
+                p.EquipDoctrineBuild(doctrine);
+
+                if (form >= 0)
+                {
+                    for (int slot = 0; slot < PlayerData.SkillSlotCount; slot++)
+                    {
+                        int raw = p.GetSkillSlot(slot);
+                        if (raw < 0) continue;
+                        var id = (SkillId)raw;
+                        if (!RuneCatalog.Has(id)) continue;
+                        p.UnlockRune(id);
+                        p.SetRuneForm(id, form == 0 ? RuneForm.A : RuneForm.B);
+                    }
+                }
+
+                p.FillHp();
+                return p;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append($"巅峰符文木桩矩阵（{System.DateTime.Now:yyyy-MM-dd HH:mm}）\n");
+            sb.Append($"口径：Lv.100 传说五件套 + 巅峰 {paragon}（符文 {RuneCatalog.PointsFor(paragon)} 点）；" +
+                      $"每流派装 SkillCatalog.BuildOf 的毕业六格；木桩 {seconds:0} 秒 × {repeats} 次取平均；" +
+                      $"验收：相对同流派无符文基准 ±25% 以内\n");
+            sb.Append($"按档位说明：甲 = RuneForm.A，乙 = RuneForm.B；只解锁已装备的六个技能\n\n");
+
+            var configs = new[] { -1, 0, 1 };
+            var configName = new[] { "无符文", "全甲", "全乙" };
+            bool allPass = true;
+
+            for (int doctrine = 1; doctrine <= 2; doctrine++)
+            {
+                float baseline = 0f;
+                var rows = new float[configs.Length];
+                for (int ci = 0; ci < configs.Length; ci++)
+                {
+                    float sum = 0f;
+                    for (int i = 0; i < repeats; i++) sum += DummyDamage(Template(doctrine, configs[ci]), seconds);
+                    rows[ci] = sum / repeats / seconds;
+                    if (ci == 0) baseline = rows[ci];
+                }
+
+                sb.Append($"【{SkillCatalog.SchoolName(doctrine)}】无符文基准 DPS {baseline:0}\n");
+                for (int ci = 0; ci < configs.Length; ci++)
+                {
+                    float ratio = baseline > 0f ? rows[ci] / baseline : 1f;
+                    bool pass = System.Math.Abs(ratio - 1f) <= 0.25f;
+                    if (!pass) allPass = false;
+                    sb.Append($"  {configName[ci],-5} DPS {rows[ci],8:0.0}   {(ratio - 1f) * 100f,+7:0.0}%   {(pass ? "PASS" : "**超出 ±25%**")}\n");
+                }
+                sb.Append("\n");
+            }
+
+            sb.Append(allPass ? "结论：全部格子在 ±25% 以内，方案 C 的 DPS 验收通过。\n"
+                              : "结论：存在超出 ±25% 的格子，需要回看形态数值。\n");
+
+            System.IO.File.WriteAllText(RuneMatrixPath, sb.ToString());
+            Debug.Log("[RUNE] " + sb.ToString().Replace("\n", " | "));
+            Debug.Log($"[RUNE] 已写入 {RuneMatrixPath}");
         }
     }
 }

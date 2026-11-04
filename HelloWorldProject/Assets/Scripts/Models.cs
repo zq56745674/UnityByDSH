@@ -602,6 +602,13 @@ namespace AutoBattle
         public int defense;
         public float speed;
 
+        /// <summary>攻速加成（0 = 不加成）。出手间隔见 <see cref="GameConfig.AttackInterval"/>。</summary>
+        public float attackHaste;
+
+        /// <summary>疾袭契约：直接乘在出手间隔上（1 = 不压缩）。走这条路是因为深层怪攻速已撞软/硬上限，</summary>
+        /// <remarks>把加成塞进 <see cref="attackHaste"/> 会被上限吃掉，契约等于没生效。</remarks>
+        public float attackIntervalMult = 1f;
+
         /// <summary>暴击率：近战/远程 5%，暴击怪 45%（取自 GameConfig.MonsterCritChanceByType）。</summary>
         public float critChance;
 
@@ -678,6 +685,21 @@ namespace AutoBattle
             return CreateCore(level, type, tier, affix,
                 applyMaxTierAndFinalBoss: false, applyChapterBias: false,
                 extraStatFactor: Mathf.Max(0.01f, GameConfig.EndlessBaseFactor));
+        }
+
+        /// <summary>
+        /// 深层契约：把敌人侧的乘区乘进面板（狂躁攻击 / 疾袭出手间隔）。
+        /// 硬化走「敌人受伤」乘区（BattleSystem.HitMonster），不在这里改护甲——
+        /// 护甲减伤 = 护甲/(护甲+K)，100 级 K≈2300、怪护甲只有 200 出头，加 80% 护甲也只多掉 7% 伤害。
+        /// 必须在 <see cref="CreateForEndlessFloor"/> 之后、开打之前调用。
+        /// </summary>
+        public void ApplyContract(ContractMods mods)
+        {
+            if (mods == null || mods.IsEmpty) return;
+            attack = Mathf.Max(1, Mathf.RoundToInt(attack * Mathf.Max(0.01f, mods.enemyAttackMult)));
+            // 疾袭：不写 attackHaste（会被 AttackSpeedSoftCap/HardCap 吃掉），直接把间隔压下去。
+            attackIntervalMult = 1f / Mathf.Max(0.05f, mods.enemyAttackSpeedMult);
+            attackTimer = GameConfig.AttackInterval(speed, attackHaste) * attackIntervalMult;
         }
 
         private static MonsterData CreateCore(

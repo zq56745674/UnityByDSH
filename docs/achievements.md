@@ -1,7 +1,7 @@
 # 成就系统设计
 
 状态：2026-10-20 **已实现**（存档 v10）。实现与验收记录见 §15；本文其余章节保留为设计依据，未逐条回改。2026-10-25 补成就点出口（兑换无尽建议起始层，存档 v13），见 §15.5；2026-10-26 商店 2.0 升 v14（8 个商店字段，不碰成就字段）；2026-10-26 技能 2.0 升 v15（`doctrine` / `skillEverMask`），`skills_15` / `skill_triple_4` / `all_active` 改用跨世掩码；同日技能改为**技能点自选**（随机三选一删除，P10 起按巅峰发点），回归 **668/0**。
-涉及存档：**v15**（成就本身 v10；v11 无尽榜、v12 转生 v2、v13 成就点兑换、v14 商店 2.0、v15 技能 2.0）。`SaveSystem.CurrentSaveVersion = 15`；v9 已用于转生，v10 用于成就累计与解锁。
+涉及存档：**v16**（成就本身 v10；v11 无尽榜、v12 转生 v2、v13 成就点兑换、v14 商店 2.0、v15 技能 2.0、v16 深层契约分）。`SaveSystem.CurrentSaveVersion = 16`；成就字段自 v15 起未再改，v16 只加 `PlayerData.contractScore`。
 相关文件（已实现）：`Models.PlayerStats.cs` / `Models.Achievements.cs` / `AchievementCatalog.cs` / `AchievementSystem.cs` / `SaveSystem.cs` / `GameController.cs` / `GameController.Endless.cs` / `GameController.Rebirth.cs` / `GameUI.Achievements.cs` / `Assets/Resources/achievements.json`
 参考：`README.md`（当前实现与基线）、`docs/equipment-reforge.md`（装备规则）、`docs/endless-mode.md`（无尽层数口径）、`docs/rebirth.md`（已实现转生与 v10 预留）。文中代码位置以类/方法名为锚点，行号仅为复审时参考。
 

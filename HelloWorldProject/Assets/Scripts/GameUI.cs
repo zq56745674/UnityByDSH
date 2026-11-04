@@ -94,6 +94,21 @@ namespace AutoBattle
         private Text _skillPanelSchoolText;
         private Text _skillPanelOtherText;
 
+        // ---- 巅峰符文面板（2026-11-04）----
+        private RectTransform _runePanel;
+        private Text _runePanelTitle;
+        private Image _runePointsBar;
+        private Text _runePointsText;
+        private Button[] _runeCardButtons;
+        private Text[] _runeCardLabels;
+        private Image[] _runeCardIcons;
+        private Image[] _runeCardAccents;
+        private SkillId[] _runeIds;
+        private Text _runeFooterText;
+
+        /// <summary>符文面板的判脏签名（掩码 + 巅峰 + 流派）。</summary>
+        private ulong _runeSig;
+
         /// <summary>技能面板当前选中的槽位（0~5）。</summary>
         private int _selectedSkillSlot;
 
@@ -217,7 +232,9 @@ namespace AutoBattle
         // 洗练同理：它也在同一个对象上换掉全部副词条，所以次数（reforgeCount）也要进键。
         // 五槽的缓存键：装备引用、等级、强化、洗练、锁、评分开关与技能状态全部拼成签名。
         // 比旧的两槽逐字段比较更不容易漏项（洗练会原地改词条数值，引用不变）。
-        private string _scoreCacheSignature = string.Empty;
+        private ulong _scoreCacheSignature;
+        /// <summary>收起状态下详情串是否已经清过一次，避免每条日志都重复清空。</summary>
+        private bool _logDetailCleared;
         private readonly string[] _scoreEquipTitles = new string[EquipmentSlots.Count];
         private readonly string[] _scoreEquipStats = new string[EquipmentSlots.Count];
         private readonly string[] _scoreEquipMetas = new string[EquipmentSlots.Count];
@@ -377,6 +394,7 @@ namespace AutoBattle
             _modalDim.gameObject.SetActive(false);
 
             BuildSkillPanel(root);
+            BuildRunePanel(root);
             BuildDoctrinePanel(root);
             BuildStagePanel(root);
             BuildSavePanel(root);
@@ -390,6 +408,8 @@ namespace AutoBattle
             BuildEndlessPanel(root);
             BuildRebirthPanel(root);
             BuildAchievements(root);
+            // 屠魔录入口建在成就面板头部，所以必须排在 BuildAchievements 之后。
+            BuildBestiaryPanel(root);
             BuildShopPanel2(root);
             // 引导最后建（横幅之下另算）：它的遮罩与高亮框要压住所有浮层。
             BuildGuide(root);

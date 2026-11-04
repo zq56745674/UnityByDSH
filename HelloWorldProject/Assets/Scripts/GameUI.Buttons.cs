@@ -258,6 +258,15 @@ namespace AutoBattle
                 GameConfig.TooltipBg, false);
             Round(_tooltipBg, 8);
             AddBorder(_tooltipBg, 8, new Color(0.82f, 0.66f, 0.34f, 0.95f));
+            // 皮面高光：贴着上边框的一条 1px 暖白，随提示框宽度横向拉伸。
+            Image tooltipSheen = CreateImage(_tooltipBg.rectTransform, "Sheen", 1, 1, 10, 1,
+                GameConfig.TooltipSheen);
+            RectTransform tooltipSheenRt = tooltipSheen.rectTransform;
+            tooltipSheenRt.anchorMin = new Vector2(0f, 1f);
+            tooltipSheenRt.anchorMax = new Vector2(1f, 1f);
+            tooltipSheenRt.pivot = new Vector2(0.5f, 1f);
+            tooltipSheenRt.offsetMin = new Vector2(3f, -3f);
+            tooltipSheenRt.offsetMax = new Vector2(-3f, -2f);
             _tooltipRoot = _tooltipBg.rectTransform;
             _tooltipRoot.anchorMin = new Vector2(0.5f, 0.5f);
             _tooltipRoot.anchorMax = new Vector2(0.5f, 0.5f);
@@ -319,9 +328,11 @@ namespace AutoBattle
             float half = width * 0.5f;
             float x = Mathf.Clamp(centerX, area.xMin + half + 4f, Mathf.Max(area.xMin + half + 4f, area.xMax - half - 4f));
 
-            // 默认挂在按钮下方；下方顶到容器底边时翻到上方（底部那排按钮都是这种情况）。
+            // 默认挂在按钮下方；下方顶到画布底边时翻到上方。
+            // 贴面板底边的按钮（成就称号栏、行商页脚）下方就是桌面，提示框挂下去正好浮在
+            // 面板外的暗底上，比翻上去压住上一行控件干净，所以只按画布底边判断。
             float y = bottom - TooltipGap - height * 0.5f;
-            if (y - height * 0.5f < area.yMin + 4f) y = top + TooltipGap + height * 0.5f;
+            if (bottom - TooltipGap - height < area.yMin + 10f) y = top + TooltipGap + height * 0.5f;
             y = Mathf.Clamp(y, area.yMin + height * 0.5f + 4f, area.yMax - height * 0.5f - 4f);
 
             _tooltipRoot.anchoredPosition = new Vector2(x, y);

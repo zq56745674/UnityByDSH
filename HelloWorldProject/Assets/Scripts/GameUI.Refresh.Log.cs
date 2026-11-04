@@ -15,6 +15,7 @@ namespace AutoBattle
             RefreshShop(p, textTick);
             RefreshSkillBar(p, textTick);
             RefreshSkillPanel();
+            RefreshRunePanel();
             RefreshDoctrinePanel();
             RefreshStagePanel();
             RefreshSavePanel();
@@ -27,6 +28,7 @@ namespace AutoBattle
             RefreshRelicPanel();
             RefreshRebirthPanel();
             RefreshAchievementPanel();
+            RefreshBestiaryPanel();
             RefreshShop2();
             RefreshAbout();
             RefreshDisplayPanel();
@@ -171,6 +173,17 @@ namespace AutoBattle
             if (_logText != null) _logText.text = ticker.ToString();
 
             // ---- 展开面板：旧在上、新在下，读完自动跟到底 ----
+            // 收起状态不构造详情串（16KB StringBuilder + 逐行高量测）；展开时 ToggleBattleLog 会把
+            // _lastLogVersion 置 -1 强制重建一次，所以这里跳过不会让面板显示旧内容（审计「性能 3」）。
+            if (!_battleLogOpen)
+            {
+                if (_logDetailCleared) return;
+                _logDetailCleared = true;
+                if (_battleLogDetail != null) _battleLogDetail.text = string.Empty;
+                return;
+            }
+            _logDetailCleared = false;
+
             var detail = new System.Text.StringBuilder(16384);
             int detailFrom = Mathf.Max(0, count - MaxDetailLogLines);
             for (int i = detailFrom; i < count; i++)
@@ -249,28 +262,43 @@ namespace AutoBattle
         {
             if (_equipTitles == null || _equipStats == null || _equipMetas == null) return;
 
-            var sig = new System.Text.StringBuilder(320);
-            sig.Append(p.level).Append('|').Append(p.paragonLevel).Append('|')
-               .Append(p.ownedSkillMask).Append('|').Append(GameSettings.ShowScore ? 1 : 0);
-            for (int i = 0; i < PlayerData.SkillSlotCount; i++) sig.Append(',').Append(p.GetSkillSlot(i));
+            // 用 64 位哈希签名而不是拼字符串：这里每帧要过五槽 × 20+ 字段，
+            // StringBuilder + ToString() 等于每帧稳定产出一次 300+ 字符的堆分配（审计「性能 2」）。
+            var sig = new Sig();
+            sig.Add(p.level);
+            sig.Add(p.paragonLevel);
+            sig.Add(p.ownedSkillMask);
+            sig.Add(GameSettings.ShowScore);
+            for (int i = 0; i < PlayerData.SkillSlotCount; i++) sig.Add(p.GetSkillSlot(i));
 
             for (int i = 0; i < EquipmentSlots.Count; i++)
             {
                 Equipment e = p.GetEquipment(EquipmentSlots.All[i]);
-                sig.Append('|');
-                if (e == null) { sig.Append('_'); continue; }
-                sig.Append(e.level).Append(',').Append((int)e.quality).Append(',')
-                   .Append(e.qualityMultiplier).Append(',').Append(e.enhanceLevel).Append(',')
-                   .Append(e.reforgeCount).Append(',').Append(e.locked ? 1 : 0).Append(',')
-                   .Append(e.attack).Append(',').Append(e.defense).Append(',').Append(e.hp).Append(',')
-                   .Append(e.speed).Append(',').Append(e.haste).Append(',').Append(e.armorPen).Append(',')
-                   .Append(e.critChance).Append(',').Append(e.critDamage).Append(',')
-                   .Append(e.affixCritChance).Append(',').Append(e.affixCritDamage).Append(',')
-                   .Append(e.affixAttackSpeed).Append(',').Append(e.affixAllStats).Append(',')
-                   .Append(e.affixArmorPen).Append(',').Append(e.affixScale);
+                sig.Add(e != null);
+                if (e == null) continue;
+                sig.Add(e.level);
+                sig.Add((int)e.quality);
+                sig.Add(e.qualityMultiplier, 100000f);
+                sig.Add(e.enhanceLevel);
+                sig.Add(e.reforgeCount);
+                sig.Add(e.locked);
+                sig.Add(e.attack);
+                sig.Add(e.defense);
+                sig.Add(e.hp);
+                sig.Add(e.speed);
+                sig.Add(e.haste, 100000f);
+                sig.Add(e.armorPen, 100000f);
+                sig.Add(e.critChance, 100000f);
+                sig.Add(e.critDamage, 100000f);
+                sig.Add(e.affixCritChance, 100000f);
+                sig.Add(e.affixCritDamage, 100000f);
+                sig.Add(e.affixAttackSpeed, 100000f);
+                sig.Add(e.affixAllStats, 100000f);
+                sig.Add(e.affixArmorPen, 100000f);
+                sig.Add(e.affixScale, 100000f);
             }
 
-            string signature = sig.ToString();
+            ulong signature = sig.Value;
             if (signature == _scoreCacheSignature) return;
             _scoreCacheSignature = signature;
 

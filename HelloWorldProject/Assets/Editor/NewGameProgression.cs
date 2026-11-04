@@ -423,7 +423,7 @@ namespace AutoBattle.EditorTools
                 {
                     p.potionCount--;
                     p.currentHp = Mathf.Min(p.MaxHp,
-                        p.currentHp + Mathf.RoundToInt(p.MaxHp * GameConfig.PotionHealPercent));
+                        p.currentHp + Mathf.RoundToInt(p.MaxHp * GameConfig.PotionHealPercent * p.ContractHealMultiplier));
                     cd = GameConfig.PotionCooldown;
                 }
 
@@ -470,7 +470,7 @@ namespace AutoBattle.EditorTools
                 p.currentHp = Mathf.Min(p.MaxHp, p.currentHp + GameConfig.PlayerMaxHpPerLevel * levels);
             }
 
-            int heal = Mathf.RoundToInt(p.MaxHp * GameConfig.MonsterTierHealOnKillPercent[(int)m.tier]);
+            int heal = Mathf.RoundToInt(p.MaxHp * GameConfig.MonsterTierHealOnKillPercent[(int)m.tier] * p.ContractHealMultiplier);
             p.currentHp = Mathf.Min(p.MaxHp, p.currentHp + heal);
 
             ResolveDrops(p, m);

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace AutoBattle
@@ -265,7 +265,9 @@ namespace AutoBattle
                     : GameConfig.CardBg;
 
                 MusicTrack track = MusicCatalog.Tracks[i];
-                string missing = available ? "" : "  <color=#9B2C2C>（缺少文件）</color>";
+                // 缺文件时直接把要补的文件名写出来：换机克隆下来四首 mp3 都不在（.gitignore），
+                // 只说「缺少文件」用户还得回头翻文档找文件名。
+                string missing = available ? "" : "  <color=#9B2C2C>（缺 " + FileNameOf(track) + "）</color>";
                 _musicTrackLabels[i].text =
                     $"<b>{track.Title}</b>{missing}\n" +
                     $"<size=11><color=#6F6252>{track.Artist} · {track.DurationText}</color></size>";
@@ -319,6 +321,14 @@ namespace AutoBattle
         {
             int total = Mathf.Max(0, Mathf.FloorToInt(seconds));
             return $"{total / 60}:{total % 60:00}";
+        }
+
+        /// <summary>曲目在 Resources/Music 下应有的文件名（缺文件提示用）。</summary>
+        private static string FileNameOf(MusicTrack track)
+        {
+            string path = track.ResourcePath;
+            int slash = path.LastIndexOf('/');
+            return (slash >= 0 ? path.Substring(slash + 1) : path) + ".mp3";
         }
     }
 }

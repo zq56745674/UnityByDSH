@@ -54,6 +54,70 @@ namespace AutoBattle
 
         public void CloseEndlessPanel() => EndlessPanelOpen = false;
 
+        // ==================== 深层契约（B，docs/gameplay-expansion.md §5） ====================
+        // 面板上勾 0~3 条，每条一个档位；开局时把档位拷进 EndlessRunState 并聚合成 ContractMods。
+        // 这里的选择只活在本次会话里（不进存档），下一次开局面板里还是上次勾的那套，方便重复挑战。
+
+        private readonly int[] _endlessContractTiers = new int[ContractCatalog.All.Length];
+
+        /// <summary>面板当前勾选的契约档位（只读给 UI 画选中态）。</summary>
+        public int[] EndlessContractTiers => _endlessContractTiers;
+
+        /// <summary>当前勾了几条。</summary>
+        public int EndlessContractCount => ContractCatalog.CountSelected(_endlessContractTiers);
+
+        /// <summary>当前勾选的档位系数之和（面板显示本局倍率）。</summary>
+        public float EndlessContractCoef => ContractCatalog.CoefSum(_endlessContractTiers);
+
+        /// <summary>
+        /// 点某一档：再点一次同一档 = 取消；点别的档 = 换档。决绝只有 Ⅰ 档。
+        /// 已选满 <see cref="ContractCatalog.MaxSelected"/> 条时再选新的会被拒绝（返回 false）。
+        /// </summary>
+        public bool ToggleContractTier(ContractKind kind, int tier)
+        {
+            int i = (int)kind;
+            if (i < 0 || i >= _endlessContractTiers.Length) return false;
+            ContractDef def = ContractCatalog.Get(kind);
+            if (def == null || tier <= 0 || tier > def.TierCount) return false;
+
+            if (_endlessContractTiers[i] == tier)
+            {
+                _endlessContractTiers[i] = 0;
+                return true;
+            }
+
+            bool already = _endlessContractTiers[i] > 0;
+            if (!already && ContractCatalog.CountSelected(_endlessContractTiers) >= ContractCatalog.MaxSelected)
+            {
+                AddLog($"🔒 契约最多同时选 {ContractCatalog.MaxSelected} 条，先取消一条再选", GameConfig.LogWarn);
+                return false;
+            }
+
+            _endlessContractTiers[i] = tier;
+            return true;
+        }
+
+        /// <summary>清空面板上的契约勾选（不影响已入账的累计契约分）。</summary>
+        public void ClearContractSelection()
+        {
+            for (int i = 0; i < _endlessContractTiers.Length; i++) _endlessContractTiers[i] = 0;
+        }
+
+        /// <summary>本层的击杀需求（群袭不改击杀数，只改守关阶段的精英只数）。</summary>
+        private int ContractKillTarget(int floor)
+        {
+            return EndlessCatalog.KillTargetOf(floor);
+        }
+
+        /// <summary>
+        /// 群袭：守关怪按「本层层数 + N」的强度生成（N = 契约档位，0 = 不加强）。
+        /// 只加怪不加难度（引擎里杂兵几乎免费），所以难度落在这只关底怪的属性上。
+        /// </summary>
+        private int ContractClearFloorBonus()
+        {
+            return Player != null ? Mathf.Max(0, Player.ContractClearFloorBonus) : 0;
+        }
+
         // ==================== 深渊遗物（v1，docs/gameplay-expansion.md §4） ====================
         // 一局无尽里每清 10 层弹一次三选一；遗物只在本局有效，撤退/阵亡即清空、不进存档。
         // 序列由「本局种子 + 层号」派生，不消耗 UnityEngine.Random（战斗随机流），
@@ -74,8 +138,9 @@ namespace AutoBattle
         /// <summary>生成三张候选（排除本局已持有的，避免出现「已经有了还给你选」）。</summary>
         private void OfferRelicChoice(int clearedFloor)
         {
+            int maxTier = ContractCatalog.RelicMaxTier(Player != null ? Player.contractScore : 0);
             System.Collections.Generic.List<int> picks = RelicCatalog.RollChoices(
-                EndlessRun.relicSeed, clearedFloor, EndlessRun.relics);
+                EndlessRun.relicSeed, clearedFloor, EndlessRun.relics, maxTier);
             if (picks == null || picks.Count == 0) return;
 
             EndlessRun.pendingRelics.Clear();
@@ -214,6 +279,18 @@ namespace AutoBattle
             Monster = null;
             _loadedFromSave = false;
 
+            // 深层契约：把面板上的勾选夹成合法值、拷进本局、聚合出修正。
+            // 契约分只换遗物档位/槽位，不改玩家面板，所以这里只算一次乘区。
+            int[] tiers = ContractCatalog.Sanitize(_endlessContractTiers);
+            System.Array.Copy(tiers, _endlessContractTiers, tiers.Length);
+            ContractMods contractMods = ContractMods.Build(tiers);
+            EndlessRun.contractTiers = tiers;
+            EndlessRun.contract = contractMods;
+            EndlessRun.contractCount = ContractCatalog.CountSelected(tiers);
+            EndlessRun.relicSlots = RelicCatalog.SlotsFor(Player.contractScore);
+            EndlessRun.killTarget = ContractKillTarget(floor);
+            Player.contract = contractMods;
+
             // 深渊遗物：判定要不要在本局启用（首局不弹），并清掉上一局残留的加成。
             // 种子用系统时间而不是 UnityEngine.Random：后者是战斗随机流，动它会破坏逐帧可复现。
             bool relicsOn = RelicsEnabledThisRun;
@@ -245,8 +322,15 @@ namespace AutoBattle
                 GameConfig.LogUnlock);
             AddLog("  阵亡或撤退都会结束本局；每清一层立即记录最高层。", GameConfig.LogInfo);
             AddLog(relicsOn
-                ? $"✦ 深渊遗物：每清 10 层三选一，槽位 {RelicCatalog.SlotCount}；满槽后需先舍弃一件"
+                ? $"✦ 深渊遗物：每清 10 层三选一（最高第 {ContractCatalog.RelicMaxTier(Player.contractScore)} 档），" +
+                  $"槽位 {EndlessRun.RelicSlots}；满槽后需先舍弃一件"
                 : "✦ 深渊遗物将在下一局生效（首局先跑一遍无尽）。", GameConfig.LogUnlock);
+            if (contractMods != null)
+            {
+                AddLog($"◈ 深层契约 {contractMods.count} 条：{ContractCatalog.Describe(tiers)}" +
+                       $"（本局契约分倍率 ×{1f + ContractCatalog.CoefSum(tiers):0.00}，每层击杀 {EndlessRun.killTarget} 只）",
+                    GameConfig.LogUnlock);
+            }
         }
 
         /// <summary>结果面板的「再次挑战」：从检查点起步，重新开一局。</summary>
@@ -259,6 +343,11 @@ namespace AutoBattle
         public void RetreatEndlessRun()
         {
             if (!EndlessActive) return;
+            if (Player != null && Player.ContractNoRetreat)
+            {
+                AddLog("🔒 决绝契约：本局不能主动撤退（只能打到阵亡）", GameConfig.LogWarn);
+                return;
+            }
             AddLog($"◀ 已撤退（第 {EndlessRun.floor} 层）", GameConfig.LogWarn);
             EndEndlessRun(EndlessEndReason.Retreat);
         }
@@ -280,6 +369,7 @@ namespace AutoBattle
                 _finalBossAttempt = 0;
                 _justClearedStage = false;
                 Player.relic = null;
+                Player.contract = null;
                 Player.FillHp();
                 Player.shield = 0;
                 _battle.ResetSkillState();
@@ -318,7 +408,7 @@ namespace AutoBattle
             ResolveLevelUp(reward);
             ResolveDrops();
 
-            if (EndlessRun.killCount >= EndlessCatalog.KillTargetOf(EndlessRun.floor))
+            if (EndlessRun.killCount >= EndlessRun.killTarget)
             {
                 ResolveEndlessFloorClear();
             }
@@ -372,6 +462,7 @@ namespace AutoBattle
 
             EndlessRun.floor = Mathf.Min(cleared + 1, EndlessCatalog.MaxFloor);
             EndlessRun.killCount = 0;
+            EndlessRun.killTarget = ContractKillTarget(EndlessRun.floor);
             _pendingTier = MonsterTier.Normal;
             _justClearedStage = false;
             Monster = null;
@@ -414,7 +505,10 @@ namespace AutoBattle
                 AddLog("♥ 开战前已恢复全部生命", GameConfig.LogHeal);
             }
 
-            Monster = MonsterData.CreateForEndlessFloor(def.floor, type, tier, affix);
+            // 群袭：整层怪物按更深的层数生成（小怪、精英、Boss 都吃）。
+            int spawnFloor = def.floor + ContractClearFloorBonus();
+            Monster = MonsterData.CreateForEndlessFloor(spawnFloor, type, tier, affix);
+            Monster.ApplyContract(EndlessRun.contract);
             CurrentState = State.Fighting;
             _battle.BeginBattle(Player);
 
@@ -438,6 +532,30 @@ namespace AutoBattle
             EndlessRun.reachedFloor = EndlessRun.floor;
             EndlessRun.finishSeconds = EndlessRun.Seconds;
 
+            // 契约分：先算本局再记账（历史榜条目要读 EndlessRun.contractScore）。
+            // 换档/重置是把这一局掐掉，与「退出游戏放弃本局」同义，不给分。
+            EndlessRun.contractScore = ContractCatalog.ScoreOf(
+                EndlessRun.clearedThisRun, EndlessRun.contractTiers);
+            if ((reason == EndlessEndReason.Death || reason == EndlessEndReason.Retreat)
+                && Player != null && EndlessRun.contractScore > 0)
+            {
+                int before = Player.contractScore;
+                Player.contractScore = ContractCatalog.AddToTotal(before, EndlessRun.contractScore);
+                int gained = Player.contractScore - before;
+                int milestonesBefore = ContractCatalog.MilestoneCount(before);
+                int milestonesAfter = ContractCatalog.MilestoneCount(Player.contractScore);
+
+                AddLog($"◈ 深层契约 {EndlessRun.contractCount} 条 → 契约分 +{gained:N0}" +
+                       $"（本局 {EndlessRun.contractScore:N0}，累计 {Player.contractScore:N0}）",
+                    GameConfig.LogUnlock);
+                for (int i = milestonesBefore; i < milestonesAfter; i++)
+                {
+                    ContractCatalog.Milestone ms = ContractCatalog.Milestones[i];
+                    AddLog($"🏅 契约里程碑「{ms.name}」解锁：{ms.desc}", GameConfig.LogUnlock);
+                }
+                if (gained > 0) SaveSystem.Save(Player);
+            }
+
             // 只有「真的打完一局」（阵亡/撤退）才进历史榜。换档/重置是把这一局掐掉，
             // 与「退出游戏放弃本局」同一语义，不占榜单，也不落盘。
             if (reason == EndlessEndReason.Death || reason == EndlessEndReason.Retreat)
@@ -452,7 +570,11 @@ namespace AutoBattle
             EndlessRun.pendingRelics.Clear();
             EndlessRun.relicTakePending = -1;
             EndlessRun.relicPendingFloor = 0;
-            if (Player != null) Player.relic = null;
+            if (Player != null)
+            {
+                Player.relic = null;
+                Player.contract = null;
+            }
 
             Mode = GameMode.Campaign;
             IsRunning = false;
@@ -483,6 +605,8 @@ namespace AutoBattle
                 endedUtc = System.DateTime.UtcNow.Ticks,
                 reason = (int)reason,
                 hasRelic = EndlessRun.relics.Count > 0,
+                contractScore = Mathf.Max(0, EndlessRun.contractScore),
+                contractCount = Mathf.Clamp(EndlessRun.contractCount, 0, ContractCatalog.MaxSelected),
             };
 
             int rank = EndlessHistory.Insert(Player.endlessTop, entry);

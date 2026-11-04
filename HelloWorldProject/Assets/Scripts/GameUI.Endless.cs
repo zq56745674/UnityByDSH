@@ -51,6 +51,19 @@ namespace AutoBattle
         /// <summary>内容区当前显示历史榜还是规则。只影响显示，不参与存档。</summary>
         private bool _endlessHistoryOpen;
 
+        // ---- 契约页（B 深层契约，docs/gameplay-expansion.md 第 5 节） ----
+        private Button _endlessContractTab;
+        private Text _endlessContractTabLabel;
+        private RectTransform _endlessContractRoot;
+        private Text _endlessContractSummary;
+        private Image[] _endlessContractCells;
+        private Button[,] _endlessContractTierButtons;
+        private Text[,] _endlessContractTierLabels;
+        private Image[,] _endlessContractTierMarks;
+
+        /// <summary>内容区停在契约页时为 true（与 _endlessHistoryOpen 互斥）。</summary>
+        private bool _endlessContractOpen;
+
         // ---- 本局结果面板（结算卡片） ----
         private RectTransform _endlessResultPanel;
         private Text _endlessResultTitle;
@@ -62,6 +75,20 @@ namespace AutoBattle
         private Text _endlessResultReward;
         private Text _endlessRetryLabel;
         private Text _endlessResultReturnLabel;
+
+        /// <summary>一条契约最多三档（决绝只有一档），按钮数组按三列开。</summary>
+        private const int ContractTierSlots = 3;
+
+        private static string ContractTierMark(int tier)
+        {
+            switch (tier)
+            {
+                case 1: return "Ⅰ";
+                case 2: return "Ⅱ";
+                case 3: return "Ⅲ";
+                default: return tier.ToString();
+            }
+        }
 
         /// <summary>
         /// 建无尽面板与结果面板。调用点在 BuildComparePanel 之后、BuildGuide 之前：
@@ -107,13 +134,18 @@ namespace AutoBattle
             StyleTab(_endlessHistoryTab, _endlessHistoryTabLabel, "frame_tab", 12);
             _endlessHistoryTab.onClick.AddListener(OnEndlessHistoryTabClicked);
 
+            _endlessContractTab = CreateButton(_endlessPanel, "EndlessTabContract", "契约", 228, 112, 96, 28,
+                GameConfig.BtnHeader, out _endlessContractTabLabel);
+            StyleTab(_endlessContractTab, _endlessContractTabLabel, "frame_tab", 12);
+            _endlessContractTab.onClick.AddListener(OnEndlessContractTabClicked);
+
             _endlessRulesText = CreateText(_endlessPanel, "EndlessRules", "", 20, 146, 640, 150,
                 FontSmall + 1, GameConfig.TextInfo, TextAnchor.UpperLeft);
             _endlessRulesText.lineSpacing = 1.18f;
 
             // ---- 历史榜（Top-N，最多 5 行） ----
             _endlessHistoryHint = CreateText(_endlessPanel, "EndlessHistoryHint",
-                "本档历史最好 5 局 · 按到达层数 → 本局清除 → 先达成排序", 20, 146, 640, 18,
+                "本档历史最好 5 局 · 按契约分 → 到达层数 → 本局清除排序", 20, 146, 640, 18,
                 FontTiny + 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
             _endlessHistoryEmpty = CreateText(_endlessPanel, "EndlessHistoryEmpty",
@@ -141,31 +173,89 @@ namespace AutoBattle
             _endlessClearButton.onClick.AddListener(OnEndlessClearHistoryClicked);
             _endlessClearButton.gameObject.SetActive(false);
 
+            // ---- 契约页（B 深层契约，docs/gameplay-expansion.md 第 5 节） ----
+            // 八条契约 2 列 × 4 行一次看全；每格右侧是 Ⅰ/Ⅱ/Ⅲ 三档小钮（决绝只有一档）。
+            // 只改本局规则，所以选择结果要等开局才写进 EndlessRunState，这里只画勾选态。
+            _endlessContractRoot = CreateRect(_endlessPanel, "EndlessContracts", 20, 146, 640, 176);
+            _endlessContractCells = new Image[ContractCatalog.All.Length];
+            _endlessContractTierButtons = new Button[ContractCatalog.All.Length, ContractTierSlots];
+            _endlessContractTierLabels = new Text[ContractCatalog.All.Length, ContractTierSlots];
+            _endlessContractTierMarks = new Image[ContractCatalog.All.Length, ContractTierSlots];
+
+            for (int c = 0; c < ContractCatalog.All.Length; c++)
+            {
+                ContractDef def = ContractCatalog.All[c];
+                if (def == null) continue;
+
+                Image cell = CreateCard(_endlessContractRoot, "ContractCell" + c,
+                    (c % 2) * 326f, (c / 2) * 40f, 312, 36,
+                    GameConfig.CardBgDim, RadiusButton, GameConfig.BorderSoft);
+                _endlessContractCells[c] = cell;
+
+                CreateText(cell.transform, "ContractName", def.name, 10, 0, 152, 18,
+                    FontTiny + 1, GameConfig.TextTitle, TextAnchor.MiddleLeft, FontStyle.Bold);
+                CreateText(cell.transform, "ContractEffect", def.shortText, 10, 18, 154, 16,
+                    FontTiny - 1, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+
+                int tiers = Mathf.Clamp(def.TierCount, 1, ContractTierSlots);
+                for (int t = 1; t <= tiers; t++)
+                {
+                    bool single = tiers <= 1;
+                    float bx = single ? 168f : 168f + (t - 1) * 48f;
+                    float bw = single ? 132f : 44f;
+                    Button tierButton = CreateButton(cell.transform, "ContractTier" + c + "_" + t,
+                        single ? "本局启用" : ContractTierMark(t), bx, 7, bw, 22,
+                        GameConfig.BtnHeader, out Text tierLabel);
+                    StyleTab(tierButton, tierLabel, "frame_tab", 11);
+
+                    // 选中标记：按钮底沿一条金线。只靠亮度差在小尺寸下看不出来。
+                    Image mark = CreateImage(tierButton.transform, "TierMark", 4, bw > 60f ? 18 : 17, bw - 8, 2,
+                        GameConfig.Border);
+                    mark.gameObject.SetActive(false);
+                    _endlessContractTierMarks[c, t - 1] = mark;
+
+                    ContractKind kind = def.kind;
+                    int tierIndex = t;
+                    tierButton.onClick.AddListener(() => _game?.ToggleContractTier(kind, tierIndex));
+                    AttachTooltip(tierButton,
+                        $"{def.name} {ContractTierMark(tierIndex)}：{def.tierText[tierIndex - 1]}" +
+                        $"\n契约分系数 +{def.coef[tierIndex - 1] * 100f:0}%");
+
+                    _endlessContractTierButtons[c, t - 1] = tierButton;
+                    _endlessContractTierLabels[c, t - 1] = tierLabel;
+                }
+            }
+
+            // 底行摘要：已选几条、本局契约分倍率、累计契约分与下一个里程碑。
+            _endlessContractSummary = CreateText(_endlessContractRoot, "ContractSummary", "",
+                0, 158, 640, 18, FontTiny, GameConfig.TextMuted, TextAnchor.MiddleLeft);
+            _endlessContractRoot.gameObject.SetActive(false);
+
             // 开始 / 继续按钮：未开局开始挑战，局内变成继续战斗。
-            _endlessStartButton = CreateButton(_endlessPanel, "EndlessStart", "开始挑战", 20, 328, 200, 40,
+            _endlessStartButton = CreateButton(_endlessPanel, "EndlessStart", "开始挑战", 20, 334, 200, 40,
                 GameConfig.BtnGold, out _endlessStartLabel);
             StyleBar(_endlessStartButton, _endlessStartLabel, "frame_bar_round", "glyph_play", 21f, "开始 / 继续无尽挑战");
             _endlessStartButton.onClick.AddListener(OnEndlessStartClicked);
 
             // 从第 1 层开始：只在起始层 > 1 时显示。
-            _endlessFreshButton = CreateButton(_endlessPanel, "EndlessFresh", "从第 1 层开始", 232, 328, 200, 40,
+            _endlessFreshButton = CreateButton(_endlessPanel, "EndlessFresh", "从第 1 层开始", 232, 334, 200, 40,
                 GameConfig.BtnHeader, out _endlessFreshLabel);
             StyleBar(_endlessFreshButton, _endlessFreshLabel, "frame_bar_notched", "glyph_reset", 20f, "从第 1 层重新开始");
             _endlessFreshButton.onClick.AddListener(OnEndlessFreshClicked);
 
             // 撤退：局内才显示；第一次点击进入 3 秒确认。
-            _endlessRetreatButton = CreateButton(_endlessPanel, "EndlessRetreat", "撤退", 232, 328, 140, 40,
+            _endlessRetreatButton = CreateButton(_endlessPanel, "EndlessRetreat", "撤退", 232, 334, 140, 40,
                 GameConfig.BtnDanger, out _endlessRetreatLabel);
             StyleBar(_endlessRetreatButton, _endlessRetreatLabel, "frame_pill", "glyph_back", 19f, "撤退并结束本局");
             _endlessRetreatButton.onClick.AddListener(OnEndlessRetreatClicked);
 
             // 返回战役：只在未开局的可浏览状态显示；局内要先撤退。
-            _endlessReturnButton = CreateButton(_endlessPanel, "EndlessReturn", "返回战役", 444, 328, 120, 40,
+            _endlessReturnButton = CreateButton(_endlessPanel, "EndlessReturn", "返回战役", 444, 334, 120, 40,
                 GameConfig.BtnHeader, out Text returnLabel);
             StyleBar(_endlessReturnButton, returnLabel, "frame_pill", "glyph_back", 19f, "返回战役");
             _endlessReturnButton.onClick.AddListener(OnEndlessReturnClicked);
 
-            _endlessHintText = CreateText(_endlessPanel, "EndlessHint", "", 20, 382, 640, 38,
+            _endlessHintText = CreateText(_endlessPanel, "EndlessHint", "", 20, 386, 640, 38,
                 FontTiny + 2, GameConfig.TextMuted, TextAnchor.UpperLeft);
 
             _endlessPanel.gameObject.SetActive(false);
@@ -173,7 +263,7 @@ namespace AutoBattle
             // ---- 结果面板（结算卡片） ----
             // 一局打完只会停在这一个界面上，所以它得有「结算」的分量：
             // 大号到达层数 + 结局标签 + 三格数据 + 本档/全局对照，往下给 A 遗物 / B 契约留位置。
-            _endlessResultPanel = CreatePanel(root, "EndlessResultPanel", 300, 150, 680, 420,
+            _endlessResultPanel = CreatePanel(root, "EndlessResultPanel", 300, 150, 680, 436,
                 GameConfig.OverlayBg, true);
 
             CreateIcon(_endlessResultPanel, "ui_endless", 24, 16, 24);
@@ -215,19 +305,19 @@ namespace AutoBattle
             _endlessResultCompare = CreateText(_endlessResultPanel, "EndlessResultCompare", "", 24, 232, 632, 22,
                 FontTiny + 2, GameConfig.TextMuted, TextAnchor.MiddleLeft);
 
-            // 遗物 / 契约的奖励位：A、B 两个玩法落地前先把版式留出来，空态如实写「尚未开放」。
-            Image rewardCard = CreateCard(_endlessResultPanel, "EndlessResultReward", 24, 264, 632, 52,
+            // 遗物 / 契约的奖励位：三行分别是遗物清单、本局契约与契约分、下一个里程碑。
+            Image rewardCard = CreateCard(_endlessResultPanel, "EndlessResultReward", 24, 264, 632, 96,
                 GameConfig.InsetBg, RadiusCard, GameConfig.BorderSoft);
-            _endlessResultReward = CreateText(rewardCard.transform, "RewardText", "", 16, 6, 600, 40,
-                FontSmall, GameConfig.TextNormal, TextAnchor.MiddleLeft);
-            _endlessResultReward.lineSpacing = 1.15f;
+            _endlessResultReward = CreateText(rewardCard.transform, "RewardText", "", 16, 7, 600, 82,
+                FontTiny + 1, GameConfig.TextNormal, TextAnchor.UpperLeft);
+            _endlessResultReward.lineSpacing = 1.2f;
 
-            Button retry = CreateButton(_endlessResultPanel, "EndlessRetry", "再次挑战", 24, 336, 340, 44,
+            Button retry = CreateButton(_endlessResultPanel, "EndlessRetry", "再次挑战", 24, 368, 340, 44,
                 GameConfig.BtnGold, out _endlessRetryLabel);
             StyleBar(retry, _endlessRetryLabel, "frame_bar_round", "glyph_reset", 22f, "再次挑战");
             retry.onClick.AddListener(OnEndlessRetryClicked);
 
-            Button back = CreateButton(_endlessResultPanel, "EndlessResultReturn", "返回战役", 380, 336, 276, 44,
+            Button back = CreateButton(_endlessResultPanel, "EndlessResultReturn", "返回战役", 380, 368, 276, 44,
                 GameConfig.BtnHeader, out _endlessResultReturnLabel);
             StyleBar(back, _endlessResultReturnLabel, "frame_pill", "glyph_back", 22f, "返回战役");
             back.onClick.AddListener(OnEndlessResultReturnClicked);
@@ -281,10 +371,13 @@ namespace AutoBattle
             if (inRun && _game.EndlessRun != null)
             {
                 EndlessRunState run = _game.EndlessRun;
-                int target = EndlessCatalog.KillTargetOf(run.floor);
+                int target = run.killTarget;
+                string contractNote = run.contractCount > 0
+                    ? $"   契约 {ContractCatalog.Describe(run.contractTiers)}"
+                    : string.Empty;
                 _endlessStartText.text =
                     $"本局：第 {run.floor} 层   击杀 {run.killCount}/{target}   已清 {run.clearedThisRun} 层" +
-                    $"   起始 第 {run.startFloor} 层";
+                    $"   起始 第 {run.startFloor} 层{contractNote}";
             }
             else
             {
@@ -312,7 +405,9 @@ namespace AutoBattle
                 $"· 每层清完立刻进入下一层；每 {Mathf.Max(1, GameConfig.EndlessBossEvery)} 层一个 BOSS。\n" +
                 "· 死亡或撤退结束本局；最高层只记「已清除」的层。\n" +
                 "· 每局结束会记进本档历史榜（最多 5 局）；中途退出/换档/重置不算。\n" +
-                $"· 掉落等级封顶 {Mathf.Max(1, GameConfig.EndlessDropLevelCap)}；层通过给金币，新纪录额外给首通金币。";
+                $"· 掉落等级封顶 {Mathf.Max(1, GameConfig.EndlessDropLevelCap)}；层通过给金币，新纪录额外给首通金币。\n" +
+                $"· 深层契约：开局前最多勾 {ContractCatalog.MaxSelected} 条，只改敌人与规则；" +
+                "结算契约分 = 已清层数 ×（1 + 各档系数之和），跨转生累计解锁遗物档位与槽位。";
 
             RefreshEndlessTabs();
 
@@ -359,15 +454,25 @@ namespace AutoBattle
         {
             if (_endlessRulesTab == null) return;
 
+            // 契约是开局前勾的：局内与未解锁时藏掉这一页（局内改了也只影响下一局，容易误读）。
+            bool canEditContracts = !_game.EndlessActive && _game.EndlessUnlocked;
+            _endlessContractTab.gameObject.SetActive(canEditContracts);
+            if (!canEditContracts) _endlessContractOpen = false;
+
             // 生图底框不染色：选中保持原皮革亮度，未选中整体压暗。
             Color dimTab = new Color(0.62f, 0.60f, 0.57f, 1f);
-            _endlessRulesTab.image.color = _endlessHistoryOpen ? dimTab : Color.white;
+            bool rules = !_endlessHistoryOpen && !_endlessContractOpen;
+            _endlessRulesTab.image.color = rules ? Color.white : dimTab;
             _endlessHistoryTab.image.color = _endlessHistoryOpen ? Color.white : dimTab;
-            _endlessRulesTabLabel.color = _endlessHistoryOpen ? GameConfig.BtnText : Color.white;
+            _endlessContractTab.image.color = _endlessContractOpen ? Color.white : dimTab;
+            _endlessRulesTabLabel.color = rules ? Color.white : GameConfig.BtnText;
             _endlessHistoryTabLabel.color = _endlessHistoryOpen ? Color.white : GameConfig.BtnText;
+            _endlessContractTabLabel.color = _endlessContractOpen ? Color.white : GameConfig.BtnText;
 
-            _endlessRulesText.gameObject.SetActive(!_endlessHistoryOpen);
+            _endlessRulesText.gameObject.SetActive(rules);
             _endlessHistoryHint.gameObject.SetActive(_endlessHistoryOpen);
+            _endlessContractRoot.gameObject.SetActive(_endlessContractOpen);
+            if (_endlessContractOpen) RefreshEndlessContracts();
 
             System.Collections.Generic.List<EndlessScoreEntry> top =
                 _game.Player != null ? _game.Player.endlessTop : null;
@@ -402,37 +507,110 @@ namespace AutoBattle
         }
 
         /// <summary>
-        /// 结算卡上的「本局奖励」：A 深渊遗物落地后逐件列出；B 深层契约还没做，如实写未开放。
+        /// 契约页：把面板上勾的档位画成选中态，并写底行摘要（已选几条 / 倍率 / 累计分）。
+        /// 只读控制器里的选择态，点击由按钮回调直接转给 ToggleContractTier。
         /// </summary>
-        private static string DescribeRunRelics(EndlessRunState run)
+        private void RefreshEndlessContracts()
         {
-            // 读结束时的快照：EndEndlessRun 已经把 relics 清空（加成不外带），
-            // 直接读 relics 会永远显示 0/6。
-            var owned = run.resultRelics;
-            if (owned == null || owned.Count == 0)
+            if (_endlessContractCells == null || _game == null || _game.Player == null) return;
+
+            int[] tiers = _game.EndlessContractTiers;
+            Color dimItem = new Color(0.62f, 0.60f, 0.57f, 1f);
+
+            for (int c = 0; c < _endlessContractCells.Length; c++)
             {
-                return run.relicsEnabled
-                    ? "本局奖励  <color=#4E463C>深渊遗物 0/6（本局没拿到）· 深层契约尚未开放</color>"
-                    : "本局奖励  <color=#4E463C>深渊遗物 0/6（首局不开放，下一局起生效）· 深层契约尚未开放</color>";
+                Image cell = _endlessContractCells[c];
+                if (cell == null) continue;
+
+                int chosen = tiers != null && c < tiers.Length ? tiers[c] : 0;
+                cell.color = chosen > 0 ? GameConfig.CardBg : GameConfig.CardBgDim;
+
+                for (int t = 0; t < ContractTierSlots; t++)
+                {
+                    Button tierButton = _endlessContractTierButtons[c, t];
+                    if (tierButton == null) continue;
+
+                    bool on = chosen == t + 1;
+                    tierButton.image.color = on ? new Color(1f, 0.94f, 0.80f) : dimItem;
+                    Text label = _endlessContractTierLabels[c, t];
+                    if (label != null)
+                        label.color = on ? new Color(1f, 0.95f, 0.78f) : GameConfig.BtnTextDim;
+                    Image mark = _endlessContractTierMarks[c, t];
+                    if (mark != null) mark.gameObject.SetActive(on);
+                }
             }
 
+            int count = _game.EndlessContractCount;
+            float coef = _game.EndlessContractCoef;
+            int total = _game.Player.contractScore;
+            _endlessContractSummary.text =
+                $"已选 <color=#8A5A12>{count}</color>/{ContractCatalog.MaxSelected} 条 · " +
+                $"本局契约分 ×{1f + coef:0.00} · " +
+                $"累计契约分 {total:N0}（{ContractCatalog.NextMilestoneText(total)}）" +
+                (count > 0 ? " · 同档再点一次取消" : " · 只改敌人与规则，不动玩家数值");
+        }
+
+        /// <summary>
+        /// 结算卡的「本局奖励」三行：遗物清单 / 本局契约与契约分 / 下一个里程碑。
+        /// 遗物读结束时的快照（EndEndlessRun 已清空 relics）；累计契约分读玩家当前值（已经入账）。
+        /// </summary>
+        private string BuildEndlessRewardText(EndlessRunState run)
+        {
             var sb = new System.Text.StringBuilder();
-            sb.Append("本局遗物 ");
-            sb.Append(owned.Count);
-            sb.Append("/");
-            sb.Append(run.RelicSlots);
-            sb.Append("：");
-            for (int i = 0; i < owned.Count; i++)
+
+            var owned = run.resultRelics;
+            int slots = Mathf.Max(1, run.RelicSlots);
+            if (owned == null || owned.Count == 0)
             {
-                RelicDef def = RelicCatalog.Get(owned[i]);
-                if (def == null) continue;
-                if (i > 0) sb.Append(" · ");
-                sb.Append("<color=#8A5A12>");
-                sb.Append(def.ClassName);
-                sb.Append("</color> ");
-                sb.Append(def.name);
+                sb.Append("本局遗物 0/");
+                sb.Append(slots);
+                sb.Append("：<color=#4E463C>");
+                sb.Append(run.relicsEnabled ? "本局没拿到" : "首局不开放，下一局起生效");
+                sb.Append("</color>");
             }
-            sb.Append("\n<color=#4E463C>深层契约尚未开放（B 落地后逐条列在这里）。</color>");
+            else
+            {
+                sb.Append("本局遗物 ");
+                sb.Append(owned.Count);
+                sb.Append("/");
+                sb.Append(slots);
+                sb.Append("：");
+                for (int i = 0; i < owned.Count; i++)
+                {
+                    RelicDef def = RelicCatalog.Get(owned[i]);
+                    if (def == null) continue;
+                    if (i > 0) sb.Append(" · ");
+                    sb.Append("<color=#8A5A12>");
+                    sb.Append(def.ClassName);
+                    sb.Append("</color> ");
+                    sb.Append(def.name);
+                }
+            }
+
+            sb.Append("\n");
+            if (run.contractCount > 0)
+            {
+                sb.Append("深层契约 ");
+                sb.Append(run.contractCount);
+                sb.Append(" 条（");
+                sb.Append(ContractCatalog.Describe(run.contractTiers));
+                sb.Append("）· 契约分 <color=#8A5A12>+");
+                sb.Append(run.contractScore);
+                sb.Append("</color>");
+            }
+            else
+            {
+                sb.Append("深层契约 <color=#4E463C>未选</color> · 契约分 +0");
+            }
+
+            int total = _game != null && _game.Player != null ? _game.Player.contractScore : 0;
+            sb.Append("（累计 ");
+            sb.Append(total);
+            sb.Append("）");
+
+            sb.Append("\n<color=#6F6252>");
+            sb.Append(ContractCatalog.NextMilestoneText(total));
+            sb.Append("</color>");
             return sb.ToString();
         }
 
@@ -452,6 +630,8 @@ namespace AutoBattle
 
             // 老纪录没有 hasRelic 字段（v15 及更早），显示成「遗物前」：那会儿还没有遗物玩法。
             string relicMark = entry.hasRelic ? " · 遗物" : " · <color=#7A6A55>遗物前</color>";
+            if (entry.contractCount > 0 || entry.contractScore > 0)
+                relicMark = $" · <color=#8A5A12>契约 {entry.contractScore}分</color>" + relicMark;
             string mark = entry.endedUtc > 0 && entry.endedUtc == lastRecordUtc
                 ? "   <color=#8A5A12>◀ 本次</color>"
                 : "";
@@ -523,7 +703,7 @@ namespace AutoBattle
             _endlessResultCompare.text =
                 $"起始层 第 {run.startFloor} 层 · 本档最高 {best} 层 · 全局最高 {globalBest} 层 · {record}";
 
-            _endlessResultReward.text = DescribeRunRelics(run);
+            _endlessResultReward.text = BuildEndlessRewardText(run);
 
             int retryFloor = _game.EndlessSuggestedStartFloor;
             _endlessRetryLabel.text = $"再次挑战（第 {retryFloor} 层）";
@@ -559,12 +739,21 @@ namespace AutoBattle
         private void OnEndlessRulesTabClicked()
         {
             _endlessHistoryOpen = false;
+            _endlessContractOpen = false;
             _endlessClearConfirmUntil = 0f;
         }
 
         private void OnEndlessHistoryTabClicked()
         {
             _endlessHistoryOpen = true;
+            _endlessContractOpen = false;
+            _endlessClearConfirmUntil = 0f;
+        }
+
+        private void OnEndlessContractTabClicked()
+        {
+            _endlessHistoryOpen = false;
+            _endlessContractOpen = true;
             _endlessClearConfirmUntil = 0f;
         }
 
